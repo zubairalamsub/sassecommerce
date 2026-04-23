@@ -1,4 +1,5 @@
 using Ecommerce.PaymentService.Data;
+using Ecommerce.PaymentService.Messaging;
 using Ecommerce.PaymentService.Repositories;
 using Ecommerce.PaymentService.Services;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,9 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
 builder.Services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
 builder.Services.AddScoped<IRefundRepository, RefundRepository>();
+
+// Register Kafka Event Publisher
+builder.Services.AddSingleton<IEventPublisher, KafkaEventPublisher>();
 
 // Register Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();

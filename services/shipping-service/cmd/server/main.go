@@ -9,8 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"os"
+	"strings"
+
 	"github.com/ecommerce/shipping-service/internal/api"
 	"github.com/ecommerce/shipping-service/internal/config"
+	"github.com/ecommerce/shipping-service/internal/messaging"
 	"github.com/ecommerce/shipping-service/internal/models"
 	"github.com/ecommerce/shipping-service/internal/repository"
 	"github.com/ecommerce/shipping-service/internal/service"
@@ -41,6 +45,11 @@ func main() {
 	}
 	log.Info("Database migrations completed")
 
+	// Initialize Kafka producer
+	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
+	kafkaProducer := messaging.NewProducer(kafkaBrokers, log)
+	defer kafkaProducer.Close()
+
 	// Initialize repository
 	shipmentRepo := repository.NewShipmentRepository(db)
 
@@ -48,7 +57,7 @@ func main() {
 	carrierService := service.NewSimulatedCarrierService()
 
 	// Initialize shipping service
-	shippingService := service.NewShippingService(shipmentRepo, carrierService, log)
+	shippingService := service.NewShippingService(shipmentRepo, carrierService, kafkaProducer, log)
 
 	// Initialize handler
 	handler := api.NewShippingHandler(shippingService, log)
@@ -114,4 +123,11 @@ func main() {
 	}
 
 	log.Info("Server exited")
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

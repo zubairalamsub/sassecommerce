@@ -2,15 +2,22 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ecommerce/product-service/internal/models"
 	"github.com/ecommerce/product-service/internal/repository"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
+
+// KafkaPublisher defines the interface for publishing messages to Kafka
+type KafkaPublisher interface {
+	Publish(ctx context.Context, topic, key string, value []byte) error
+}
 
 // ProductService defines the interface for product operations
 type ProductService interface {
@@ -26,21 +33,24 @@ type ProductService interface {
 }
 
 type productService struct {
-	productRepo  repository.ProductRepository
-	categoryRepo repository.CategoryRepository
-	logger       *logrus.Logger
+	productRepo   repository.ProductRepository
+	categoryRepo  repository.CategoryRepository
+	kafkaProducer KafkaPublisher
+	logger        *logrus.Logger
 }
 
 // NewProductService creates a new product service
 func NewProductService(
 	productRepo repository.ProductRepository,
 	categoryRepo repository.CategoryRepository,
+	kafkaProducer KafkaPublisher,
 	logger *logrus.Logger,
 ) ProductService {
 	return &productService{
-		productRepo:  productRepo,
-		categoryRepo: categoryRepo,
-		logger:       logger,
+		productRepo:   productRepo,
+		categoryRepo:  categoryRepo,
+		kafkaProducer: kafkaProducer,
+		logger:        logger,
 	}
 }
 
@@ -108,6 +118,16 @@ func (s *productService) CreateProduct(ctx context.Context, req *models.CreatePr
 		"tenant_id":  product.TenantID,
 		"sku":        product.SKU,
 	}).Info("Product created successfully")
+
+	// Publish ProductCreated event
+	s.publishEvent(ctx, "ProductCreated", map[string]interface{}{
+		"tenant_id":  product.TenantID,
+		"product_id": product.ID.Hex(),
+		"name":       product.Name,
+		"sku":        product.SKU,
+		"price":      product.Price,
+		"status":     product.Status,
+	})
 
 	return product.ToResponse(), nil
 }
@@ -264,6 +284,16 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 
 	s.logger.WithField("product_id", id).Info("Product updated successfully")
 
+	// Publish ProductUpdated event
+	s.publishEvent(ctx, "ProductUpdated", map[string]interface{}{
+		"tenant_id":  product.TenantID,
+		"product_id": id,
+		"name":       product.Name,
+		"sku":        product.SKU,
+		"price":      product.Price,
+		"status":     product.Status,
+	})
+
 	return product.ToResponse(), nil
 }
 
@@ -275,6 +305,11 @@ func (s *productService) DeleteProduct(ctx context.Context, id string) error {
 	}
 
 	s.logger.WithField("product_id", id).Info("Product deleted successfully")
+
+	// Publish ProductDeleted event
+	s.publishEvent(ctx, "ProductDeleted", map[string]interface{}{
+		"product_id": id,
+	})
 
 	return nil
 }
@@ -300,6 +335,27 @@ func parseStatus(s string) models.ProductStatus {
 		return models.ProductStatus(s)
 	default:
 		return models.ProductStatusDraft
+	}
+}
+
+// publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
+func (s *productService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	event := map[string]interface{}{
+		"event_id":   uuid.New().String(),
+		"event_type": eventType,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"version":    "1.0.0",
+		"payload":    payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to marshal product event")
+		return
+	}
+
+	if err := s.kafkaProducer.Publish(ctx, "product-events", event["event_id"].(string), data); err != nil {
+		s.logger.WithError(err).Warn("Failed to publish product event")
 	}
 }
 

@@ -1,6 +1,7 @@
 using AutoMapper;
 using Ecommerce.PaymentService.DTOs;
 using Ecommerce.PaymentService.Entities;
+using Ecommerce.PaymentService.Messaging;
 using Ecommerce.PaymentService.Repositories;
 
 namespace Ecommerce.PaymentService.Services;
@@ -12,6 +13,7 @@ public class PaymentService : IPaymentService
     private readonly IPaymentTransactionRepository _transactionRepository;
     private readonly IRefundRepository _refundRepository;
     private readonly IPaymentGateway _gateway;
+    private readonly IEventPublisher _eventPublisher;
     private readonly IMapper _mapper;
     private readonly ILogger<PaymentService> _logger;
 
@@ -21,6 +23,7 @@ public class PaymentService : IPaymentService
         IPaymentTransactionRepository transactionRepository,
         IRefundRepository refundRepository,
         IPaymentGateway gateway,
+        IEventPublisher eventPublisher,
         IMapper mapper,
         ILogger<PaymentService> logger)
     {
@@ -29,6 +32,7 @@ public class PaymentService : IPaymentService
         _transactionRepository = transactionRepository;
         _refundRepository = refundRepository;
         _gateway = gateway;
+        _eventPublisher = eventPublisher;
         _mapper = mapper;
         _logger = logger;
     }
@@ -143,6 +147,32 @@ public class PaymentService : IPaymentService
 
         await _paymentRepository.UpdateAsync(payment, cancellationToken);
         await _transactionRepository.CreateAsync(transaction, cancellationToken);
+
+        // Publish payment event
+        if (gatewayResponse.Success)
+        {
+            await _eventPublisher.PublishAsync("PaymentCompleted", new Dictionary<string, object>
+            {
+                ["tenant_id"] = payment.TenantId,
+                ["payment_id"] = payment.Id.ToString(),
+                ["order_id"] = payment.OrderId,
+                ["customer_id"] = payment.CustomerId,
+                ["amount"] = payment.Amount,
+                ["currency"] = payment.Currency
+            }, cancellationToken);
+        }
+        else
+        {
+            await _eventPublisher.PublishAsync("PaymentFailed", new Dictionary<string, object>
+            {
+                ["tenant_id"] = payment.TenantId,
+                ["payment_id"] = payment.Id.ToString(),
+                ["order_id"] = payment.OrderId,
+                ["customer_id"] = payment.CustomerId,
+                ["amount"] = payment.Amount,
+                ["reason"] = payment.FailureReason ?? "Unknown"
+            }, cancellationToken);
+        }
 
         return _mapper.Map<PaymentResponse>(payment);
     }

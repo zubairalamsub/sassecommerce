@@ -164,8 +164,11 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: info
       LOG_FORMAT: json
+      KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - ecommerce-network
@@ -185,8 +188,11 @@ services:
       DB_NAME: product_db
       JWT_SECRET: your-secret-key-change-in-production-12345
       GIN_MODE: release
+      KAFKA_BROKERS: kafka:29092
     depends_on:
       mongodb:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - ecommerce-network
@@ -208,8 +214,11 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: inventory_db
+      KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - ecommerce-network
@@ -231,8 +240,11 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: payment_db
+      KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - ecommerce-network
@@ -255,8 +267,11 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: shipping_db
       DB_SSLMODE: disable
+      KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - ecommerce-network

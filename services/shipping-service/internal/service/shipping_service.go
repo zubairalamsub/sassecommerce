@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -11,6 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
+
+// KafkaPublisher defines the interface for publishing messages to Kafka
+type KafkaPublisher interface {
+	Publish(ctx context.Context, topic, key string, value []byte) error
+}
 
 type ShippingService interface {
 	CreateShipment(ctx context.Context, req *models.CreateShipmentRequest) (*models.ShipmentResponse, error)
@@ -24,16 +30,18 @@ type ShippingService interface {
 }
 
 type shippingService struct {
-	repo    repository.ShipmentRepository
-	carrier CarrierService
-	logger  *logrus.Logger
+	repo          repository.ShipmentRepository
+	carrier       CarrierService
+	kafkaProducer KafkaPublisher
+	logger        *logrus.Logger
 }
 
-func NewShippingService(repo repository.ShipmentRepository, carrier CarrierService, logger *logrus.Logger) ShippingService {
+func NewShippingService(repo repository.ShipmentRepository, carrier CarrierService, kafkaProducer KafkaPublisher, logger *logrus.Logger) ShippingService {
 	return &shippingService{
-		repo:    repo,
-		carrier: carrier,
-		logger:  logger,
+		repo:          repo,
+		carrier:       carrier,
+		kafkaProducer: kafkaProducer,
+		logger:        logger,
 	}
 }
 
@@ -120,6 +128,16 @@ func (s *shippingService) CreateShipment(ctx context.Context, req *models.Create
 		"tracking_number": shipment.TrackingNumber,
 		"carrier":         shipment.Carrier,
 	}).Info("Shipment created successfully")
+
+	// Publish ShipmentCreated event
+	s.publishEvent(ctx, "ShipmentCreated", map[string]interface{}{
+		"tenant_id":        shipment.TenantID,
+		"shipment_id":      shipment.ID,
+		"order_id":         shipment.OrderID,
+		"tracking_number":  shipment.TrackingNumber,
+		"carrier":          shipment.Carrier,
+		"status":           shipment.Status,
+	})
 
 	return toShipmentResponse(shipment), nil
 }
@@ -216,6 +234,20 @@ func (s *shippingService) UpdateStatus(ctx context.Context, id string, req *mode
 		"new_status":  req.Status,
 	}).Info("Shipment status updated")
 
+	// Publish shipping event based on status
+	eventType := "ShipmentStatusUpdated"
+	if newStatus == models.StatusDelivered {
+		eventType = "ShipmentDelivered"
+	}
+	s.publishEvent(ctx, eventType, map[string]interface{}{
+		"tenant_id":        shipment.TenantID,
+		"shipment_id":      shipment.ID,
+		"order_id":         shipment.OrderID,
+		"tracking_number":  shipment.TrackingNumber,
+		"carrier":          shipment.Carrier,
+		"status":           string(newStatus),
+	})
+
 	// Reload with details
 	updated, err := s.repo.GetByIDWithDetails(ctx, id)
 	if err != nil {
@@ -268,6 +300,27 @@ func (s *shippingService) CalculateRates(ctx context.Context, req *models.Calcul
 	}
 
 	return &models.RateCalculationResponse{Rates: rates}, nil
+}
+
+// publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
+func (s *shippingService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	event := map[string]interface{}{
+		"event_id":   uuid.New().String(),
+		"event_type": eventType,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"version":    "1.0.0",
+		"payload":    payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to marshal shipping event")
+		return
+	}
+
+	if err := s.kafkaProducer.Publish(ctx, "shipping-events", event["event_id"].(string), data); err != nil {
+		s.logger.WithError(err).Warn("Failed to publish shipping event")
+	}
 }
 
 // validateStatusTransition ensures only valid status transitions are allowed

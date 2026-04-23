@@ -1,4 +1,5 @@
 using Ecommerce.InventoryService.Data;
+using Ecommerce.InventoryService.Messaging;
 using Ecommerce.InventoryService.Repositories;
 using Ecommerce.InventoryService.Services;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,9 @@ builder.Services.AddScoped<IWarehouseRepository, WarehouseRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IStockMovementRepository, StockMovementRepository>();
 builder.Services.AddScoped<IStockReservationRepository, StockReservationRepository>();
+
+// Register Kafka Event Publisher
+builder.Services.AddSingleton<IEventPublisher, KafkaEventPublisher>();
 
 // Register Services
 builder.Services.AddScoped<IInventoryService, InventoryService>();

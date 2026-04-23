@@ -9,7 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"strings"
+
 	"github.com/ecommerce/user-service/internal/api"
+	"github.com/ecommerce/user-service/internal/messaging"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
@@ -41,6 +44,11 @@ func main() {
 		log.WithError(err).Fatal("Failed to run migrations")
 	}
 
+	// Initialize Kafka producer
+	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
+	kafkaProducer := messaging.NewProducer(kafkaBrokers, log)
+	defer kafkaProducer.Close()
+
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 
@@ -50,8 +58,8 @@ func main() {
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "user-service",
 	}
-	authService := service.NewAuthService(userRepo, tokenConfig, log)
-	userService := service.NewUserService(userRepo, log)
+	authService := service.NewAuthService(userRepo, tokenConfig, kafkaProducer, log)
+	userService := service.NewUserService(userRepo, kafkaProducer, log)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService, log)

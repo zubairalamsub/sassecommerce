@@ -1,6 +1,7 @@
 using AutoMapper;
 using Ecommerce.InventoryService.DTOs;
 using Ecommerce.InventoryService.Entities;
+using Ecommerce.InventoryService.Messaging;
 using Ecommerce.InventoryService.Repositories;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ public class InventoryService : IInventoryService
     private readonly IInventoryRepository _inventoryRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly IStockReservationRepository _stockReservationRepository;
+    private readonly IEventPublisher _eventPublisher;
     private readonly IMapper _mapper;
     private readonly ILogger<InventoryService> _logger;
 
@@ -20,6 +22,7 @@ public class InventoryService : IInventoryService
         IInventoryRepository inventoryRepository,
         IStockMovementRepository stockMovementRepository,
         IStockReservationRepository stockReservationRepository,
+        IEventPublisher eventPublisher,
         IMapper mapper,
         ILogger<InventoryService> logger)
     {
@@ -27,6 +30,7 @@ public class InventoryService : IInventoryService
         _inventoryRepository = inventoryRepository;
         _stockMovementRepository = stockMovementRepository;
         _stockReservationRepository = stockReservationRepository;
+        _eventPublisher = eventPublisher;
         _mapper = mapper;
         _logger = logger;
     }
@@ -276,6 +280,29 @@ public class InventoryService : IInventoryService
 
         _logger.LogInformation("Stock adjusted for inventory item {InventoryItemId}: {Quantity}", inventoryItemId, request.Quantity);
 
+        // Publish InventoryUpdated event
+        await _eventPublisher.PublishAsync("InventoryUpdated", new Dictionary<string, object>
+        {
+            ["tenant_id"] = inventoryItem.TenantId,
+            ["product_id"] = inventoryItem.ProductId,
+            ["sku"] = inventoryItem.SKU,
+            ["quantity"] = quantityAfter,
+            ["in_stock"] = quantityAfter > 0
+        }, cancellationToken);
+
+        // Check for low stock
+        if (inventoryItem.QuantityAvailable <= inventoryItem.ReorderPoint)
+        {
+            await _eventPublisher.PublishAsync("StockLevelLow", new Dictionary<string, object>
+            {
+                ["tenant_id"] = inventoryItem.TenantId,
+                ["product_id"] = inventoryItem.ProductId,
+                ["sku"] = inventoryItem.SKU,
+                ["current_quantity"] = inventoryItem.QuantityAvailable,
+                ["reorder_point"] = inventoryItem.ReorderPoint
+            }, cancellationToken);
+        }
+
         return await MapToInventoryItemResponseAsync(inventoryItem, inventoryItem.Warehouse.Name);
     }
 
@@ -407,6 +434,16 @@ public class InventoryService : IInventoryService
 
         _logger.LogInformation("Stock reserved: {ReservationId} for Order {OrderId}, Quantity: {Quantity}",
             reservation.Id, request.OrderId, request.Quantity);
+
+        // Publish StockReserved event
+        await _eventPublisher.PublishAsync("StockReserved", new Dictionary<string, object>
+        {
+            ["tenant_id"] = request.TenantId,
+            ["product_id"] = request.ProductId,
+            ["order_id"] = request.OrderId,
+            ["quantity"] = request.Quantity,
+            ["reservation_id"] = reservation.Id.ToString()
+        }, cancellationToken);
 
         return _mapper.Map<StockReservationResponse>(reservation);
     }

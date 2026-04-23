@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,18 +24,21 @@ type UserService interface {
 }
 
 type userService struct {
-	userRepo repository.UserRepository
-	logger   *logrus.Logger
+	userRepo      repository.UserRepository
+	kafkaProducer KafkaPublisher
+	logger        *logrus.Logger
 }
 
 // NewUserService creates a new user service
 func NewUserService(
 	userRepo repository.UserRepository,
+	kafkaProducer KafkaPublisher,
 	logger *logrus.Logger,
 ) UserService {
 	return &userService{
-		userRepo: userRepo,
-		logger:   logger,
+		userRepo:      userRepo,
+		kafkaProducer: kafkaProducer,
+		logger:        logger,
 	}
 }
 
@@ -108,17 +114,37 @@ func (s *userService) UpdateUser(ctx context.Context, userID string, req *models
 
 	s.logger.WithField("user_id", userID).Info("User updated successfully")
 
+	// Publish UserUpdated event
+	s.publishEvent(ctx, "UserUpdated", map[string]interface{}{
+		"tenant_id": user.TenantID,
+		"user_id":   user.ID,
+		"email":     user.Email,
+		"name":      user.FirstName + " " + user.LastName,
+	})
+
 	return user.ToResponse(), nil
 }
 
 // DeleteUser deletes a user (soft delete)
 func (s *userService) DeleteUser(ctx context.Context, userID string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to get user for delete")
+		return errors.New("user not found")
+	}
+
 	if err := s.userRepo.Delete(ctx, userID); err != nil {
 		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to delete user")
 		return errors.New("failed to delete user")
 	}
 
 	s.logger.WithField("user_id", userID).Info("User deleted successfully")
+
+	// Publish UserDeleted event
+	s.publishEvent(ctx, "UserDeleted", map[string]interface{}{
+		"tenant_id": user.TenantID,
+		"user_id":   userID,
+	})
 
 	return nil
 }
@@ -167,4 +193,25 @@ func (s *userService) UpdateUserStatus(ctx context.Context, userID string, statu
 	}).Info("User status updated successfully")
 
 	return nil
+}
+
+// publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
+func (s *userService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	event := map[string]interface{}{
+		"event_id":   uuid.New().String(),
+		"event_type": eventType,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"version":    "1.0.0",
+		"payload":    payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to marshal user event")
+		return
+	}
+
+	if err := s.kafkaProducer.Publish(ctx, "user-events", event["event_id"].(string), data); err != nil {
+		s.logger.WithError(err).Warn("Failed to publish user event")
+	}
 }

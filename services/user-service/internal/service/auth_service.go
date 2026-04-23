@@ -2,15 +2,22 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// KafkaPublisher defines the interface for publishing messages to Kafka
+type KafkaPublisher interface {
+	Publish(ctx context.Context, topic, key string, value []byte) error
+}
 
 // AuthService defines the interface for authentication operations
 type AuthService interface {
@@ -21,21 +28,24 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo    repository.UserRepository
-	tokenConfig models.TokenConfig
-	logger      *logrus.Logger
+	userRepo      repository.UserRepository
+	tokenConfig   models.TokenConfig
+	kafkaProducer KafkaPublisher
+	logger        *logrus.Logger
 }
 
 // NewAuthService creates a new authentication service
 func NewAuthService(
 	userRepo repository.UserRepository,
 	tokenConfig models.TokenConfig,
+	kafkaProducer KafkaPublisher,
 	logger *logrus.Logger,
 ) AuthService {
 	return &authService{
-		userRepo:    userRepo,
-		tokenConfig: tokenConfig,
-		logger:      logger,
+		userRepo:      userRepo,
+		tokenConfig:   tokenConfig,
+		kafkaProducer: kafkaProducer,
+		logger:        logger,
 	}
 }
 
@@ -92,6 +102,15 @@ func (s *authService) Register(ctx context.Context, req *models.RegisterRequest)
 		"tenant_id": user.TenantID,
 		"email":     user.Email,
 	}).Info("User registered successfully")
+
+	// Publish UserRegistered event
+	s.publishEvent(ctx, "UserRegistered", map[string]interface{}{
+		"tenant_id": user.TenantID,
+		"user_id":   user.ID,
+		"email":     user.Email,
+		"name":      user.FirstName + " " + user.LastName,
+		"role":      user.Role,
+	})
 
 	return user.ToResponse(), nil
 }
@@ -241,4 +260,25 @@ func hashPassword(password string) (string, error) {
 func verifyPassword(hash, password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+// publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
+func (s *authService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	event := map[string]interface{}{
+		"event_id":   uuid.New().String(),
+		"event_type": eventType,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"version":    "1.0.0",
+		"payload":    payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		s.logger.WithError(err).Warn("Failed to marshal user event")
+		return
+	}
+
+	if err := s.kafkaProducer.Publish(ctx, "user-events", event["event_id"].(string), data); err != nil {
+		s.logger.WithError(err).Warn("Failed to publish user event")
+	}
 }

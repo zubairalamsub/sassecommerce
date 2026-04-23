@@ -9,7 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"strings"
+
 	"github.com/ecommerce/product-service/internal/api"
+	"github.com/ecommerce/product-service/internal/messaging"
 	"github.com/ecommerce/product-service/internal/repository"
 	"github.com/ecommerce/product-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
@@ -42,12 +45,17 @@ func main() {
 	db := client.Database(config.DBName)
 	logger.Info("Successfully connected to MongoDB")
 
+	// Initialize Kafka producer
+	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
+	kafkaProducer := messaging.NewProducer(kafkaBrokers, logger)
+	defer kafkaProducer.Close()
+
 	// Initialize repositories
 	productRepo := repository.NewProductRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 
 	// Initialize services
-	productService := service.NewProductService(productRepo, categoryRepo, logger)
+	productService := service.NewProductService(productRepo, categoryRepo, kafkaProducer, logger)
 	categoryService := service.NewCategoryService(categoryRepo, logger)
 
 	// Initialize handlers

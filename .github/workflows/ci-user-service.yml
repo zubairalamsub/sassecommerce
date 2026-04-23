@@ -1,0 +1,22 @@
+name: CI - User Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/user-service/**'
+      - '.github/workflows/ci-user-service.yml'
+      - '.github/workflows/go-service.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/user-service/**'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/go-service.yml
+    with:
+      service-name: user-service
+      service-path: services/user-service
+      go-version: '1.23'
+      needs-postgres: true

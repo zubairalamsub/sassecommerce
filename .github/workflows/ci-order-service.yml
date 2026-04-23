@@ -1,0 +1,21 @@
+name: CI - Order Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/order-service/**'
+      - '.github/workflows/ci-order-service.yml'
+      - '.github/workflows/go-service.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/order-service/**'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/go-service.yml
+    with:
+      service-name: order-service
+      service-path: services/order-service
+      needs-postgres: true

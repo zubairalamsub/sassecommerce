@@ -1,0 +1,33 @@
+# Test outputs
+*.test
+*.out
+coverage.html
+coverage.out
+coverage-*.out
+test-results/
+test-reports/
+badges/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+bin/
+dist/
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/

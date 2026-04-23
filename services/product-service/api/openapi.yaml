@@ -1,0 +1,1034 @@
+openapi: 3.0.3
+info:
+  title: Product Service API
+  description: |
+    Product and category management for a multi-tenant e-commerce platform.
+    Bangladesh-first market with BDT as the primary currency.
+    All endpoints require the X-Tenant-ID header for tenant isolation.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Products
+    description: Product CRUD and search operations
+  - name: Categories
+    description: Category management
+
+paths:
+  /api/v1/products:
+    post:
+      tags: [Products]
+      summary: Create a new product
+      operationId: createProduct
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              name: "Premium Jamdani Saree"
+              slug: "premium-jamdani-saree"
+              description: "Handwoven Jamdani saree from Dhaka"
+              sku: "SAR-JAM-001"
+              price: 15000.00
+              compare_at_price: 18000.00
+              category_id: "cat_sarees_001"
+              status: "active"
+              images:
+                - url: "https://cdn.example.com/images/jamdani-1.jpg"
+                  alt_text: "Jamdani saree front view"
+                  position: 1
+              variants:
+                - name: "Color"
+                  value: "Red"
+                  sku: "SAR-JAM-001-RED"
+                  price: 15000.00
+                  stock: 25
+                - name: "Color"
+                  value: "Blue"
+                  sku: "SAR-JAM-001-BLU"
+                  price: 15500.00
+                  stock: 18
+              tags: ["jamdani", "saree", "handwoven", "dhaka"]
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Products]
+      summary: List products with pagination
+      operationId: listProducts
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, draft, archived]
+          example: "active"
+        - name: sort
+          in: query
+          description: "Sort field and direction (e.g. price_asc, price_desc, name_asc, created_at_desc)"
+          schema:
+            type: string
+          example: "created_at_desc"
+      responses:
+        '200':
+          description: Paginated list of products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/search:
+    get:
+      tags: [Products]
+      summary: Search products by query, price range
+      operationId: searchProducts
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+          example: "jamdani saree"
+        - name: min_price
+          in: query
+          schema:
+            type: number
+            format: double
+          example: 1000.00
+        - name: max_price
+          in: query
+          schema:
+            type: number
+            format: double
+          example: 20000.00
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/sku/{sku}:
+    get:
+      tags: [Products]
+      summary: Get a product by SKU
+      operationId: getProductBySku
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "SAR-JAM-001"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/category/{category_id}:
+    get:
+      tags: [Products]
+      summary: List products by category
+      operationId: getProductsByCategory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: category_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cat_sarees_001"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Products in the specified category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get a product by ID
+      operationId: getProduct
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Products]
+      summary: Update a product
+      operationId: updateProduct
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      operationId: deleteProduct
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+      responses:
+        '204':
+          description: Product deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/{id}/status:
+    patch:
+      tags: [Products]
+      summary: Update product status
+      operationId: updateProductStatus
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, draft, archived]
+            example:
+              status: "active"
+      responses:
+        '200':
+          description: Product status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/categories:
+    post:
+      tags: [Categories]
+      summary: Create a new category
+      operationId: createCategory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              name: "Sarees"
+              slug: "sarees"
+              description: "Traditional and modern sarees"
+              parent_id: "cat_clothing_001"
+              image_url: "https://cdn.example.com/categories/sarees.jpg"
+      responses:
+        '201':
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Categories]
+      summary: List all categories for a tenant
+      operationId: listCategories
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/categories/by-parent:
+    get:
+      tags: [Categories]
+      summary: List categories by parent
+      operationId: getCategoriesByParent
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: parent_id
+          in: query
+          required: true
+          description: "Parent category ID. Use empty string or 'root' for top-level categories."
+          schema:
+            type: string
+          example: "cat_clothing_001"
+      responses:
+        '200':
+          description: Child categories
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/categories/slug/{slug}:
+    get:
+      tags: [Categories]
+      summary: Get a category by slug
+      operationId: getCategoryBySlug
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sarees"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: Category details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get a category by ID
+      operationId: getCategory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cat_sarees_001"
+      responses:
+        '200':
+          description: Category details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Categories]
+      summary: Update a category
+      operationId: updateCategory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cat_sarees_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      operationId: deleteCategory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cat_sarees_001"
+      responses:
+        '204':
+          description: Category deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/categories/{id}/status:
+    patch:
+      tags: [Categories]
+      summary: Update category status
+      operationId: updateCategoryStatus
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cat_sarees_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive]
+            example:
+              status: "active"
+      responses:
+        '200':
+          description: Category status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "tenant_abc123"
+
+  schemas:
+    ProductImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          example: "https://cdn.example.com/images/jamdani-1.jpg"
+        alt_text:
+          type: string
+          example: "Jamdani saree front view"
+        position:
+          type: integer
+          example: 1
+
+    ProductVariant:
+      type: object
+      required: [name, value, sku, price, stock]
+      properties:
+        id:
+          type: string
+          example: "var_x1y2z3"
+        name:
+          type: string
+          example: "Color"
+        value:
+          type: string
+          example: "Red"
+        sku:
+          type: string
+          example: "SAR-JAM-001-RED"
+        price:
+          type: number
+          format: double
+          description: "Price in BDT"
+          example: 15000.00
+        stock:
+          type: integer
+          example: 25
+
+    CreateProductRequest:
+      type: object
+      required: [tenant_id, name, slug, sku, price, category_id, status]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          maxLength: 255
+          example: "Premium Jamdani Saree"
+        slug:
+          type: string
+          maxLength: 255
+          example: "premium-jamdani-saree"
+        description:
+          type: string
+          example: "Handwoven Jamdani saree from Dhaka"
+        sku:
+          type: string
+          maxLength: 100
+          example: "SAR-JAM-001"
+        price:
+          type: number
+          format: double
+          description: "Price in BDT"
+          example: 15000.00
+        compare_at_price:
+          type: number
+          format: double
+          nullable: true
+          description: "Original price in BDT for showing discounts"
+          example: 18000.00
+        category_id:
+          type: string
+          example: "cat_sarees_001"
+        status:
+          type: string
+          enum: [active, draft, archived]
+          example: "active"
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["jamdani", "saree", "handwoven"]
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: "Premium Jamdani Saree - Updated"
+        slug:
+          type: string
+          maxLength: 255
+          example: "premium-jamdani-saree-updated"
+        description:
+          type: string
+          example: "Updated description"
+        sku:
+          type: string
+          maxLength: 100
+          example: "SAR-JAM-001"
+        price:
+          type: number
+          format: double
+          description: "Price in BDT"
+          example: 14500.00
+        compare_at_price:
+          type: number
+          format: double
+          nullable: true
+          example: 18000.00
+        category_id:
+          type: string
+          example: "cat_sarees_001"
+        status:
+          type: string
+          enum: [active, draft, archived]
+          example: "active"
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["jamdani", "saree"]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "prod_a1b2c3d4"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          example: "Premium Jamdani Saree"
+        slug:
+          type: string
+          example: "premium-jamdani-saree"
+        description:
+          type: string
+          example: "Handwoven Jamdani saree from Dhaka"
+        sku:
+          type: string
+          example: "SAR-JAM-001"
+        price:
+          type: number
+          format: double
+          description: "Price in BDT"
+          example: 15000.00
+        compare_at_price:
+          type: number
+          format: double
+          nullable: true
+          example: 18000.00
+        category_id:
+          type: string
+          example: "cat_sarees_001"
+        status:
+          type: string
+          enum: [active, draft, archived]
+          example: "active"
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["jamdani", "saree", "handwoven"]
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T12:00:00Z"
+
+    ProductResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Product'
+
+    ProductListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreateCategoryRequest:
+      type: object
+      required: [tenant_id, name, slug]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          maxLength: 255
+          example: "Sarees"
+        slug:
+          type: string
+          maxLength: 255
+          example: "sarees"
+        description:
+          type: string
+          example: "Traditional and modern sarees"
+        parent_id:
+          type: string
+          nullable: true
+          example: "cat_clothing_001"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.example.com/categories/sarees.jpg"
+
+    UpdateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: "Sarees & Fabrics"
+        slug:
+          type: string
+          maxLength: 255
+          example: "sarees-fabrics"
+        description:
+          type: string
+          example: "Updated category description"
+        parent_id:
+          type: string
+          nullable: true
+          example: "cat_clothing_001"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.example.com/categories/sarees-updated.jpg"
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "cat_sarees_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          example: "Sarees"
+        slug:
+          type: string
+          example: "sarees"
+        description:
+          type: string
+          example: "Traditional and modern sarees"
+        parent_id:
+          type: string
+          nullable: true
+          example: "cat_clothing_001"
+        image_url:
+          type: string
+          nullable: true
+          example: "https://cdn.example.com/categories/sarees.jpg"
+        status:
+          type: string
+          enum: [active, inactive]
+          example: "active"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T12:00:00Z"
+
+    CategoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Category'
+
+    CategoryListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 150
+        total_pages:
+          type: integer
+          example: 8
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "price"
+                  message:
+                    type: string
+                    example: "Price must be a positive number"
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid request parameters"
+              details:
+                - field: "price"
+                  message: "Price must be a positive number"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              details: []
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "An unexpected error occurred"
+              details: []

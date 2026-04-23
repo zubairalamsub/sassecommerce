@@ -1,0 +1,1342 @@
+openapi: 3.0.3
+info:
+  title: Config Service API
+  description: |
+    Configuration and menu management for a multi-tenant e-commerce platform.
+    Bangladesh-first market with BDT as the primary currency.
+
+    **Config Resolution Order:** tenant+environment -> environment -> global fallback.
+
+    **Available Namespaces:** general, branding, payment, shipping, notifications, email,
+    seo, social, analytics, security, features, limits, localization, integrations, checkout.
+
+    All endpoints require the X-Tenant-ID header for tenant isolation.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8081
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Config
+    description: Configuration key-value management with namespace isolation
+  - name: Config Bulk
+    description: Bulk configuration operations
+  - name: Config Export & Audit
+    description: Configuration export and audit trail
+  - name: Menus
+    description: Navigation menu management
+  - name: Menu Items
+    description: Menu item CRUD and reordering
+
+paths:
+  # ── Config Endpoints ──────────────────────────────────────────────────
+
+  /api/v1/config/get:
+    get:
+      tags: [Config]
+      summary: Get a single config value
+      operationId: getConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: environment
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [development, staging, production]
+          example: "production"
+        - name: namespace
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "payment"
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "default_currency"
+      responses:
+        '200':
+          description: Config value retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+              example:
+                success: true
+                data:
+                  id: "cfg_pay_001"
+                  tenant_id: "tenant_abc123"
+                  environment: "production"
+                  namespace: "payment"
+                  key: "default_currency"
+                  value: "BDT"
+                  value_type: "string"
+                  description: "Default currency for transactions"
+                  created_at: "2026-04-18T10:00:00Z"
+                  updated_at: "2026-04-18T10:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/set:
+    post:
+      tags: [Config]
+      summary: Set a config value
+      operationId: setConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetConfigRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              environment: "production"
+              namespace: "payment"
+              key: "default_currency"
+              value: "BDT"
+              value_type: "string"
+              description: "Default currency for transactions"
+      responses:
+        '200':
+          description: Config value set (created or updated)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/{id}:
+    delete:
+      tags: [Config]
+      summary: Delete a config entry
+      operationId: deleteConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cfg_pay_001"
+      responses:
+        '204':
+          description: Config deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/namespace/{namespace}:
+    get:
+      tags: [Config]
+      summary: List all configs in a namespace
+      operationId: listConfigsByNamespace
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - general
+              - branding
+              - payment
+              - shipping
+              - notifications
+              - email
+              - seo
+              - social
+              - analytics
+              - security
+              - features
+              - limits
+              - localization
+              - integrations
+              - checkout
+          example: "payment"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: environment
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [development, staging, production]
+          example: "production"
+      responses:
+        '200':
+          description: List of configs in the namespace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/namespaces:
+    get:
+      tags: [Config]
+      summary: List unique namespaces for a tenant
+      operationId: listNamespaces
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: List of unique namespace names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                      - "general"
+                      - "branding"
+                      - "payment"
+                      - "shipping"
+                      - "localization"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/search:
+    get:
+      tags: [Config]
+      summary: Search configs by key or value
+      operationId: searchConfigs
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: q
+          in: query
+          required: true
+          description: Search term to match against config keys and values
+          schema:
+            type: string
+          example: "currency"
+      responses:
+        '200':
+          description: Matching configs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ── Bulk Config Endpoints ─────────────────────────────────────────────
+
+  /api/v1/config/bulk/get:
+    post:
+      tags: [Config Bulk]
+      summary: Get multiple config values at once
+      operationId: bulkGetConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkGetConfigRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              environment: "production"
+              keys:
+                - namespace: "payment"
+                  key: "default_currency"
+                - namespace: "localization"
+                  key: "default_language"
+                - namespace: "shipping"
+                  key: "free_shipping_threshold"
+      responses:
+        '200':
+          description: Multiple config values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/bulk/set:
+    post:
+      tags: [Config Bulk]
+      summary: Set multiple config values at once
+      operationId: bulkSetConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSetConfigRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              environment: "production"
+              configs:
+                - namespace: "payment"
+                  key: "default_currency"
+                  value: "BDT"
+                  value_type: "string"
+                - namespace: "shipping"
+                  key: "free_shipping_threshold"
+                  value: "500"
+                  value_type: "float"
+                - namespace: "features"
+                  key: "enable_cod"
+                  value: "true"
+                  value_type: "bool"
+      responses:
+        '200':
+          description: All configs set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ── Export & Audit ────────────────────────────────────────────────────
+
+  /api/v1/config/export/{namespace}:
+    get:
+      tags: [Config Export & Audit]
+      summary: Export all configs in a namespace as JSON
+      operationId: exportConfigNamespace
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "payment"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: environment
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [development, staging, production]
+          example: "production"
+      responses:
+        '200':
+          description: Exported config as JSON key-value map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    additionalProperties: true
+                    example:
+                      default_currency: "BDT"
+                      payment_gateway: "sslcommerz"
+                      enable_cod: true
+                      cod_max_amount: 50000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/audit:
+    get:
+      tags: [Config Export & Audit]
+      summary: Get audit trail for config changes
+      operationId: getConfigAuditTrail
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: config_id
+          in: query
+          schema:
+            type: string
+          description: Filter by specific config ID
+          example: "cfg_pay_001"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated audit trail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/config/audit/{configId}:
+    get:
+      tags: [Config Export & Audit]
+      summary: Get change history for a specific config
+      operationId: getConfigHistory
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cfg_pay_001"
+      responses:
+        '200':
+          description: Config change history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ── Menu Endpoints ────────────────────────────────────────────────────
+
+  /api/v1/menus:
+    post:
+      tags: [Menus]
+      summary: Create a new menu
+      operationId: createMenu
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              name: "Main Navigation"
+              slug: "main-navigation"
+              location: "header"
+              is_active: true
+      responses:
+        '201':
+          description: Menu created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Menus]
+      summary: List all menus for a tenant
+      operationId: listMenus
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: List of menus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/menus/{id}:
+    get:
+      tags: [Menus]
+      summary: Get a menu by ID (with items)
+      operationId: getMenu
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "menu_header_001"
+      responses:
+        '200':
+          description: Menu with items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuWithItemsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Menus]
+      summary: Update a menu
+      operationId: updateMenu
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "menu_header_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMenuRequest'
+      responses:
+        '200':
+          description: Menu updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Menus]
+      summary: Delete a menu and its items
+      operationId: deleteMenu
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "menu_header_001"
+      responses:
+        '204':
+          description: Menu deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/menus/slug/{slug}:
+    get:
+      tags: [Menus]
+      summary: Get a menu by slug
+      operationId: getMenuBySlug
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "main-navigation"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: Menu with items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuWithItemsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/menus/location/{location}:
+    get:
+      tags: [Menus]
+      summary: Get menus by location
+      operationId: getMenusByLocation
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [header, footer, sidebar, mobile]
+          example: "header"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+      responses:
+        '200':
+          description: Menus at the specified location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ── Menu Item Endpoints ───────────────────────────────────────────────
+
+  /api/v1/menu-items/{menuId}:
+    post:
+      tags: [Menu Items]
+      summary: Add an item to a menu
+      operationId: createMenuItem
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: menuId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "menu_header_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuItemRequest'
+            example:
+              title: "Shop All"
+              url: "/products"
+              icon: "shopping-bag"
+              parent_id: null
+              position: 1
+              is_active: true
+      responses:
+        '201':
+          description: Menu item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/menu-items/{itemId}:
+    put:
+      tags: [Menu Items]
+      summary: Update a menu item
+      operationId: updateMenuItem
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "mi_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMenuItemRequest'
+      responses:
+        '200':
+          description: Menu item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Menu Items]
+      summary: Delete a menu item
+      operationId: deleteMenuItem
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "mi_001"
+      responses:
+        '204':
+          description: Menu item deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/menus-reorder/{menuId}:
+    put:
+      tags: [Menu Items]
+      summary: Reorder menu items
+      operationId: reorderMenuItems
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: menuId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "menu_header_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderMenuItemsRequest'
+            example:
+              items:
+                - id: "mi_001"
+                  position: 1
+                - id: "mi_002"
+                  position: 2
+                - id: "mi_003"
+                  position: 3
+      responses:
+        '200':
+          description: Menu items reordered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuWithItemsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "tenant_abc123"
+
+  schemas:
+    # ── Config Schemas ────────────────────────────────────────────────
+
+    ConfigEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "cfg_pay_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        environment:
+          type: string
+          enum: [development, staging, production]
+          example: "production"
+        namespace:
+          type: string
+          example: "payment"
+        key:
+          type: string
+          example: "default_currency"
+        value:
+          type: string
+          description: "Stored as string; interpret according to value_type"
+          example: "BDT"
+        value_type:
+          type: string
+          enum: [string, int, float, bool, json]
+          example: "string"
+        description:
+          type: string
+          nullable: true
+          example: "Default currency for transactions"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    SetConfigRequest:
+      type: object
+      required: [tenant_id, environment, namespace, key, value, value_type]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        environment:
+          type: string
+          enum: [development, staging, production]
+          example: "production"
+        namespace:
+          type: string
+          example: "payment"
+        key:
+          type: string
+          maxLength: 255
+          example: "default_currency"
+        value:
+          type: string
+          example: "BDT"
+        value_type:
+          type: string
+          enum: [string, int, float, bool, json]
+          example: "string"
+        description:
+          type: string
+          nullable: true
+          example: "Default currency for transactions"
+
+    BulkGetConfigRequest:
+      type: object
+      required: [tenant_id, environment, keys]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        environment:
+          type: string
+          enum: [development, staging, production]
+          example: "production"
+        keys:
+          type: array
+          items:
+            type: object
+            required: [namespace, key]
+            properties:
+              namespace:
+                type: string
+                example: "payment"
+              key:
+                type: string
+                example: "default_currency"
+
+    BulkSetConfigRequest:
+      type: object
+      required: [tenant_id, environment, configs]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        environment:
+          type: string
+          enum: [development, staging, production]
+          example: "production"
+        configs:
+          type: array
+          items:
+            type: object
+            required: [namespace, key, value, value_type]
+            properties:
+              namespace:
+                type: string
+                example: "payment"
+              key:
+                type: string
+                example: "default_currency"
+              value:
+                type: string
+                example: "BDT"
+              value_type:
+                type: string
+                enum: [string, int, float, bool, json]
+                example: "string"
+
+    ConfigResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ConfigEntry'
+
+    ConfigListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigEntry'
+
+    # ── Audit Schemas ─────────────────────────────────────────────────
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "audit_001"
+        config_id:
+          type: string
+          example: "cfg_pay_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        namespace:
+          type: string
+          example: "payment"
+        key:
+          type: string
+          example: "default_currency"
+        old_value:
+          type: string
+          nullable: true
+          example: "USD"
+        new_value:
+          type: string
+          example: "BDT"
+        action:
+          type: string
+          enum: [created, updated, deleted]
+          example: "updated"
+        changed_by:
+          type: string
+          example: "user_admin_001"
+        changed_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    AuditListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ── Menu Schemas ──────────────────────────────────────────────────
+
+    Menu:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "menu_header_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          example: "Main Navigation"
+        slug:
+          type: string
+          example: "main-navigation"
+        location:
+          type: string
+          enum: [header, footer, sidebar, mobile]
+          example: "header"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    MenuItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "mi_001"
+        menu_id:
+          type: string
+          example: "menu_header_001"
+        title:
+          type: string
+          example: "Shop All"
+        url:
+          type: string
+          example: "/products"
+        icon:
+          type: string
+          nullable: true
+          example: "shopping-bag"
+        parent_id:
+          type: string
+          nullable: true
+          example: null
+        position:
+          type: integer
+          example: 1
+        is_active:
+          type: boolean
+          example: true
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    CreateMenuRequest:
+      type: object
+      required: [tenant_id, name, slug, location]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          maxLength: 255
+          example: "Main Navigation"
+        slug:
+          type: string
+          maxLength: 255
+          example: "main-navigation"
+        location:
+          type: string
+          enum: [header, footer, sidebar, mobile]
+          example: "header"
+        is_active:
+          type: boolean
+          default: true
+          example: true
+
+    UpdateMenuRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: "Updated Navigation"
+        slug:
+          type: string
+          maxLength: 255
+          example: "updated-navigation"
+        location:
+          type: string
+          enum: [header, footer, sidebar, mobile]
+          example: "header"
+        is_active:
+          type: boolean
+          example: true
+
+    CreateMenuItemRequest:
+      type: object
+      required: [title, url, position]
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          example: "Shop All"
+        url:
+          type: string
+          maxLength: 500
+          example: "/products"
+        icon:
+          type: string
+          nullable: true
+          maxLength: 100
+          example: "shopping-bag"
+        parent_id:
+          type: string
+          nullable: true
+          example: null
+        position:
+          type: integer
+          minimum: 0
+          example: 1
+        is_active:
+          type: boolean
+          default: true
+          example: true
+
+    UpdateMenuItemRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          example: "Updated Title"
+        url:
+          type: string
+          maxLength: 500
+          example: "/updated-url"
+        icon:
+          type: string
+          nullable: true
+          maxLength: 100
+          example: "new-icon"
+        parent_id:
+          type: string
+          nullable: true
+          example: null
+        position:
+          type: integer
+          minimum: 0
+          example: 2
+        is_active:
+          type: boolean
+          example: true
+
+    ReorderMenuItemsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, position]
+            properties:
+              id:
+                type: string
+                example: "mi_001"
+              position:
+                type: integer
+                minimum: 0
+                example: 1
+
+    MenuResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Menu'
+
+    MenuListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Menu'
+
+    MenuWithItemsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Menu'
+            - type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MenuItem'
+
+    MenuItemResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/MenuItem'
+
+    # ── Common Schemas ────────────────────────────────────────────────
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 85
+        total_pages:
+          type: integer
+          example: 5
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "namespace"
+                  message:
+                    type: string
+                    example: "Namespace is required"
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid request parameters"
+              details:
+                - field: "namespace"
+                  message: "Namespace is required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              details: []
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "An unexpected error occurred"
+              details: []

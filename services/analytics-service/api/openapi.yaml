@@ -1,0 +1,804 @@
+openapi: 3.0.3
+info:
+  title: Analytics Service API
+  description: |
+    Sales, customer, and product analytics for a multi-tenant e-commerce platform.
+    Bangladesh-first market with BDT as the primary currency.
+    All endpoints require the X-Tenant-ID header for tenant isolation.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8082
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Sales Analytics
+    description: Revenue and order analytics
+  - name: Customer Analytics
+    description: Customer insights and segmentation
+  - name: Product Analytics
+    description: Product performance metrics
+  - name: Reports
+    description: Custom report management
+
+paths:
+  /api/v1/analytics/sales:
+    get:
+      tags: [Sales Analytics]
+      summary: Get sales analytics report
+      operationId: getSalesAnalytics
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-03-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-04-18"
+        - name: granularity
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+          example: "daily"
+      responses:
+        '200':
+          description: Sales report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesReportResponse'
+              example:
+                success: true
+                data:
+                  total_revenue: 4500000.00
+                  total_orders: 1250
+                  avg_order_value: 3600.00
+                  currency: "BDT"
+                  start_date: "2026-03-01"
+                  end_date: "2026-04-18"
+                  granularity: "daily"
+                  data_points:
+                    - date: "2026-03-01"
+                      revenue: 125000.00
+                      orders: 35
+                      avg_order_value: 3571.43
+                    - date: "2026-03-02"
+                      revenue: 98000.00
+                      orders: 28
+                      avg_order_value: 3500.00
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analytics/customers:
+    get:
+      tags: [Customer Analytics]
+      summary: Get customer insights
+      operationId: getCustomerAnalytics
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-03-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-04-18"
+      responses:
+        '200':
+          description: Customer insights data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerInsightsResponse'
+              example:
+                success: true
+                data:
+                  total_customers: 850
+                  new_customers: 230
+                  returning_customers: 620
+                  start_date: "2026-03-01"
+                  end_date: "2026-04-18"
+                  top_customers:
+                    - customer_id: "cust_001"
+                      name: "Rahim Uddin"
+                      email: "rahim@example.com"
+                      total_orders: 15
+                      total_spent: 125000.00
+                      currency: "BDT"
+                    - customer_id: "cust_002"
+                      name: "Fatima Begum"
+                      email: "fatima@example.com"
+                      total_orders: 12
+                      total_spent: 98000.00
+                      currency: "BDT"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analytics/products:
+    get:
+      tags: [Product Analytics]
+      summary: Get product performance metrics
+      operationId: getProductAnalytics
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-03-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-04-18"
+        - name: limit
+          in: query
+          description: Number of top products to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: Product performance data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPerformanceResponse'
+              example:
+                success: true
+                data:
+                  start_date: "2026-03-01"
+                  end_date: "2026-04-18"
+                  top_products:
+                    - product_id: "prod_a1b2c3d4"
+                      name: "Premium Jamdani Saree"
+                      sku: "SAR-JAM-001"
+                      total_sold: 85
+                      total_revenue: 1275000.00
+                      currency: "BDT"
+                      avg_rating: 4.7
+                    - product_id: "prod_e5f6g7h8"
+                      name: "Nakshi Kantha Bedsheet"
+                      sku: "BED-NK-001"
+                      total_sold: 62
+                      total_revenue: 310000.00
+                      currency: "BDT"
+                      avg_rating: 4.5
+                  categories_breakdown:
+                    - category_id: "cat_sarees_001"
+                      category_name: "Sarees"
+                      total_sold: 320
+                      total_revenue: 3200000.00
+                      currency: "BDT"
+                      percentage_of_total: 42.5
+                    - category_id: "cat_home_001"
+                      category_name: "Home & Living"
+                      total_sold: 180
+                      total_revenue: 900000.00
+                      currency: "BDT"
+                      percentage_of_total: 12.0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analytics/reports:
+    post:
+      tags: [Reports]
+      summary: Create a custom report
+      operationId: createReport
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              name: "Q1 2026 Sales Overview"
+              type: "sales"
+              config:
+                start_date: "2026-01-01"
+                end_date: "2026-03-31"
+                granularity: "monthly"
+                include_comparisons: true
+                comparison_period: "previous_quarter"
+                filters:
+                  categories: ["cat_sarees_001", "cat_home_001"]
+                  min_order_value: 500
+      responses:
+        '201':
+          description: Report created and queued for generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Reports]
+      summary: List saved reports
+      operationId: listReports
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tenant_abc123"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of reports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analytics/reports/{reportId}:
+    get:
+      tags: [Reports]
+      summary: Get a specific report with results
+      operationId: getReport
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rpt_q1_sales_001"
+      responses:
+        '200':
+          description: Report with generated results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "tenant_abc123"
+
+  schemas:
+    # ── Sales Analytics ───────────────────────────────────────────────
+
+    SalesDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: "Date label for the data point (format depends on granularity)"
+          example: "2026-03-01"
+        revenue:
+          type: number
+          format: double
+          description: "Revenue in BDT"
+          example: 125000.00
+        orders:
+          type: integer
+          example: 35
+        avg_order_value:
+          type: number
+          format: double
+          description: "Average order value in BDT"
+          example: 3571.43
+
+    SalesReport:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+          format: double
+          description: "Total revenue in BDT"
+          example: 4500000.00
+        total_orders:
+          type: integer
+          example: 1250
+        avg_order_value:
+          type: number
+          format: double
+          description: "Average order value in BDT"
+          example: 3600.00
+        currency:
+          type: string
+          default: "BDT"
+          example: "BDT"
+        start_date:
+          type: string
+          format: date
+          example: "2026-03-01"
+        end_date:
+          type: string
+          format: date
+          example: "2026-04-18"
+        granularity:
+          type: string
+          enum: [daily, weekly, monthly]
+          example: "daily"
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalesDataPoint'
+
+    SalesReportResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/SalesReport'
+
+    # ── Customer Analytics ────────────────────────────────────────────
+
+    TopCustomer:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          example: "cust_001"
+        name:
+          type: string
+          example: "Rahim Uddin"
+        email:
+          type: string
+          format: email
+          example: "rahim@example.com"
+        total_orders:
+          type: integer
+          example: 15
+        total_spent:
+          type: number
+          format: double
+          description: "Total amount spent in BDT"
+          example: 125000.00
+        currency:
+          type: string
+          default: "BDT"
+          example: "BDT"
+
+    CustomerInsights:
+      type: object
+      properties:
+        total_customers:
+          type: integer
+          example: 850
+        new_customers:
+          type: integer
+          example: 230
+        returning_customers:
+          type: integer
+          example: 620
+        start_date:
+          type: string
+          format: date
+          example: "2026-03-01"
+        end_date:
+          type: string
+          format: date
+          example: "2026-04-18"
+        top_customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopCustomer'
+
+    CustomerInsightsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/CustomerInsights'
+
+    # ── Product Analytics ─────────────────────────────────────────────
+
+    TopProduct:
+      type: object
+      properties:
+        product_id:
+          type: string
+          example: "prod_a1b2c3d4"
+        name:
+          type: string
+          example: "Premium Jamdani Saree"
+        sku:
+          type: string
+          example: "SAR-JAM-001"
+        total_sold:
+          type: integer
+          example: 85
+        total_revenue:
+          type: number
+          format: double
+          description: "Revenue in BDT"
+          example: 1275000.00
+        currency:
+          type: string
+          default: "BDT"
+          example: "BDT"
+        avg_rating:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 5
+          example: 4.7
+
+    CategoryBreakdown:
+      type: object
+      properties:
+        category_id:
+          type: string
+          example: "cat_sarees_001"
+        category_name:
+          type: string
+          example: "Sarees"
+        total_sold:
+          type: integer
+          example: 320
+        total_revenue:
+          type: number
+          format: double
+          description: "Revenue in BDT"
+          example: 3200000.00
+        currency:
+          type: string
+          default: "BDT"
+          example: "BDT"
+        percentage_of_total:
+          type: number
+          format: double
+          description: "Percentage of total revenue"
+          example: 42.5
+
+    ProductPerformance:
+      type: object
+      properties:
+        start_date:
+          type: string
+          format: date
+          example: "2026-03-01"
+        end_date:
+          type: string
+          format: date
+          example: "2026-04-18"
+        top_products:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopProduct'
+        categories_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryBreakdown'
+
+    ProductPerformanceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ProductPerformance'
+
+    # ── Reports ───────────────────────────────────────────────────────
+
+    CreateReportRequest:
+      type: object
+      required: [tenant_id, name, type, config]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          maxLength: 255
+          example: "Q1 2026 Sales Overview"
+        type:
+          type: string
+          enum: [sales, customers, products, custom]
+          example: "sales"
+        config:
+          type: object
+          description: "Report configuration - structure varies by report type"
+          properties:
+            start_date:
+              type: string
+              format: date
+              example: "2026-01-01"
+            end_date:
+              type: string
+              format: date
+              example: "2026-03-31"
+            granularity:
+              type: string
+              enum: [daily, weekly, monthly]
+              example: "monthly"
+            include_comparisons:
+              type: boolean
+              example: true
+            comparison_period:
+              type: string
+              enum: [previous_period, previous_quarter, previous_year]
+              example: "previous_quarter"
+            filters:
+              type: object
+              properties:
+                categories:
+                  type: array
+                  items:
+                    type: string
+                  example: ["cat_sarees_001", "cat_home_001"]
+                min_order_value:
+                  type: number
+                  format: double
+                  example: 500
+                max_order_value:
+                  type: number
+                  format: double
+                  example: 100000
+          additionalProperties: true
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "rpt_q1_sales_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        name:
+          type: string
+          example: "Q1 2026 Sales Overview"
+        type:
+          type: string
+          enum: [sales, customers, products, custom]
+          example: "sales"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "completed"
+        config:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:05:00Z"
+
+    ReportDetail:
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          properties:
+            results:
+              type: object
+              description: "Generated report data - structure varies by report type"
+              additionalProperties: true
+              example:
+                summary:
+                  total_revenue: 12500000.00
+                  total_orders: 3400
+                  currency: "BDT"
+                data_points:
+                  - period: "2026-01"
+                    revenue: 3800000.00
+                    orders: 1050
+                  - period: "2026-02"
+                    revenue: 4200000.00
+                    orders: 1150
+                  - period: "2026-03"
+                    revenue: 4500000.00
+                    orders: 1200
+                comparisons:
+                  previous_quarter_revenue: 10800000.00
+                  revenue_change_percentage: 15.7
+
+    ReportResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Report'
+
+    ReportDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ReportDetail'
+
+    ReportListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ── Common Schemas ────────────────────────────────────────────────
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 12
+        total_pages:
+          type: integer
+          example: 1
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "start_date"
+                  message:
+                    type: string
+                    example: "start_date must be before end_date"
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid request parameters"
+              details:
+                - field: "start_date"
+                  message: "start_date is required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              details: []
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "An unexpected error occurred"
+              details: []

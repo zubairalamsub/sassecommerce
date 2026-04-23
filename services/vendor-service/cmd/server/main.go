@@ -1,0 +1,129 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/ecommerce/vendor-service/internal/api"
+	"github.com/ecommerce/vendor-service/internal/config"
+	"github.com/ecommerce/vendor-service/internal/messaging"
+	"github.com/ecommerce/vendor-service/internal/models"
+	"github.com/ecommerce/vendor-service/internal/repository"
+	"github.com/ecommerce/vendor-service/internal/service"
+	"github.com/ecommerce/vendor-service/pkg/logger"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/segmentio/kafka-go"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+func main() {
+	cfg := config.Load()
+	log := logger.NewLogger(cfg.Server.Env)
+	log.Info("Starting Vendor Management Service...")
+
+	// Connect to PostgreSQL
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
+		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	log.Info("Successfully connected to PostgreSQL")
+
+	// Auto-migrate
+	if err := db.AutoMigrate(
+		&models.Vendor{},
+		&models.VendorOrder{},
+	); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Initialize Kafka writer
+	kafkaWriter := &kafka.Writer{
+		Addr:         kafka.TCP(cfg.Kafka.Brokers...),
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+		RequiredAcks: kafka.RequireOne,
+	}
+	defer kafkaWriter.Close()
+
+	// Initialize repository
+	vendorRepo := repository.NewVendorRepository(db)
+
+	// Initialize service
+	vendorService := service.NewVendorService(vendorRepo, kafkaWriter, log)
+
+	// Initialize Kafka consumer
+	consumer := messaging.NewEventConsumer(cfg.Kafka.Brokers, cfg.Kafka.GroupID, vendorService, log)
+	consumer.Start(context.Background())
+	defer consumer.Stop()
+
+	// Initialize handler
+	handler := api.NewVendorHandler(vendorService, log)
+
+	// Setup Gin router
+	if cfg.Server.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.Default()
+
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-Id"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "healthy",
+			"service": "vendor-service",
+			"time":    time.Now().UTC(),
+		})
+	})
+
+	api.RegisterRoutes(router, handler)
+
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%s", cfg.Server.Port),
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	go func() {
+		log.Infof("Vendor Service listening on port %s", cfg.Server.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("Shutting down server...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Info("Server exited")
+}

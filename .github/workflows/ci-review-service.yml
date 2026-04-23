@@ -1,0 +1,21 @@
+name: CI - Review Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/review-service/**'
+      - '.github/workflows/ci-review-service.yml'
+      - '.github/workflows/go-service.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/review-service/**'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/go-service.yml
+    with:
+      service-name: review-service
+      service-path: services/review-service
+      needs-postgres: true

@@ -1,0 +1,521 @@
+openapi: 3.0.3
+info:
+  title: Search Service API
+  description: |
+    Multi-tenant product search service for the e-commerce platform.
+    Provides full-text product search with faceted filtering, autocomplete
+    suggestions, and manual reindexing. Bangladesh-first market with
+    prices in BDT.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:5007/api/v1
+    description: Local development
+  - url: https://api.example.com/api/v1
+    description: Production
+
+tags:
+  - name: Search
+    description: Product search and autocomplete
+  - name: Indexing
+    description: Search index management
+
+paths:
+  /search/products:
+    get:
+      tags: [Search]
+      summary: Search products with filters and facets
+      operationId: searchProducts
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+          example: "Samsung Galaxy"
+        - name: category
+          in: query
+          description: Filter by category slug or ID
+          schema:
+            type: string
+          example: "electronics"
+        - name: min_price
+          in: query
+          description: Minimum price filter (BDT)
+          schema:
+            type: number
+            format: decimal
+            minimum: 0
+          example: 5000
+        - name: max_price
+          in: query
+          description: Maximum price filter (BDT)
+          schema:
+            type: number
+            format: decimal
+            minimum: 0
+          example: 50000
+        - name: sort
+          in: query
+          description: Sort order for results
+          schema:
+            type: string
+            enum:
+              - relevance
+              - price_asc
+              - price_desc
+              - newest
+            default: relevance
+          example: "relevance"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Search results with facets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+              example:
+                products:
+                  - id: "prod_01HXYZ"
+                    name: "Samsung Galaxy A54 5G"
+                    slug: "samsung-galaxy-a54-5g"
+                    description: "128GB, 8GB RAM, Awesome Graphite"
+                    price: 38999.00
+                    currency: "BDT"
+                    category: "electronics"
+                    image_url: "https://cdn.example.com/products/galaxy-a54.jpg"
+                    rating: 4.5
+                    review_count: 234
+                    in_stock: true
+                    created_at: "2026-03-15T10:00:00Z"
+                  - id: "prod_02HXYZ"
+                    name: "Samsung Galaxy M14 5G"
+                    slug: "samsung-galaxy-m14-5g"
+                    description: "64GB, 4GB RAM, Arctic Blue"
+                    price: 15999.00
+                    currency: "BDT"
+                    category: "electronics"
+                    image_url: "https://cdn.example.com/products/galaxy-m14.jpg"
+                    rating: 4.2
+                    review_count: 178
+                    in_stock: true
+                    created_at: "2026-02-20T08:00:00Z"
+                total: 12
+                page: 1
+                page_size: 20
+                total_pages: 1
+                facets:
+                  categories:
+                    - name: "Electronics"
+                      slug: "electronics"
+                      count: 10
+                    - name: "Accessories"
+                      slug: "accessories"
+                      count: 2
+                  price_ranges:
+                    - min: 0
+                      max: 10000
+                      count: 2
+                      label: "Under 10,000 BDT"
+                    - min: 10000
+                      max: 25000
+                      count: 4
+                      label: "10,000 - 25,000 BDT"
+                    - min: 25000
+                      max: 50000
+                      count: 5
+                      label: "25,000 - 50,000 BDT"
+                    - min: 50000
+                      max: null
+                      count: 1
+                      label: "Above 50,000 BDT"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /search/autocomplete:
+    get:
+      tags: [Search]
+      summary: Get autocomplete suggestions for a search query
+      operationId: autocomplete
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: q
+          in: query
+          required: true
+          description: Partial search query
+          schema:
+            type: string
+            minLength: 2
+          example: "sam"
+        - name: limit
+          in: query
+          description: Maximum number of suggestions
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+          example: 5
+      responses:
+        '200':
+          description: Autocomplete suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutocompleteResponse'
+              example:
+                suggestions:
+                  - text: "Samsung Galaxy"
+                    type: "query"
+                    highlight: "<em>Sam</em>sung Galaxy"
+                  - text: "Samsung Galaxy A54"
+                    type: "product"
+                    product_id: "prod_01HXYZ"
+                    highlight: "<em>Sam</em>sung Galaxy A54"
+                    image_url: "https://cdn.example.com/products/galaxy-a54-thumb.jpg"
+                    price: 38999.00
+                    currency: "BDT"
+                  - text: "Samsung charger"
+                    type: "query"
+                    highlight: "<em>Sam</em>sung charger"
+                  - text: "Saree collection"
+                    type: "category"
+                    highlight: "<em>Sa</em>ree collection"
+                  - text: "Samsung earbuds"
+                    type: "query"
+                    highlight: "<em>Sam</em>sung earbuds"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /search/reindex:
+    post:
+      tags: [Indexing]
+      summary: Trigger reindexing for a product
+      description: |
+        Triggers a reindex of a specific product in the search engine.
+        Used when product data is updated in the product service and
+        the search index needs to be refreshed.
+      operationId: reindexProduct
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReindexRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              product_id: "prod_01HXYZ"
+      responses:
+        '202':
+          description: Reindex request accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexResponse'
+              example:
+                status: "accepted"
+                product_id: "prod_01HXYZ"
+                message: "Reindex request queued successfully."
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "t_01HXYZ"
+
+  schemas:
+    SearchProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "prod_01HXYZ"
+        name:
+          type: string
+          example: "Samsung Galaxy A54 5G"
+        slug:
+          type: string
+          example: "samsung-galaxy-a54-5g"
+        description:
+          type: string
+          example: "128GB, 8GB RAM, Awesome Graphite"
+        price:
+          type: number
+          format: decimal
+          example: 38999.00
+        currency:
+          type: string
+          example: "BDT"
+        category:
+          type: string
+          example: "electronics"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.example.com/products/galaxy-a54.jpg"
+        rating:
+          type: number
+          format: float
+          nullable: true
+          example: 4.5
+        review_count:
+          type: integer
+          example: 234
+        in_stock:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-03-15T10:00:00Z"
+
+    CategoryFacet:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Electronics"
+        slug:
+          type: string
+          example: "electronics"
+        count:
+          type: integer
+          example: 10
+
+    PriceRangeFacet:
+      type: object
+      properties:
+        min:
+          type: number
+          format: decimal
+          example: 10000
+        max:
+          type: number
+          format: decimal
+          nullable: true
+          example: 25000
+        count:
+          type: integer
+          example: 4
+        label:
+          type: string
+          example: "10,000 - 25,000 BDT"
+
+    Facets:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryFacet'
+        price_ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceRangeFacet'
+
+    SearchResults:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchProduct'
+        total:
+          type: integer
+          description: Total number of matching results
+          example: 12
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 1
+        facets:
+          $ref: '#/components/schemas/Facets'
+
+    AutocompleteSuggestion:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Suggested search text
+          example: "Samsung Galaxy A54"
+        type:
+          type: string
+          enum:
+            - query
+            - product
+            - category
+          description: Type of suggestion
+          example: "product"
+        product_id:
+          type: string
+          nullable: true
+          description: Product ID if suggestion type is 'product'
+          example: "prod_01HXYZ"
+        highlight:
+          type: string
+          description: HTML-highlighted text showing matched portion
+          example: "<em>Sam</em>sung Galaxy A54"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Product thumbnail if suggestion type is 'product'
+          example: "https://cdn.example.com/products/galaxy-a54-thumb.jpg"
+        price:
+          type: number
+          format: decimal
+          nullable: true
+          description: Product price if suggestion type is 'product'
+          example: 38999.00
+        currency:
+          type: string
+          nullable: true
+          example: "BDT"
+
+    AutocompleteResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutocompleteSuggestion'
+
+    ReindexRequest:
+      type: object
+      required:
+        - tenant_id
+        - product_id
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        product_id:
+          type: string
+          example: "prod_01HXYZ"
+
+    ReindexResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - accepted
+            - failed
+          example: "accepted"
+        product_id:
+          type: string
+          example: "prod_01HXYZ"
+        message:
+          type: string
+          example: "Reindex request queued successfully."
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        title:
+          type: string
+          example: "Bad Request"
+        detail:
+          type: string
+          example: "Validation failed for one or more fields."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            q: ["Search query is required."]
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 400
+            title: "Bad Request"
+            detail: "Validation failed for one or more fields."
+            errors:
+              q: ["Search query is required."]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 404
+            title: "Not Found"
+            detail: "The requested resource was not found."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            title: "Internal Server Error"
+            detail: "An unexpected error occurred. Please try again later."

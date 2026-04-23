@@ -1,0 +1,1158 @@
+openapi: 3.0.3
+info:
+  title: Inventory Service API
+  description: |
+    Multi-tenant inventory management service for the e-commerce platform.
+    Manages warehouses, inventory items, stock levels, reservations, stock
+    adjustments, transfers, and movement history. Bangladesh-first market
+    with warehouse locations across BD.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:5005/api/v1
+    description: Local development
+  - url: https://api.example.com/api/v1
+    description: Production
+
+tags:
+  - name: Warehouses
+    description: Warehouse management
+  - name: Inventory Items
+    description: Inventory item CRUD and stock operations
+  - name: Stock Levels
+    description: Aggregate stock level queries
+  - name: Adjustments & Transfers
+    description: Stock adjustment and warehouse transfer operations
+  - name: Reservations
+    description: Order-based inventory reservation management
+  - name: Movements
+    description: Inventory movement history and audit trail
+
+paths:
+  /inventory/warehouses:
+    post:
+      tags: [Warehouses]
+      summary: Create a new warehouse
+      operationId: createWarehouse
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWarehouseRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              code: "DHK-01"
+              name: "Dhaka Central Warehouse"
+              address: "123 Tejgaon Industrial Area"
+              city: "Dhaka"
+              state: "Dhaka Division"
+              country: "BD"
+              postal_code: "1208"
+              is_active: true
+      responses:
+        '201':
+          description: Warehouse created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Warehouses]
+      summary: List warehouses for a tenant
+      operationId: listWarehouses
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+      responses:
+        '200':
+          description: List of warehouses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Warehouse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/warehouses/{id}:
+    get:
+      tags: [Warehouses]
+      summary: Get warehouse by ID
+      operationId: getWarehouseById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/WarehouseId'
+      responses:
+        '200':
+          description: Warehouse details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Warehouses]
+      summary: Update a warehouse
+      operationId: updateWarehouse
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/WarehouseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWarehouseRequest'
+      responses:
+        '200':
+          description: Warehouse updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Warehouse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Warehouses]
+      summary: Delete a warehouse
+      operationId: deleteWarehouse
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/WarehouseId'
+      responses:
+        '204':
+          description: Warehouse deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/items:
+    post:
+      tags: [Inventory Items]
+      summary: Create an inventory item
+      operationId: createInventoryItem
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryItemRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              warehouse_id: "wh_01HXYZ"
+              product_id: "prod_01HXYZ"
+              sku: "ELEC-PHONE-SAM-001"
+              quantity_on_hand: 150
+              reorder_point: 20
+              reorder_quantity: 100
+      responses:
+        '201':
+          description: Inventory item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Inventory Items]
+      summary: List inventory items with filters
+      operationId: listInventoryItems
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: warehouse_id
+          in: query
+          schema:
+            type: string
+          example: "wh_01HXYZ"
+        - name: sku
+          in: query
+          schema:
+            type: string
+          example: "ELEC-PHONE-SAM-001"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of inventory items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInventoryItems'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/items/low-stock:
+    get:
+      tags: [Inventory Items]
+      summary: List items at or below reorder point
+      operationId: getLowStockItems
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+      responses:
+        '200':
+          description: List of low stock inventory items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/items/{id}:
+    get:
+      tags: [Inventory Items]
+      summary: Get inventory item by ID
+      operationId: getInventoryItemById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/InventoryItemId'
+      responses:
+        '200':
+          description: Inventory item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Inventory Items]
+      summary: Update an inventory item
+      operationId: updateInventoryItem
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/InventoryItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInventoryItemRequest'
+      responses:
+        '200':
+          description: Inventory item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Inventory Items]
+      summary: Delete an inventory item
+      operationId: deleteInventoryItem
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/InventoryItemId'
+      responses:
+        '204':
+          description: Inventory item deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/stock-levels:
+    get:
+      tags: [Stock Levels]
+      summary: Get aggregate stock levels for a product across warehouses
+      operationId: getStockLevels
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "prod_01HXYZ"
+      responses:
+        '200':
+          description: Stock levels across warehouses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockLevels'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/items/{id}/adjust:
+    post:
+      tags: [Adjustments & Transfers]
+      summary: Adjust inventory quantity
+      operationId: adjustInventory
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/InventoryItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustInventoryRequest'
+            example:
+              quantity: -5
+              reason: "Damaged during storage - monsoon water damage"
+              type: "damage"
+      responses:
+        '200':
+          description: Inventory adjusted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/items/{id}/transfer:
+    post:
+      tags: [Adjustments & Transfers]
+      summary: Transfer inventory to another warehouse
+      operationId: transferInventory
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/InventoryItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferInventoryRequest'
+            example:
+              to_warehouse_id: "wh_02HXYZ"
+              quantity: 30
+              reason: "Rebalancing stock between Dhaka and Chittagong warehouses"
+      responses:
+        '200':
+          description: Inventory transferred
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/reservations:
+    post:
+      tags: [Reservations]
+      summary: Create an inventory reservation for an order
+      operationId: createReservation
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              inventory_item_id: "inv_01HXYZ"
+              order_id: "ord_01HXYZ"
+              order_item_id: "oi_01HXYZ"
+              quantity: 2
+      responses:
+        '201':
+          description: Reservation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/reservations/{id}:
+    get:
+      tags: [Reservations]
+      summary: Get reservation by ID
+      operationId: getReservationById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "res_01HXYZ"
+      responses:
+        '200':
+          description: Reservation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/reservations/{id}/fulfill:
+    post:
+      tags: [Reservations]
+      summary: Fulfill a reservation (deduct stock permanently)
+      operationId: fulfillReservation
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "res_01HXYZ"
+      responses:
+        '200':
+          description: Reservation fulfilled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/reservations/{id}/cancel:
+    post:
+      tags: [Reservations]
+      summary: Cancel a reservation (release reserved stock)
+      operationId: cancelReservation
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "res_01HXYZ"
+      responses:
+        '200':
+          description: Reservation cancelled and stock released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/movements:
+    get:
+      tags: [Movements]
+      summary: List inventory movements (audit trail)
+      operationId: listMovements
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: warehouse_id
+          in: query
+          schema:
+            type: string
+          example: "wh_01HXYZ"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of inventory movements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovements'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /inventory/movements/order/{orderId}:
+    get:
+      tags: [Movements]
+      summary: Get inventory movements for a specific order
+      operationId: getMovementsByOrderId
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "ord_01HXYZ"
+      responses:
+        '200':
+          description: Movements related to the order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryMovement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "t_01HXYZ"
+
+    WarehouseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "wh_01HXYZ"
+
+    InventoryItemId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "inv_01HXYZ"
+
+  schemas:
+    ReservationStatus:
+      type: string
+      enum:
+        - Active
+        - Fulfilled
+        - Cancelled
+        - Expired
+
+    MovementType:
+      type: string
+      enum:
+        - Adjustment
+        - Receipt
+        - Sale
+        - Return
+        - Transfer
+        - Damage
+
+    AdjustmentType:
+      type: string
+      enum:
+        - adjustment
+        - receipt
+        - damage
+        - return
+
+    CreateWarehouseRequest:
+      type: object
+      required:
+        - tenant_id
+        - code
+        - name
+        - address
+        - city
+        - state
+        - country
+        - postal_code
+        - is_active
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        code:
+          type: string
+          description: Unique warehouse code
+          example: "DHK-01"
+        name:
+          type: string
+          example: "Dhaka Central Warehouse"
+        address:
+          type: string
+          example: "123 Tejgaon Industrial Area"
+        city:
+          type: string
+          example: "Dhaka"
+        state:
+          type: string
+          example: "Dhaka Division"
+        country:
+          type: string
+          default: "BD"
+          example: "BD"
+        postal_code:
+          type: string
+          example: "1208"
+        is_active:
+          type: boolean
+          default: true
+          example: true
+
+    UpdateWarehouseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Dhaka Central Warehouse - Updated"
+        address:
+          type: string
+          example: "456 Mirpur DOHS"
+        city:
+          type: string
+          example: "Dhaka"
+        state:
+          type: string
+          example: "Dhaka Division"
+        postal_code:
+          type: string
+          example: "1216"
+        is_active:
+          type: boolean
+          example: true
+
+    Warehouse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "wh_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        code:
+          type: string
+          example: "DHK-01"
+        name:
+          type: string
+          example: "Dhaka Central Warehouse"
+        address:
+          type: string
+          example: "123 Tejgaon Industrial Area"
+        city:
+          type: string
+          example: "Dhaka"
+        state:
+          type: string
+          example: "Dhaka Division"
+        country:
+          type: string
+          example: "BD"
+        postal_code:
+          type: string
+          example: "1208"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-01T08:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-01T08:00:00Z"
+
+    CreateInventoryItemRequest:
+      type: object
+      required:
+        - tenant_id
+        - warehouse_id
+        - product_id
+        - sku
+        - quantity_on_hand
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        warehouse_id:
+          type: string
+          example: "wh_01HXYZ"
+        product_id:
+          type: string
+          example: "prod_01HXYZ"
+        sku:
+          type: string
+          example: "ELEC-PHONE-SAM-001"
+        quantity_on_hand:
+          type: integer
+          minimum: 0
+          example: 150
+        reorder_point:
+          type: integer
+          minimum: 0
+          example: 20
+        reorder_quantity:
+          type: integer
+          minimum: 0
+          example: 100
+
+    UpdateInventoryItemRequest:
+      type: object
+      properties:
+        reorder_point:
+          type: integer
+          minimum: 0
+          example: 25
+        reorder_quantity:
+          type: integer
+          minimum: 0
+          example: 120
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "inv_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        warehouse_id:
+          type: string
+          example: "wh_01HXYZ"
+        product_id:
+          type: string
+          example: "prod_01HXYZ"
+        sku:
+          type: string
+          example: "ELEC-PHONE-SAM-001"
+        quantity_on_hand:
+          type: integer
+          example: 150
+        quantity_reserved:
+          type: integer
+          example: 10
+        quantity_available:
+          type: integer
+          description: quantity_on_hand - quantity_reserved
+          example: 140
+        reorder_point:
+          type: integer
+          nullable: true
+          example: 20
+        reorder_quantity:
+          type: integer
+          nullable: true
+          example: 100
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-10T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T09:15:00Z"
+
+    PaginatedInventoryItems:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+        total:
+          type: integer
+          example: 85
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 5
+
+    StockLevels:
+      type: object
+      properties:
+        product_id:
+          type: string
+          example: "prod_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        total_on_hand:
+          type: integer
+          description: Total quantity across all warehouses
+          example: 350
+        total_reserved:
+          type: integer
+          example: 25
+        total_available:
+          type: integer
+          example: 325
+        warehouse_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              warehouse_id:
+                type: string
+                example: "wh_01HXYZ"
+              warehouse_name:
+                type: string
+                example: "Dhaka Central Warehouse"
+              quantity_on_hand:
+                type: integer
+                example: 200
+              quantity_reserved:
+                type: integer
+                example: 15
+              quantity_available:
+                type: integer
+                example: 185
+
+    AdjustInventoryRequest:
+      type: object
+      required:
+        - quantity
+        - reason
+        - type
+      properties:
+        quantity:
+          type: integer
+          description: Positive to add, negative to subtract
+          example: -5
+        reason:
+          type: string
+          example: "Damaged during storage - monsoon water damage"
+        type:
+          $ref: '#/components/schemas/AdjustmentType'
+
+    TransferInventoryRequest:
+      type: object
+      required:
+        - to_warehouse_id
+        - quantity
+        - reason
+      properties:
+        to_warehouse_id:
+          type: string
+          example: "wh_02HXYZ"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 30
+        reason:
+          type: string
+          example: "Rebalancing stock between Dhaka and Chittagong warehouses"
+
+    TransferResult:
+      type: object
+      properties:
+        transfer_id:
+          type: string
+          example: "xfr_01HXYZ"
+        source_item:
+          $ref: '#/components/schemas/InventoryItem'
+        destination_item:
+          $ref: '#/components/schemas/InventoryItem'
+        quantity_transferred:
+          type: integer
+          example: 30
+        reason:
+          type: string
+          example: "Rebalancing stock between Dhaka and Chittagong warehouses"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    CreateReservationRequest:
+      type: object
+      required:
+        - tenant_id
+        - inventory_item_id
+        - order_id
+        - order_item_id
+        - quantity
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        inventory_item_id:
+          type: string
+          example: "inv_01HXYZ"
+        order_id:
+          type: string
+          example: "ord_01HXYZ"
+        order_item_id:
+          type: string
+          example: "oi_01HXYZ"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "res_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        inventory_item_id:
+          type: string
+          example: "inv_01HXYZ"
+        order_id:
+          type: string
+          example: "ord_01HXYZ"
+        order_item_id:
+          type: string
+          example: "oi_01HXYZ"
+        quantity:
+          type: integer
+          example: 2
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T09:00:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Reservation expiry time (auto-release if not fulfilled)
+          example: "2026-04-18T09:30:00Z"
+
+    InventoryMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "mov_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        inventory_item_id:
+          type: string
+          example: "inv_01HXYZ"
+        warehouse_id:
+          type: string
+          example: "wh_01HXYZ"
+        type:
+          $ref: '#/components/schemas/MovementType'
+        quantity:
+          type: integer
+          description: Positive for inbound, negative for outbound
+          example: -2
+        previous_quantity:
+          type: integer
+          example: 150
+        new_quantity:
+          type: integer
+          example: 148
+        reason:
+          type: string
+          nullable: true
+          example: "Order fulfillment for ord_01HXYZ"
+        order_id:
+          type: string
+          nullable: true
+          example: "ord_01HXYZ"
+        reference_id:
+          type: string
+          nullable: true
+          description: Reference to reservation, transfer, or adjustment ID
+          example: "res_01HXYZ"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T09:15:00Z"
+
+    PaginatedMovements:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryMovement'
+        total:
+          type: integer
+          example: 230
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 12
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        title:
+          type: string
+          example: "Bad Request"
+        detail:
+          type: string
+          example: "Validation failed for one or more fields."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            quantity: ["Quantity must be greater than 0."]
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 400
+            title: "Bad Request"
+            detail: "Validation failed for one or more fields."
+            errors:
+              quantity: ["Quantity must be greater than 0."]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 404
+            title: "Not Found"
+            detail: "The requested resource was not found."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            title: "Internal Server Error"
+            detail: "An unexpected error occurred. Please try again later."

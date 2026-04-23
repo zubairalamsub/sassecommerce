@@ -1,0 +1,733 @@
+openapi: 3.0.3
+info:
+  title: Shipping Service API
+  description: |
+    Multi-tenant shipping and logistics service for the e-commerce platform.
+    Integrates with Bangladesh courier services (Pathao, Steadfast, RedX, Paperfly, Sundarban, SA Paribahan).
+    Handles shipment creation, tracking, rate calculation, and status updates.
+    Bangladesh-first market with BDT currency.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8004
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Shipments
+    description: Shipment lifecycle management
+  - name: Tracking
+    description: Shipment tracking operations
+  - name: Rates
+    description: Shipping rate calculation
+
+paths:
+  /api/v1/shipments:
+    post:
+      tags: [Shipments]
+      summary: Create a new shipment
+      operationId: createShipment
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShipmentRequest'
+            example:
+              tenant_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+              order_id: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+              carrier: "pathao"
+              service_type: "standard"
+              weight_kg: 1.5
+              length_cm: 30
+              width_cm: 20
+              height_cm: 10
+              insured_value: 9000.00
+              signature_required: false
+              from_address:
+                name: "Saajan Fashion House"
+                street: "Level 5, Bashundhara City, Panthapath"
+                city: "Dhaka"
+                state: "Dhaka Division"
+                postal_code: "1205"
+                country: "BD"
+              to_address:
+                name: "Rahim Ahmed"
+                street: "House 12, Road 5, Dhanmondi"
+                city: "Dhaka"
+                state: "Dhaka Division"
+                postal_code: "1209"
+                country: "BD"
+              items:
+                - product_id: "c5d6e7f8-9012-3456-7890-abcdef123456"
+                  variant_id: "d6e7f890-1234-5678-9012-abcdef345678"
+                  sku: "SARI-SILK-RED-M"
+                  name: "Red Silk Saree - Medium"
+                  quantity: 2
+                  weight_kg: 0.75
+      responses:
+        '201':
+          description: Shipment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Shipments]
+      summary: List shipments
+      operationId: listShipments
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, label_created, picked_up, in_transit, out_for_delivery, delivered, failed, returned, cancelled]
+          example: "in_transit"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of shipments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/shipments/{id}:
+    get:
+      tags: [Shipments]
+      summary: Get shipment by ID
+      operationId: getShipment
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/ShipmentID'
+      responses:
+        '200':
+          description: Shipment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/shipments/tracking/{trackingNumber}:
+    get:
+      tags: [Tracking]
+      summary: Get shipment by tracking number
+      operationId: getShipmentByTrackingNumber
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: trackingNumber
+          in: path
+          required: true
+          description: Carrier tracking number
+          schema:
+            type: string
+          example: "PTH-20260418-001234"
+      responses:
+        '200':
+          description: Shipment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/shipments/order/{orderId}:
+    get:
+      tags: [Tracking]
+      summary: Get shipments for an order
+      operationId: getShipmentsByOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: orderId
+          in: path
+          required: true
+          description: Order unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+      responses:
+        '200':
+          description: List of shipments for the order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/shipments/{id}/status:
+    put:
+      tags: [Shipments]
+      summary: Update shipment status
+      operationId: updateShipmentStatus
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/ShipmentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateShipmentStatusRequest'
+            example:
+              status: "in_transit"
+              location: "Dhaka Sorting Hub, Uttara"
+              description: "Package arrived at sorting facility"
+      responses:
+        '200':
+          description: Shipment status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/shipments/{id}/cancel:
+    post:
+      tags: [Shipments]
+      summary: Cancel a shipment
+      operationId: cancelShipment
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/ShipmentID'
+      responses:
+        '200':
+          description: Shipment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/rates:
+    post:
+      tags: [Rates]
+      summary: Calculate shipping rates
+      operationId: calculateRates
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateCalculationRequest'
+            example:
+              carrier: "pathao"
+              from_postal_code: "1205"
+              to_postal_code: "4000"
+              weight_kg: 1.5
+              length_cm: 30
+              width_cm: 20
+              height_cm: 10
+      responses:
+        '200':
+          description: Calculated shipping rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateCalculationResponse'
+              example:
+                rates:
+                  - carrier: "pathao"
+                    service_type: "standard"
+                    rate: 120.00
+                    currency: "BDT"
+                    estimated_days: 3
+                    description: "Pathao Standard Delivery (2-3 business days)"
+                  - carrier: "pathao"
+                    service_type: "express"
+                    rate: 200.00
+                    currency: "BDT"
+                    estimated_days: 1
+                    description: "Pathao Express Delivery (next business day)"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    ShipmentID:
+      name: id
+      in: path
+      required: true
+      description: Shipment unique identifier
+      schema:
+        type: string
+        format: uuid
+      example: "d4e5f678-9012-3456-abcd-ef7890123456"
+
+  schemas:
+    ShipmentAddress:
+      type: object
+      required: [name, street, city, state, postal_code, country]
+      properties:
+        name:
+          type: string
+          example: "Rahim Ahmed"
+        street:
+          type: string
+          example: "House 12, Road 5, Dhanmondi"
+        city:
+          type: string
+          example: "Dhaka"
+        state:
+          type: string
+          example: "Dhaka Division"
+        postal_code:
+          type: string
+          example: "1209"
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+          example: "BD"
+
+    ShipmentItem:
+      type: object
+      required: [product_id, variant_id, sku, name, quantity, weight_kg]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          example: "c5d6e7f8-9012-3456-7890-abcdef123456"
+        variant_id:
+          type: string
+          format: uuid
+          example: "d6e7f890-1234-5678-9012-abcdef345678"
+        sku:
+          type: string
+          example: "SARI-SILK-RED-M"
+        name:
+          type: string
+          example: "Red Silk Saree - Medium"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        weight_kg:
+          type: number
+          format: double
+          minimum: 0
+          example: 0.75
+
+    CreateShipmentRequest:
+      type: object
+      required: [tenant_id, order_id, carrier, service_type, weight_kg, length_cm, width_cm, height_cm, from_address, to_address, items]
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        order_id:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+        carrier:
+          type: string
+          enum: [pathao, steadfast, redx, paperfly, sundarban, sa_paribahan]
+          description: Bangladesh courier service
+          example: "pathao"
+        service_type:
+          type: string
+          enum: [standard, express]
+          example: "standard"
+        weight_kg:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 1.5
+        length_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 30
+        width_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 20
+        height_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 10
+        insured_value:
+          type: number
+          format: double
+          nullable: true
+          description: Insured value in BDT
+          example: 9000.00
+        signature_required:
+          type: boolean
+          nullable: true
+          default: false
+          example: false
+        from_address:
+          $ref: '#/components/schemas/ShipmentAddress'
+        to_address:
+          $ref: '#/components/schemas/ShipmentAddress'
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ShipmentItem'
+
+    UpdateShipmentStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, label_created, picked_up, in_transit, out_for_delivery, delivered, failed, returned, cancelled]
+          example: "in_transit"
+        location:
+          type: string
+          nullable: true
+          example: "Dhaka Sorting Hub, Uttara"
+        description:
+          type: string
+          nullable: true
+          example: "Package arrived at sorting facility"
+        signed_by:
+          type: string
+          nullable: true
+          description: Name of person who signed for delivery
+          example: "Rahim Ahmed"
+
+    RateCalculationRequest:
+      type: object
+      required: [from_postal_code, to_postal_code, weight_kg, length_cm, width_cm, height_cm]
+      properties:
+        carrier:
+          type: string
+          enum: [pathao, steadfast, redx, paperfly, sundarban, sa_paribahan]
+          nullable: true
+          description: Specific carrier to get rates for. If omitted, returns rates from all available carriers.
+          example: "pathao"
+        from_postal_code:
+          type: string
+          description: Origin postal code
+          example: "1205"
+        to_postal_code:
+          type: string
+          description: Destination postal code
+          example: "4000"
+        weight_kg:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 1.5
+        length_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 30
+        width_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 20
+        height_cm:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 10
+
+    TrackingEvent:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, label_created, picked_up, in_transit, out_for_delivery, delivered, failed, returned, cancelled]
+          example: "in_transit"
+        location:
+          type: string
+          nullable: true
+          example: "Dhaka Sorting Hub, Uttara"
+        description:
+          type: string
+          example: "Package arrived at sorting facility"
+        signed_by:
+          type: string
+          nullable: true
+          example: null
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-04-18T14:30:00+06:00"
+
+    ShipmentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d4e5f678-9012-3456-abcd-ef7890123456"
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        order_id:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+        tracking_number:
+          type: string
+          example: "PTH-20260418-001234"
+        carrier:
+          type: string
+          enum: [pathao, steadfast, redx, paperfly, sundarban, sa_paribahan]
+          example: "pathao"
+        service_type:
+          type: string
+          enum: [standard, express]
+          example: "standard"
+        status:
+          type: string
+          enum: [pending, label_created, picked_up, in_transit, out_for_delivery, delivered, failed, returned, cancelled]
+          example: "in_transit"
+        weight_kg:
+          type: number
+          format: double
+          example: 1.5
+        length_cm:
+          type: number
+          format: double
+          example: 30
+        width_cm:
+          type: number
+          format: double
+          example: 20
+        height_cm:
+          type: number
+          format: double
+          example: 10
+        insured_value:
+          type: number
+          format: double
+          nullable: true
+          description: Insured value in BDT
+          example: 9000.00
+        signature_required:
+          type: boolean
+          example: false
+        shipping_rate:
+          type: number
+          format: double
+          description: Shipping cost in BDT
+          example: 120.00
+        currency:
+          type: string
+          example: "BDT"
+        from_address:
+          $ref: '#/components/schemas/ShipmentAddress'
+        to_address:
+          $ref: '#/components/schemas/ShipmentAddress'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentItem'
+        tracking_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingEvent'
+        estimated_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-04-21T18:00:00+06:00"
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        label_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://labels.pathao.com/PTH-20260418-001234.pdf"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T14:30:00+06:00"
+
+    ShipmentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentResponse'
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 63
+
+    RateOption:
+      type: object
+      properties:
+        carrier:
+          type: string
+          enum: [pathao, steadfast, redx, paperfly, sundarban, sa_paribahan]
+          example: "pathao"
+        service_type:
+          type: string
+          enum: [standard, express]
+          example: "standard"
+        rate:
+          type: number
+          format: double
+          description: Shipping rate in BDT
+          example: 120.00
+        currency:
+          type: string
+          example: "BDT"
+        estimated_days:
+          type: integer
+          description: Estimated delivery time in business days
+          example: 3
+        description:
+          type: string
+          example: "Pathao Standard Delivery (2-3 business days)"
+
+    RateCalculationResponse:
+      type: object
+      properties:
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateOption'
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request body"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "weight_kg"
+              message:
+                type: string
+                example: "must be greater than 0"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid request body"
+            details:
+              - field: "carrier"
+                message: "must be one of: pathao, steadfast, redx, paperfly, sundarban, sa_paribahan"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "Shipment not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"

@@ -1,0 +1,21 @@
+name: CI - Payment Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/payment-service/**'
+      - '.github/workflows/ci-payment-service.yml'
+      - '.github/workflows/dotnet-service.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/payment-service/**'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/dotnet-service.yml
+    with:
+      service-name: payment-service
+      service-path: services/payment-service
+      test-project-path: services/payment-service/tests/Ecommerce.PaymentService.Tests

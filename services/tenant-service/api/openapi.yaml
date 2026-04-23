@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: Tenant Service API
+  description: |
+    Multi-tenant management service for the e-commerce platform.
+    Handles tenant registration, configuration, branding, and feature toggles.
+    Bangladesh-first market with BDT as default currency.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8001
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Tenants
+    description: Tenant management operations
+
+paths:
+  /api/v1/tenants:
+    post:
+      tags: [Tenants]
+      summary: Create a new tenant
+      operationId: createTenant
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+            example:
+              name: "Saajan Fashion House"
+              email: "admin@saajan.com.bd"
+              tier: "professional"
+      responses:
+        '201':
+          description: Tenant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Tenants]
+      summary: List all tenants
+      operationId: listTenants
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of tenants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tenants/{id}:
+    get:
+      tags: [Tenants]
+      summary: Get tenant by ID
+      operationId: getTenant
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/TenantID'
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Tenants]
+      summary: Update a tenant
+      operationId: updateTenant
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/TenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+            example:
+              name: "Saajan Fashion House Ltd."
+              domain: "shop.saajan.com.bd"
+              status: "active"
+      responses:
+        '200':
+          description: Tenant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Tenants]
+      summary: Delete a tenant
+      operationId: deleteTenant
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/TenantID'
+      responses:
+        '204':
+          description: Tenant deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tenants/{id}/config:
+    patch:
+      tags: [Tenants]
+      summary: Update tenant configuration
+      operationId: updateTenantConfig
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/TenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantConfigRequest'
+            example:
+              general:
+                timezone: "Asia/Dhaka"
+                currency: "BDT"
+                language: "bn"
+                date_format: "DD/MM/YYYY"
+                time_format: "12h"
+              branding:
+                logo_url: "https://cdn.saajan.com.bd/logo.png"
+                primary_color: "#006A4E"
+                secondary_color: "#F42A41"
+              features:
+                multi_currency: false
+                wishlist: true
+                product_reviews: true
+                guest_checkout: true
+                social_login: false
+                ai_recommendations: false
+      responses:
+        '200':
+          description: Tenant configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tenants/slug/{slug}:
+    get:
+      tags: [Tenants]
+      summary: Get tenant by slug
+      operationId: getTenantBySlug
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "saajan-fashion-house"
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tenants/domain:
+    get:
+      tags: [Tenants]
+      summary: Get tenant by custom domain
+      operationId: getTenantByDomain
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "shop.saajan.com.bd"
+      responses:
+        '200':
+          description: Tenant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    TenantID:
+      name: id
+      in: path
+      required: true
+      description: Tenant unique identifier
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+  schemas:
+    CreateTenantRequest:
+      type: object
+      required: [name, email, tier]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+          example: "Saajan Fashion House"
+        email:
+          type: string
+          format: email
+          example: "admin@saajan.com.bd"
+        tier:
+          type: string
+          enum: [free, starter, professional, enterprise]
+          example: "professional"
+
+    UpdateTenantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+          example: "Saajan Fashion House Ltd."
+        domain:
+          type: string
+          example: "shop.saajan.com.bd"
+        status:
+          type: string
+          enum: [active, suspended, cancelled, pending]
+          example: "active"
+        config:
+          $ref: '#/components/schemas/TenantConfig'
+
+    UpdateTenantConfigRequest:
+      type: object
+      properties:
+        general:
+          $ref: '#/components/schemas/GeneralConfig'
+        branding:
+          $ref: '#/components/schemas/BrandingConfig'
+        features:
+          $ref: '#/components/schemas/FeaturesConfig'
+
+    TenantConfig:
+      type: object
+      properties:
+        general:
+          $ref: '#/components/schemas/GeneralConfig'
+        branding:
+          $ref: '#/components/schemas/BrandingConfig'
+        features:
+          $ref: '#/components/schemas/FeaturesConfig'
+
+    GeneralConfig:
+      type: object
+      properties:
+        timezone:
+          type: string
+          example: "Asia/Dhaka"
+        currency:
+          type: string
+          example: "BDT"
+        language:
+          type: string
+          example: "bn"
+        date_format:
+          type: string
+          example: "DD/MM/YYYY"
+        time_format:
+          type: string
+          enum: ["12h", "24h"]
+          example: "12h"
+
+    BrandingConfig:
+      type: object
+      properties:
+        logo_url:
+          type: string
+          format: uri
+          example: "https://cdn.saajan.com.bd/logo.png"
+        primary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: "#006A4E"
+        secondary_color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: "#F42A41"
+
+    FeaturesConfig:
+      type: object
+      properties:
+        multi_currency:
+          type: boolean
+          example: false
+        wishlist:
+          type: boolean
+          example: true
+        product_reviews:
+          type: boolean
+          example: true
+        guest_checkout:
+          type: boolean
+          example: true
+        social_login:
+          type: boolean
+          example: false
+        ai_recommendations:
+          type: boolean
+          example: false
+
+    TenantResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        name:
+          type: string
+          example: "Saajan Fashion House"
+        slug:
+          type: string
+          example: "saajan-fashion-house"
+        domain:
+          type: string
+          nullable: true
+          example: "shop.saajan.com.bd"
+        email:
+          type: string
+          format: email
+          example: "admin@saajan.com.bd"
+        status:
+          type: string
+          enum: [active, suspended, cancelled, pending]
+          example: "active"
+        tier:
+          type: string
+          enum: [free, starter, professional, enterprise]
+          example: "professional"
+        config:
+          $ref: '#/components/schemas/TenantConfig'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+
+    TenantListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantResponse'
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 42
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request body"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "email"
+              message:
+                type: string
+                example: "must be a valid email address"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid request body"
+            details:
+              - field: "email"
+                message: "must be a valid email address"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "Tenant not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"

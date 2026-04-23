@@ -1,0 +1,825 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: |
+    Multi-tenant payment processing service for the e-commerce platform.
+    Supports Bangladesh-first payment methods including bKash, Nagad, Rocket,
+    as well as traditional card and bank payments. Default currency is BDT.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:5004/api/v1
+    description: Local development
+  - url: https://api.example.com/api/v1
+    description: Production
+
+tags:
+  - name: Payments
+    description: Payment processing operations
+  - name: Refunds
+    description: Payment refund operations
+  - name: Payment Methods
+    description: Customer payment method management
+
+paths:
+  /payments:
+    post:
+      tags: [Payments]
+      summary: Process a new payment
+      operationId: processPayment
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessPaymentRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              customer_id: "c_01HXYZ"
+              order_id: "ord_01HXYZ"
+              amount: 2500.00
+              currency: "BDT"
+              method: "bkash"
+              payment_method_id: "pm_01HXYZ"
+              description: "Order payment for electronics"
+      responses:
+        '201':
+          description: Payment created and processing initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Payments]
+      summary: List payments with filters
+      operationId: listPayments
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: customer_id
+          in: query
+          schema:
+            type: string
+          example: "c_01HXYZ"
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of payments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPayments'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/{id}:
+    get:
+      tags: [Payments]
+      summary: Get payment by ID
+      operationId: getPaymentById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/order/{orderId}:
+    get:
+      tags: [Payments]
+      summary: Get payments by order ID
+      operationId: getPaymentsByOrderId
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "ord_01HXYZ"
+      responses:
+        '200':
+          description: Payments associated with the order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/customer/{customerId}:
+    get:
+      tags: [Payments]
+      summary: Get payments by customer ID
+      operationId: getPaymentsByCustomerId
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "c_01HXYZ"
+      responses:
+        '200':
+          description: Payments for the customer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/{id}/cancel:
+    post:
+      tags: [Payments]
+      summary: Cancel a pending payment
+      operationId: cancelPayment
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/{id}/refund:
+    post:
+      tags: [Refunds]
+      summary: Create a refund for a payment
+      operationId: refundPayment
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/PaymentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+            example:
+              amount: 500.00
+              reason: "Customer requested return - defective product"
+      responses:
+        '201':
+          description: Refund initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/refunds/{refundId}:
+    get:
+      tags: [Refunds]
+      summary: Get refund by ID
+      operationId: getRefundById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: refundId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "ref_01HXYZ"
+      responses:
+        '200':
+          description: Refund details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/{id}/refunds:
+    get:
+      tags: [Refunds]
+      summary: Get all refunds for a payment
+      operationId: getRefundsByPaymentId
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: List of refunds for the payment
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Refund'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/methods:
+    post:
+      tags: [Payment Methods]
+      summary: Create a payment method
+      operationId: createPaymentMethod
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentMethodRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              customer_id: "c_01HXYZ"
+              type: "bkash"
+              wallet_email: "karim@example.com"
+              is_default: true
+      responses:
+        '201':
+          description: Payment method created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      tags: [Payment Methods]
+      summary: List payment methods for a customer
+      operationId: listPaymentMethods
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "c_01HXYZ"
+      responses:
+        '200':
+          description: List of payment methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payments/methods/{methodId}:
+    get:
+      tags: [Payment Methods]
+      summary: Get payment method by ID
+      operationId: getPaymentMethodById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: methodId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pm_01HXYZ"
+      responses:
+        '200':
+          description: Payment method details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Payment Methods]
+      summary: Update a payment method
+      operationId: updatePaymentMethod
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: methodId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pm_01HXYZ"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentMethodRequest'
+      responses:
+        '200':
+          description: Payment method updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Payment Methods]
+      summary: Delete a payment method
+      operationId: deletePaymentMethod
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: methodId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pm_01HXYZ"
+      responses:
+        '204':
+          description: Payment method deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "t_01HXYZ"
+
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "pay_01HXYZ"
+
+  schemas:
+    PaymentStatus:
+      type: string
+      enum:
+        - Pending
+        - Completed
+        - Failed
+        - Cancelled
+        - Refunded
+        - PartiallyRefunded
+
+    PaymentMethodType:
+      type: string
+      enum:
+        - credit_card
+        - debit_card
+        - bank_transfer
+        - digital_wallet
+        - bkash
+        - nagad
+        - rocket
+        - cod
+
+    PaymentMethodEnum:
+      type: string
+      enum:
+        - bkash
+        - nagad
+        - rocket
+        - credit_card
+        - debit_card
+        - bank_transfer
+        - cod
+
+    ProcessPaymentRequest:
+      type: object
+      required:
+        - tenant_id
+        - customer_id
+        - order_id
+        - amount
+        - currency
+        - method
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        customer_id:
+          type: string
+          example: "c_01HXYZ"
+        order_id:
+          type: string
+          example: "ord_01HXYZ"
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 2500.00
+        currency:
+          type: string
+          default: "BDT"
+          example: "BDT"
+        method:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        payment_method_id:
+          type: string
+          description: Saved payment method ID to use
+          example: "pm_01HXYZ"
+        description:
+          type: string
+          example: "Payment for order ord_01HXYZ"
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "pay_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        customer_id:
+          type: string
+          example: "c_01HXYZ"
+        order_id:
+          type: string
+          example: "ord_01HXYZ"
+        amount:
+          type: number
+          format: decimal
+          example: 2500.00
+        currency:
+          type: string
+          example: "BDT"
+        method:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        payment_method_id:
+          type: string
+          nullable: true
+          example: "pm_01HXYZ"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        description:
+          type: string
+          nullable: true
+          example: "Payment for order ord_01HXYZ"
+        transaction_id:
+          type: string
+          description: External transaction reference from payment gateway
+          nullable: true
+          example: "txn_bkash_ABC123"
+        failure_reason:
+          type: string
+          nullable: true
+          example: null
+        refunded_amount:
+          type: number
+          format: decimal
+          example: 0.00
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:05Z"
+
+    PaginatedPayments:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        total:
+          type: integer
+          example: 45
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 3
+
+    RefundRequest:
+      type: object
+      required:
+        - amount
+        - reason
+      properties:
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 500.00
+        reason:
+          type: string
+          example: "Customer requested return - defective product"
+
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "ref_01HXYZ"
+        payment_id:
+          type: string
+          example: "pay_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        amount:
+          type: number
+          format: decimal
+          example: 500.00
+        currency:
+          type: string
+          example: "BDT"
+        reason:
+          type: string
+          example: "Customer requested return - defective product"
+        status:
+          type: string
+          enum:
+            - Pending
+            - Completed
+            - Failed
+          example: "Pending"
+        transaction_id:
+          type: string
+          nullable: true
+          example: "txn_ref_bkash_DEF456"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T11:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T11:00:00Z"
+
+    CreatePaymentMethodRequest:
+      type: object
+      required:
+        - tenant_id
+        - customer_id
+        - type
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        customer_id:
+          type: string
+          example: "c_01HXYZ"
+        type:
+          $ref: '#/components/schemas/PaymentMethodType'
+        card_number:
+          type: string
+          description: Required for credit_card and debit_card types
+          example: "4111111111111111"
+        expiry_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: Required for credit_card and debit_card types
+          example: 12
+        expiry_year:
+          type: integer
+          description: Required for credit_card and debit_card types
+          example: 2028
+        cardholder_name:
+          type: string
+          description: Required for credit_card and debit_card types
+          example: "Abdul Karim"
+        bank_name:
+          type: string
+          description: Required for bank_transfer type
+          example: "Dutch-Bangla Bank"
+        account_number:
+          type: string
+          description: Required for bank_transfer type
+          example: "1234567890"
+        wallet_email:
+          type: string
+          format: email
+          description: Optional for digital wallet types
+          example: "karim@example.com"
+        is_default:
+          type: boolean
+          default: false
+          example: true
+
+    UpdatePaymentMethodRequest:
+      type: object
+      properties:
+        expiry_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 6
+        expiry_year:
+          type: integer
+          example: 2029
+        cardholder_name:
+          type: string
+          example: "Abdul Karim Rahman"
+        is_default:
+          type: boolean
+          example: true
+
+    PaymentMethod:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "pm_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        customer_id:
+          type: string
+          example: "c_01HXYZ"
+        type:
+          $ref: '#/components/schemas/PaymentMethodType'
+        last_four:
+          type: string
+          nullable: true
+          description: Last four digits of card number (masked)
+          example: "1111"
+        expiry_month:
+          type: integer
+          nullable: true
+          example: 12
+        expiry_year:
+          type: integer
+          nullable: true
+          example: 2028
+        cardholder_name:
+          type: string
+          nullable: true
+          example: "Abdul Karim"
+        bank_name:
+          type: string
+          nullable: true
+          example: "Dutch-Bangla Bank"
+        wallet_email:
+          type: string
+          nullable: true
+          example: "karim@example.com"
+        is_default:
+          type: boolean
+          example: true
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-15T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-15T09:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        title:
+          type: string
+          example: "Bad Request"
+        detail:
+          type: string
+          example: "Validation failed for one or more fields."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            amount: ["Amount must be greater than 0."]
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 400
+            title: "Bad Request"
+            detail: "Validation failed for one or more fields."
+            errors:
+              amount: ["Amount must be greater than 0."]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 404
+            title: "Not Found"
+            detail: "Payment with ID 'pay_NOTFOUND' was not found."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            title: "Internal Server Error"
+            detail: "An unexpected error occurred. Please try again later."

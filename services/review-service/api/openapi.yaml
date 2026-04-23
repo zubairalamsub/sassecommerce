@@ -1,0 +1,712 @@
+openapi: 3.0.3
+info:
+  title: Review Service API
+  description: |
+    Product review and rating management for a multi-tenant e-commerce platform.
+    Bangladesh-first market with BDT as the primary currency.
+    Supports review creation, moderation, helpfulness voting, and merchant responses.
+    All endpoints require the X-Tenant-ID header for tenant isolation.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8083
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Reviews
+    description: Review CRUD operations
+  - name: Review Actions
+    description: Helpfulness voting, moderation, and merchant responses
+  - name: Review Queries
+    description: Product and user review lookups with summaries
+
+paths:
+  /api/v1/reviews:
+    post:
+      tags: [Reviews]
+      summary: Create a new review
+      operationId: createReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+            example:
+              tenant_id: "tenant_abc123"
+              product_id: "prod_a1b2c3d4"
+              user_id: "user_r001"
+              rating: 5
+              title: "Excellent quality Jamdani"
+              content: "The craftsmanship is outstanding. The saree arrived well-packaged and the colors are exactly as shown. Very happy with my purchase from Dhaka."
+              images:
+                - url: "https://cdn.example.com/reviews/rev-img-001.jpg"
+                  alt_text: "Customer photo of Jamdani saree"
+      responses:
+        '201':
+          description: Review created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/{id}:
+    get:
+      tags: [Reviews]
+      summary: Get a review by ID
+      operationId: getReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      responses:
+        '200':
+          description: Review details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Reviews]
+      summary: Update a review
+      operationId: updateReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReviewRequest'
+            example:
+              rating: 4
+              title: "Good quality, slightly delayed shipping"
+              content: "Updated review - the saree quality is great but shipping took longer than expected."
+      responses:
+        '200':
+          description: Review updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Reviews]
+      summary: Delete a review
+      operationId: deleteReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      responses:
+        '204':
+          description: Review deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/{id}/helpful:
+    post:
+      tags: [Review Actions]
+      summary: Mark a review as helpful
+      operationId: markReviewHelpful
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+                  description: ID of the user marking the review as helpful
+                  example: "user_v002"
+            example:
+              user_id: "user_v002"
+      responses:
+        '200':
+          description: Review marked as helpful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      review_id:
+                        type: string
+                        example: "rev_001"
+                      helpful_count:
+                        type: integer
+                        example: 12
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/{id}/moderate:
+    post:
+      tags: [Review Actions]
+      summary: Moderate a review (approve, reject, or flag)
+      operationId: moderateReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerateReviewRequest'
+            example:
+              status: "approved"
+              reason: "Review meets content guidelines"
+      responses:
+        '200':
+          description: Review moderation status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/{id}/respond:
+    post:
+      tags: [Review Actions]
+      summary: Add a merchant response to a review
+      operationId: respondToReview
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "rev_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToReviewRequest'
+            example:
+              response_text: "Thank you for your wonderful feedback! We take great pride in our Jamdani collection. We hope to serve you again soon."
+              responded_by: "merchant_admin_001"
+      responses:
+        '200':
+          description: Response added to review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/product/{productId}:
+    get:
+      tags: [Review Queries]
+      summary: List reviews for a product
+      operationId: getProductReviews
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, highest, lowest, helpful]
+            default: newest
+          example: "newest"
+      responses:
+        '200':
+          description: Paginated list of reviews for the product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/product/{productId}/summary:
+    get:
+      tags: [Review Queries]
+      summary: Get review summary for a product
+      operationId: getProductReviewSummary
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prod_a1b2c3d4"
+      responses:
+        '200':
+          description: Review summary with rating breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSummaryResponse'
+              example:
+                success: true
+                data:
+                  product_id: "prod_a1b2c3d4"
+                  average_rating: 4.3
+                  total_reviews: 128
+                  rating_breakdown:
+                    "5": 65
+                    "4": 32
+                    "3": 18
+                    "2": 8
+                    "1": 5
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews/user/{userId}:
+    get:
+      tags: [Review Queries]
+      summary: List reviews by a user
+      operationId: getUserReviews
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "user_r001"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of reviews by the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "tenant_abc123"
+
+  schemas:
+    ReviewImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          example: "https://cdn.example.com/reviews/rev-img-001.jpg"
+        alt_text:
+          type: string
+          example: "Customer photo of Jamdani saree"
+
+    MerchantResponse:
+      type: object
+      properties:
+        response_text:
+          type: string
+          example: "Thank you for your wonderful feedback!"
+        responded_by:
+          type: string
+          example: "merchant_admin_001"
+        responded_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T14:00:00Z"
+
+    CreateReviewRequest:
+      type: object
+      required: [tenant_id, product_id, user_id, rating, title, content]
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        product_id:
+          type: string
+          example: "prod_a1b2c3d4"
+        user_id:
+          type: string
+          example: "user_r001"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        title:
+          type: string
+          maxLength: 255
+          example: "Excellent quality Jamdani"
+        content:
+          type: string
+          maxLength: 5000
+          example: "The craftsmanship is outstanding. The saree arrived well-packaged and the colors are exactly as shown."
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewImage'
+
+    UpdateReviewRequest:
+      type: object
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        title:
+          type: string
+          maxLength: 255
+          example: "Good quality, slightly delayed shipping"
+        content:
+          type: string
+          maxLength: 5000
+          example: "Updated review - the saree quality is great but shipping took longer than expected."
+
+    ModerateReviewRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected, flagged]
+          example: "approved"
+        reason:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: "Review meets content guidelines"
+
+    RespondToReviewRequest:
+      type: object
+      required: [response_text, responded_by]
+      properties:
+        response_text:
+          type: string
+          maxLength: 2000
+          example: "Thank you for your wonderful feedback! We hope to serve you again soon."
+        responded_by:
+          type: string
+          example: "merchant_admin_001"
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "rev_001"
+        tenant_id:
+          type: string
+          example: "tenant_abc123"
+        product_id:
+          type: string
+          example: "prod_a1b2c3d4"
+        user_id:
+          type: string
+          example: "user_r001"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        title:
+          type: string
+          example: "Excellent quality Jamdani"
+        content:
+          type: string
+          example: "The craftsmanship is outstanding. The saree arrived well-packaged and the colors are exactly as shown."
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewImage'
+        helpful_count:
+          type: integer
+          example: 12
+        moderation_status:
+          type: string
+          enum: [pending, approved, rejected, flagged]
+          example: "approved"
+        moderation_reason:
+          type: string
+          nullable: true
+          example: null
+        merchant_response:
+          $ref: '#/components/schemas/MerchantResponse'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    ReviewResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Review'
+
+    ReviewListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    RatingBreakdown:
+      type: object
+      description: "Count of reviews per star rating"
+      properties:
+        "5":
+          type: integer
+          example: 65
+        "4":
+          type: integer
+          example: 32
+        "3":
+          type: integer
+          example: 18
+        "2":
+          type: integer
+          example: 8
+        "1":
+          type: integer
+          example: 5
+
+    ReviewSummary:
+      type: object
+      properties:
+        product_id:
+          type: string
+          example: "prod_a1b2c3d4"
+        average_rating:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 5
+          example: 4.3
+        total_reviews:
+          type: integer
+          example: 128
+        rating_breakdown:
+          $ref: '#/components/schemas/RatingBreakdown'
+
+    ReviewSummaryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ReviewSummary'
+
+    # ── Common Schemas ────────────────────────────────────────────────
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 128
+        total_pages:
+          type: integer
+          example: 7
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "rating"
+                  message:
+                    type: string
+                    example: "Rating must be between 1 and 5"
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid request parameters"
+              details:
+                - field: "rating"
+                  message: "Rating must be between 1 and 5"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              details: []
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "An unexpected error occurred"
+              details: []

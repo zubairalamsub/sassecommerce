@@ -1,0 +1,715 @@
+openapi: 3.0.3
+info:
+  title: Order Service API
+  description: |
+    Multi-tenant order management service for the e-commerce platform.
+    Handles order creation, item management, and order lifecycle (pending -> confirmed -> shipped -> delivered).
+    Bangladesh-first market with BDT currency.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8003
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Orders
+    description: Order lifecycle management
+  - name: Order Items
+    description: Add or remove items from an order
+
+paths:
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      summary: Create a new order
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              tenant_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+              customer_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+              shipping_address:
+                street: "House 12, Road 5, Dhanmondi"
+                city: "Dhaka"
+                state: "Dhaka Division"
+                postal_code: "1205"
+                country: "BD"
+              billing_address:
+                street: "House 12, Road 5, Dhanmondi"
+                city: "Dhaka"
+                state: "Dhaka Division"
+                postal_code: "1205"
+                country: "BD"
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by ID
+      operationId: getOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/items:
+    post:
+      tags: [Order Items]
+      summary: Add an item to an order
+      operationId: addOrderItem
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddOrderItemRequest'
+            example:
+              product_id: "c5d6e7f8-9012-3456-7890-abcdef123456"
+              variant_id: "d6e7f890-1234-5678-9012-abcdef345678"
+              sku: "SARI-SILK-RED-M"
+              name: "Red Silk Saree - Medium"
+              quantity: 2
+              unit_price: 4500.00
+      responses:
+        '201':
+          description: Item added to order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/items/{itemId}:
+    delete:
+      tags: [Order Items]
+      summary: Remove an item from an order
+      operationId: removeOrderItem
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+        - name: itemId
+          in: path
+          required: true
+          description: Order item unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "e7f89012-3456-7890-abcd-ef1234567890"
+      responses:
+        '200':
+          description: Item removed from order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/confirm:
+    post:
+      tags: [Orders]
+      summary: Confirm an order
+      operationId: confirmOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmOrderRequest'
+            example:
+              confirmed_by: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      responses:
+        '200':
+          description: Order confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel an order
+      operationId: cancelOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+            example:
+              reason: "Customer changed mind"
+              cancelled_by: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      responses:
+        '200':
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/ship:
+    post:
+      tags: [Orders]
+      summary: Mark order as shipped
+      operationId: shipOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShipOrderRequest'
+            example:
+              tracking_number: "PTH-20260418-001234"
+              carrier: "pathao"
+              shipped_by: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      responses:
+        '200':
+          description: Order shipped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/{id}/deliver:
+    post:
+      tags: [Orders]
+      summary: Mark order as delivered
+      operationId: deliverOrder
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/OrderID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliverOrderRequest'
+            example:
+              delivered_by: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      responses:
+        '200':
+          description: Order delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/customers/{customerId}/orders:
+    get:
+      tags: [Orders]
+      summary: List orders for a customer
+      operationId: listCustomerOrders
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: customerId
+          in: path
+          required: true
+          description: Customer unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of customer orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tenants/{tenantId}/orders:
+    get:
+      tags: [Orders]
+      summary: List all orders for a tenant
+      operationId: listTenantOrders
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: tenantId
+          in: path
+          required: true
+          description: Tenant unique identifier
+          schema:
+            type: string
+            format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Paginated list of tenant orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    OrderID:
+      name: id
+      in: path
+      required: true
+      description: Order unique identifier
+      schema:
+        type: string
+        format: uuid
+      example: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+
+  schemas:
+    Address:
+      type: object
+      required: [street, city, state, postal_code, country]
+      properties:
+        street:
+          type: string
+          example: "House 12, Road 5, Dhanmondi"
+        city:
+          type: string
+          example: "Dhaka"
+        state:
+          type: string
+          example: "Dhaka Division"
+        postal_code:
+          type: string
+          example: "1205"
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+          example: "BD"
+
+    CreateOrderRequest:
+      type: object
+      required: [tenant_id, customer_id, shipping_address, billing_address]
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        customer_id:
+          type: string
+          format: uuid
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        shipping_address:
+          $ref: '#/components/schemas/Address'
+        billing_address:
+          $ref: '#/components/schemas/Address'
+
+    AddOrderItemRequest:
+      type: object
+      required: [product_id, variant_id, sku, name, quantity, unit_price]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          example: "c5d6e7f8-9012-3456-7890-abcdef123456"
+        variant_id:
+          type: string
+          format: uuid
+          example: "d6e7f890-1234-5678-9012-abcdef345678"
+        sku:
+          type: string
+          example: "SARI-SILK-RED-M"
+        name:
+          type: string
+          example: "Red Silk Saree - Medium"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        unit_price:
+          type: number
+          format: double
+          minimum: 0
+          description: Price in BDT
+          example: 4500.00
+
+    ConfirmOrderRequest:
+      type: object
+      required: [confirmed_by]
+      properties:
+        confirmed_by:
+          type: string
+          format: uuid
+          description: User ID of person confirming the order
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+    CancelOrderRequest:
+      type: object
+      required: [reason, cancelled_by]
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          example: "Customer changed mind"
+        cancelled_by:
+          type: string
+          format: uuid
+          description: User ID of person cancelling the order
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+    ShipOrderRequest:
+      type: object
+      required: [tracking_number, carrier, shipped_by]
+      properties:
+        tracking_number:
+          type: string
+          example: "PTH-20260418-001234"
+        carrier:
+          type: string
+          example: "pathao"
+        shipped_by:
+          type: string
+          format: uuid
+          description: User ID of person marking the order as shipped
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+    DeliverOrderRequest:
+      type: object
+      required: [delivered_by]
+      properties:
+        delivered_by:
+          type: string
+          format: uuid
+          description: User ID of person marking the order as delivered
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "e7f89012-3456-7890-abcd-ef1234567890"
+        product_id:
+          type: string
+          format: uuid
+          example: "c5d6e7f8-9012-3456-7890-abcdef123456"
+        variant_id:
+          type: string
+          format: uuid
+          example: "d6e7f890-1234-5678-9012-abcdef345678"
+        sku:
+          type: string
+          example: "SARI-SILK-RED-M"
+        name:
+          type: string
+          example: "Red Silk Saree - Medium"
+        quantity:
+          type: integer
+          example: 2
+        unit_price:
+          type: number
+          format: double
+          description: Price per unit in BDT
+          example: 4500.00
+        total_price:
+          type: number
+          format: double
+          description: Total price in BDT (quantity x unit_price)
+          example: 9000.00
+
+    OrderResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f678-9012-abcd-ef3456789012"
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        customer_id:
+          type: string
+          format: uuid
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        order_number:
+          type: string
+          example: "ORD-20260418-0001"
+        status:
+          type: string
+          enum: [pending, confirmed, shipped, delivered, cancelled]
+          example: "pending"
+        currency:
+          type: string
+          example: "BDT"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          type: number
+          format: double
+          description: Subtotal in BDT
+          example: 9000.00
+        shipping_cost:
+          type: number
+          format: double
+          description: Shipping cost in BDT
+          example: 100.00
+        tax:
+          type: number
+          format: double
+          description: Tax in BDT
+          example: 675.00
+        total:
+          type: number
+          format: double
+          description: Grand total in BDT
+          example: 9775.00
+        shipping_address:
+          $ref: '#/components/schemas/Address'
+        billing_address:
+          $ref: '#/components/schemas/Address'
+        tracking_number:
+          type: string
+          nullable: true
+          example: "PTH-20260418-001234"
+        carrier:
+          type: string
+          nullable: true
+          example: "pathao"
+        cancel_reason:
+          type: string
+          nullable: true
+          example: null
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        confirmed_by:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        shipped_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        shipped_by:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        delivered_by:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        cancelled_by:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+
+    OrderListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 85
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request body"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "quantity"
+              message:
+                type: string
+                example: "must be greater than 0"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid request body"
+            details:
+              - field: "shipping_address.postal_code"
+                message: "is required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "Order not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"

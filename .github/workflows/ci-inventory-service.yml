@@ -1,0 +1,21 @@
+name: CI - Inventory Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/inventory-service/**'
+      - '.github/workflows/ci-inventory-service.yml'
+      - '.github/workflows/dotnet-service.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/inventory-service/**'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/dotnet-service.yml
+    with:
+      service-name: inventory-service
+      service-path: services/inventory-service
+      test-project-path: services/inventory-service/tests/Ecommerce.InventoryService.Tests

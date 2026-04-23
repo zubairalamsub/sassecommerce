@@ -1,0 +1,649 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  description: |
+    Multi-tenant user management and authentication service for the e-commerce platform.
+    Handles user registration, login, profile management, and role-based access control.
+    Bangladesh-first market.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:8002
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Authentication
+    description: Registration, login, and password management
+  - name: Users
+    description: User CRUD and admin operations
+
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      operationId: registerUser
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              tenant_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+              email: "rahim@example.com.bd"
+              username: "rahim_ahmed"
+              password: "S3cur3P@ss!"
+              first_name: "Rahim"
+              last_name: "Ahmed"
+              phone: "+8801712345678"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user and obtain token
+      operationId: loginUser
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              tenant_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+              email: "rahim@example.com.bd"
+              password: "S3cur3P@ss!"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                user:
+                  id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                  tenant_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  email: "rahim@example.com.bd"
+                  username: "rahim_ahmed"
+                  first_name: "Rahim"
+                  last_name: "Ahmed"
+                  phone: "+8801712345678"
+                  avatar: null
+                  status: "active"
+                  role: "customer"
+                  email_verified: true
+                  last_login_at: "2026-04-18T10:30:00+06:00"
+                  created_at: "2026-01-15T09:00:00+06:00"
+                  updated_at: "2026-04-18T10:30:00+06:00"
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                expires_at: "2026-04-19T10:30:00+06:00"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/profile:
+    get:
+      tags: [Authentication]
+      summary: Get current user profile
+      operationId: getProfile
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Change current user password
+      operationId: changePassword
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              old_password: "S3cur3P@ss!"
+              new_password: "N3wS3cur3P@ss!"
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Password changed successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users (paginated)
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      operationId: getUser
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/UserID'
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Users]
+      summary: Update user profile
+      operationId: updateUser
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/UserID'
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            example:
+              first_name: "Rahim"
+              last_name: "Ahmed Khan"
+              phone: "+8801812345678"
+              avatar: "https://cdn.example.com.bd/avatars/rahim.jpg"
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      operationId: deleteUser
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/UserID'
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: User deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{id}/role:
+    patch:
+      tags: [Users]
+      summary: Update user role (admin only)
+      operationId: updateUserRole
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/UserID'
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+            example:
+              role: "moderator"
+      responses:
+        '200':
+          description: User role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{id}/status:
+    patch:
+      tags: [Users]
+      summary: Update user status (admin only)
+      operationId: updateUserStatus
+      parameters:
+        - $ref: '#/components/parameters/XTenantID'
+        - $ref: '#/components/parameters/UserID'
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusRequest'
+            example:
+              status: "active"
+      responses:
+        '200':
+          description: User status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    XTenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+        format: uuid
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    UserID:
+      name: id
+      in: path
+      required: true
+      description: User unique identifier
+      schema:
+        type: string
+        format: uuid
+      example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [tenant_id, email, username, password, first_name, last_name]
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        email:
+          type: string
+          format: email
+          example: "rahim@example.com.bd"
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_]+$'
+          example: "rahim_ahmed"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: "S3cur3P@ss!"
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Rahim"
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Ahmed"
+        phone:
+          type: string
+          pattern: '^\+8801[3-9]\d{8}$'
+          example: "+8801712345678"
+
+    LoginRequest:
+      type: object
+      required: [tenant_id, email, password]
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        email:
+          type: string
+          format: email
+          example: "rahim@example.com.bd"
+        password:
+          type: string
+          example: "S3cur3P@ss!"
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_at:
+          type: string
+          format: date-time
+          description: Token expiration time
+          example: "2026-04-19T10:30:00+06:00"
+
+    ChangePasswordRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password:
+          type: string
+          example: "S3cur3P@ss!"
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: "N3wS3cur3P@ss!"
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Rahim"
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Ahmed Khan"
+        phone:
+          type: string
+          pattern: '^\+8801[3-9]\d{8}$'
+          example: "+8801812345678"
+        avatar:
+          type: string
+          format: uri
+          example: "https://cdn.example.com.bd/avatars/rahim.jpg"
+
+    UpdateRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, moderator, customer, guest]
+          example: "moderator"
+
+    UpdateStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+          example: "active"
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        tenant_id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        email:
+          type: string
+          format: email
+          example: "rahim@example.com.bd"
+        username:
+          type: string
+          example: "rahim_ahmed"
+        first_name:
+          type: string
+          example: "Rahim"
+        last_name:
+          type: string
+          example: "Ahmed"
+        phone:
+          type: string
+          nullable: true
+          example: "+8801712345678"
+        avatar:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.example.com.bd/avatars/rahim.jpg"
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+          example: "active"
+        role:
+          type: string
+          enum: [admin, moderator, customer, guest]
+          example: "customer"
+        email_verified:
+          type: boolean
+          example: true
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-04-18T10:30:00+06:00"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-15T09:00:00+06:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00+06:00"
+
+    UserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 150
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request body"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "email"
+              message:
+                type: string
+                example: "must be a valid email address"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid request body"
+            details:
+              - field: "email"
+                message: "must be a valid email address"
+
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "Invalid or expired authentication token"
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "FORBIDDEN"
+            message: "Admin role required for this operation"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "User not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"

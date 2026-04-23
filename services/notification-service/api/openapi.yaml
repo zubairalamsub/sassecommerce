@@ -1,0 +1,487 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  description: |
+    Multi-tenant notification service for the e-commerce platform.
+    Supports email, SMS, push notifications, and in-app messaging.
+    Includes user notification preferences management.
+    Bangladesh-first market with Bangla language support.
+  version: 1.0.0
+  contact:
+    email: it@bracsaajan.com
+
+servers:
+  - url: http://localhost:5006/api/v1
+    description: Local development
+  - url: https://api.example.com/api/v1
+    description: Production
+
+tags:
+  - name: Notifications
+    description: Send and manage notifications
+  - name: Preferences
+    description: User notification preferences
+
+paths:
+  /notifications/send:
+    post:
+      tags: [Notifications]
+      summary: Send a notification
+      operationId: sendNotification
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendNotificationRequest'
+            example:
+              tenant_id: "t_01HXYZ"
+              user_id: "u_01HXYZ"
+              type: "sms"
+              template: "order_confirmation"
+              subject: "Order Confirmed"
+              message: "Your order #ORD-2026-0418 has been confirmed. Total: 3,500 BDT. Thank you for shopping with us!"
+              metadata:
+                order_id: "ord_01HXYZ"
+                phone: "+8801712345678"
+      responses:
+        '201':
+          description: Notification sent/queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /notifications/{id}:
+    get:
+      tags: [Notifications]
+      summary: Get notification by ID
+      operationId: getNotificationById
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "notif_01HXYZ"
+      responses:
+        '200':
+          description: Notification details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /notifications/user/{userId}:
+    get:
+      tags: [Notifications]
+      summary: List notifications for a user
+      operationId: getUserNotifications
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "u_01HXYZ"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: read
+          in: query
+          description: Filter by read status (true = read only, false = unread only, omit for all)
+          schema:
+            type: boolean
+          example: false
+      responses:
+        '200':
+          description: Paginated list of user notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotifications'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /notifications/{id}/read:
+    put:
+      tags: [Notifications]
+      summary: Mark a notification as read
+      operationId: markNotificationAsRead
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "notif_01HXYZ"
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /preferences/{userId}:
+    get:
+      tags: [Preferences]
+      summary: Get notification preferences for a user
+      operationId: getUserPreferences
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "u_01HXYZ"
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "t_01HXYZ"
+      responses:
+        '200':
+          description: User notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Preferences]
+      summary: Update notification preferences for a user
+      operationId: updateUserPreferences
+      parameters:
+        - $ref: '#/components/parameters/TenantIdHeader'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "u_01HXYZ"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePreferencesRequest'
+            example:
+              email_enabled: true
+              sms_enabled: true
+              push_enabled: false
+              marketing_enabled: false
+      responses:
+        '200':
+          description: Preferences updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: Tenant identifier for multi-tenant isolation
+      schema:
+        type: string
+      example: "t_01HXYZ"
+
+  schemas:
+    NotificationType:
+      type: string
+      enum:
+        - email
+        - sms
+        - push
+        - in_app
+
+    NotificationStatus:
+      type: string
+      enum:
+        - pending
+        - sent
+        - delivered
+        - failed
+        - read
+
+    SendNotificationRequest:
+      type: object
+      required:
+        - tenant_id
+        - user_id
+        - type
+        - message
+      properties:
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        user_id:
+          type: string
+          example: "u_01HXYZ"
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        template:
+          type: string
+          description: Template identifier for pre-defined notification formats
+          nullable: true
+          example: "order_confirmation"
+        subject:
+          type: string
+          description: Subject line (used for email and push notifications)
+          nullable: true
+          example: "Order Confirmed"
+        message:
+          type: string
+          example: "Your order #ORD-2026-0418 has been confirmed. Total: 3,500 BDT. Thank you for shopping with us!"
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional key-value data for template rendering or tracking
+          example:
+            order_id: "ord_01HXYZ"
+            phone: "+8801712345678"
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "notif_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        user_id:
+          type: string
+          example: "u_01HXYZ"
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        template:
+          type: string
+          nullable: true
+          example: "order_confirmation"
+        subject:
+          type: string
+          nullable: true
+          example: "Order Confirmed"
+        message:
+          type: string
+          example: "Your order #ORD-2026-0418 has been confirmed. Total: 3,500 BDT. Thank you for shopping with us!"
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+          example:
+            order_id: "ord_01HXYZ"
+            phone: "+8801712345678"
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        is_read:
+          type: boolean
+          example: false
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-04-18T10:30:05Z"
+        failure_reason:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:30:05Z"
+
+    PaginatedNotifications:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 3
+        unread_count:
+          type: integer
+          description: Total unread notifications for the user
+          example: 7
+
+    NotificationPreferences:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "u_01HXYZ"
+        tenant_id:
+          type: string
+          example: "t_01HXYZ"
+        email_enabled:
+          type: boolean
+          example: true
+        sms_enabled:
+          type: boolean
+          example: true
+        push_enabled:
+          type: boolean
+          example: true
+        marketing_enabled:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-03-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-18T10:00:00Z"
+
+    UpdatePreferencesRequest:
+      type: object
+      required:
+        - email_enabled
+        - sms_enabled
+        - push_enabled
+        - marketing_enabled
+      properties:
+        email_enabled:
+          type: boolean
+          example: true
+        sms_enabled:
+          type: boolean
+          example: true
+        push_enabled:
+          type: boolean
+          example: false
+        marketing_enabled:
+          type: boolean
+          example: false
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        title:
+          type: string
+          example: "Bad Request"
+        detail:
+          type: string
+          example: "Validation failed for one or more fields."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            type: ["Notification type must be one of: email, sms, push, in_app."]
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 400
+            title: "Bad Request"
+            detail: "Validation failed for one or more fields."
+            errors:
+              message: ["Message is required."]
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 404
+            title: "Not Found"
+            detail: "The requested resource was not found."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: 500
+            title: "Internal Server Error"
+            detail: "An unexpected error occurred. Please try again later."

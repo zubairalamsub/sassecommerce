@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { configApi, type SetConfigRequest } from '@/lib/api';
 
 export interface BannerSlide {
@@ -116,50 +117,59 @@ interface StoreConfigState {
   updateConfig: (config: Partial<StorefrontConfig>) => void;
 }
 
-export const useStoreConfigStore = create<StoreConfigState>()((set, get) => ({
-  config: defaultConfig,
-  loading: false,
-  error: null,
+export const useStoreConfigStore = create<StoreConfigState>()(
+  persist(
+    (set) => ({
+      config: defaultConfig,
+      loading: false,
+      error: null,
 
-  fetchConfig: async (tenantId: string) => {
-    set({ loading: true, error: null });
-    try {
-      const entries = await configApi.listByNamespace(NAMESPACE, 'all', tenantId);
-      if (Array.isArray(entries) && entries.length > 0) {
-        const configMap: Record<string, string> = {};
-        entries.forEach((e) => { configMap[e.key] = e.value; });
+      fetchConfig: async (tenantId: string) => {
+        set({ loading: true, error: null });
+        try {
+          const entries = await configApi.listByNamespace(NAMESPACE, 'all', tenantId);
+          if (Array.isArray(entries) && entries.length > 0) {
+            const configMap: Record<string, string> = {};
+            entries.forEach((e) => { configMap[e.key] = e.value; });
 
-        const parsed: StorefrontConfig = {
-          banners: configMap.banners ? JSON.parse(configMap.banners) : defaultConfig.banners,
-          sections: configMap.sections ? JSON.parse(configMap.sections) : defaultConfig.sections,
-          footer: configMap.footer ? JSON.parse(configMap.footer) : defaultConfig.footer,
-          about: configMap.about ? JSON.parse(configMap.about) : defaultConfig.about,
-          announcement_bar: configMap.announcement_bar ? JSON.parse(configMap.announcement_bar) : defaultConfig.announcement_bar,
-        };
-        set({ config: parsed, loading: false });
-      } else {
-        set({ config: defaultConfig, loading: false });
-      }
-    } catch {
-      set({ config: defaultConfig, loading: false });
-    }
-  },
+            const parsed: StorefrontConfig = {
+              banners: configMap.banners ? JSON.parse(configMap.banners) : defaultConfig.banners,
+              sections: configMap.sections ? JSON.parse(configMap.sections) : defaultConfig.sections,
+              footer: configMap.footer ? JSON.parse(configMap.footer) : defaultConfig.footer,
+              about: configMap.about ? JSON.parse(configMap.about) : defaultConfig.about,
+              announcement_bar: configMap.announcement_bar ? JSON.parse(configMap.announcement_bar) : defaultConfig.announcement_bar,
+            };
+            set({ config: parsed, loading: false });
+          } else {
+            set({ loading: false });
+          }
+        } catch {
+          // Backend unavailable — keep previously persisted config
+          set({ loading: false });
+        }
+      },
 
-  saveConfig: async (tenantId: string, config: StorefrontConfig) => {
-    const entries: SetConfigRequest[] = [
-      { namespace: NAMESPACE, key: 'banners', value: JSON.stringify(config.banners), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
-      { namespace: NAMESPACE, key: 'sections', value: JSON.stringify(config.sections), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
-      { namespace: NAMESPACE, key: 'footer', value: JSON.stringify(config.footer), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
-      { namespace: NAMESPACE, key: 'about', value: JSON.stringify(config.about), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
-      { namespace: NAMESPACE, key: 'announcement_bar', value: JSON.stringify(config.announcement_bar), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
-    ];
-    await configApi.bulkSet(entries);
-    set({ config });
-  },
+      saveConfig: async (tenantId: string, config: StorefrontConfig) => {
+        const entries: SetConfigRequest[] = [
+          { namespace: NAMESPACE, key: 'banners', value: JSON.stringify(config.banners), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+          { namespace: NAMESPACE, key: 'sections', value: JSON.stringify(config.sections), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+          { namespace: NAMESPACE, key: 'footer', value: JSON.stringify(config.footer), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+          { namespace: NAMESPACE, key: 'about', value: JSON.stringify(config.about), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+          { namespace: NAMESPACE, key: 'announcement_bar', value: JSON.stringify(config.announcement_bar), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+        ];
+        await configApi.bulkSet(entries);
+        set({ config });
+      },
 
-  updateConfig: (partial: Partial<StorefrontConfig>) => {
-    set((state) => ({ config: { ...state.config, ...partial } }));
-  },
-}));
+      updateConfig: (partial: Partial<StorefrontConfig>) => {
+        set((state) => ({ config: { ...state.config, ...partial } }));
+      },
+    }),
+    {
+      name: 'store-config-storage',
+      partialize: (state) => ({ config: state.config }),
+    },
+  ),
+);
 
 export { defaultConfig };

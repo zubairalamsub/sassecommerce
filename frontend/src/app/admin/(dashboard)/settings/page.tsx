@@ -4,19 +4,24 @@ import { useState, useEffect } from 'react';
 import {
   Save, Loader2, Store, Palette, Globe, ToggleLeft, Layout,
   Plus, X, GripVertical, Image, ChevronUp, ChevronDown, Megaphone,
+  CreditCard, Truck, Mail, Shield,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { tenantApi, type TenantConfig } from '@/lib/api';
 import { useStoreConfigStore, type BannerSlide, type StoreSection, type StorefrontConfig } from '@/stores/store-config';
 import { cn } from '@/lib/utils';
 
-type SettingsTab = 'general' | 'branding' | 'storefront' | 'features';
+type SettingsTab = 'general' | 'branding' | 'storefront' | 'features' | 'payment' | 'shipping' | 'email' | 'security';
 
 const tabs: { label: string; value: SettingsTab; icon: React.ElementType }[] = [
   { label: 'General', value: 'general', icon: Globe },
   { label: 'Branding', value: 'branding', icon: Palette },
   { label: 'Storefront', value: 'storefront', icon: Layout },
   { label: 'Features', value: 'features', icon: ToggleLeft },
+  { label: 'Payment', value: 'payment', icon: CreditCard },
+  { label: 'Shipping', value: 'shipping', icon: Truck },
+  { label: 'Email', value: 'email', icon: Mail },
+  { label: 'Security', value: 'security', icon: Shield },
 ];
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -69,6 +74,63 @@ export default function StoreSettingsPage() {
   const [storeEmail, setStoreEmail] = useState('');
   const [tenantConfig, setTenantConfig] = useState<TenantConfig>(defaultTenantConfig);
 
+  // Payment settings
+  const [paymentSettings, setPaymentSettings] = useState({
+    sslcommerz_store_id: '',
+    sslcommerz_store_password: '',
+    sslcommerz_sandbox: true,
+    cod_enabled: true,
+    bkash_enabled: false,
+    bkash_merchant_number: '',
+    nagad_enabled: false,
+    nagad_merchant_id: '',
+    min_order_amount: 0,
+  });
+
+  // Shipping settings
+  const [shippingSettings, setShippingSettings] = useState({
+    free_shipping_enabled: false,
+    free_shipping_threshold: 2000,
+    flat_rate_enabled: true,
+    flat_rate_amount: 100,
+    inside_dhaka_rate: 60,
+    outside_dhaka_rate: 120,
+    estimated_delivery_dhaka: '1-2 days',
+    estimated_delivery_outside: '3-5 days',
+    shipping_policy: '',
+  });
+
+  // Email / Notification settings
+  const [emailSettings, setEmailSettings] = useState({
+    smtp_host: '',
+    smtp_port: '587',
+    smtp_username: '',
+    smtp_password: '',
+    smtp_from_name: '',
+    smtp_from_email: '',
+    smtp_encryption: 'tls' as 'tls' | 'ssl' | 'none',
+    notify_order_placed: true,
+    notify_order_confirmed: true,
+    notify_order_shipped: true,
+    notify_order_delivered: true,
+    notify_order_cancelled: true,
+    notify_low_stock: true,
+    notify_new_customer: false,
+  });
+
+  // Security settings
+  const [securitySettings, setSecuritySettings] = useState({
+    password_min_length: 8,
+    password_require_uppercase: true,
+    password_require_number: true,
+    password_require_special: false,
+    two_factor_enabled: false,
+    session_timeout_minutes: 60,
+    max_login_attempts: 5,
+    lockout_duration_minutes: 15,
+    api_rate_limit: 100,
+  });
+
   // Storefront config
   const storeConfig = useStoreConfigStore((s) => s.config);
   const fetchStoreConfig = useStoreConfigStore((s) => s.fetchConfig);
@@ -88,7 +150,7 @@ export default function StoreSettingsPage() {
           features: { ...defaultTenantConfig.features, ...tenant.config?.features },
         });
       } catch {
-        setError('Could not load tenant settings. Using defaults.');
+        // Backend unavailable — silently use defaults
       }
       try {
         await fetchStoreConfig(tenantId!);
@@ -564,6 +626,352 @@ export default function StoreSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* ==================== PAYMENT TAB ==================== */}
+      {activeTab === 'payment' && (
+        <div className="space-y-6">
+          {/* SSLCommerz */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-gray-400" />
+              <h2 className="text-lg font-semibold text-gray-900">SSLCommerz Gateway</h2>
+            </div>
+            <p className="mb-4 text-sm text-gray-500">Configure your SSLCommerz payment gateway credentials for online payments.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Store ID" value={paymentSettings.sslcommerz_store_id}
+                onChange={(v) => { setPaymentSettings((p) => ({ ...p, sslcommerz_store_id: v })); setSaved(false); }}
+                placeholder="your_store_id" />
+              <Field label="Store Password" type="password" value={paymentSettings.sslcommerz_store_password}
+                onChange={(v) => { setPaymentSettings((p) => ({ ...p, sslcommerz_store_password: v })); setSaved(false); }}
+                placeholder="your_store_password" />
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Sandbox Mode</p>
+                <p className="text-xs text-gray-500">Use test credentials for development</p>
+              </div>
+              <ToggleButton
+                enabled={paymentSettings.sslcommerz_sandbox}
+                onToggle={() => { setPaymentSettings((p) => ({ ...p, sslcommerz_sandbox: !p.sslcommerz_sandbox })); setSaved(false); }}
+              />
+            </div>
+          </div>
+
+          {/* Payment Methods */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-2 text-lg font-semibold text-gray-900">Payment Methods</h2>
+            <p className="mb-4 text-sm text-gray-500">Enable payment methods available to your customers</p>
+            <div className="divide-y divide-gray-100">
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Cash on Delivery (COD)</p>
+                  <p className="text-xs text-gray-500">Customers pay when they receive their order</p>
+                </div>
+                <ToggleButton
+                  enabled={paymentSettings.cod_enabled}
+                  onToggle={() => { setPaymentSettings((p) => ({ ...p, cod_enabled: !p.cod_enabled })); setSaved(false); }}
+                />
+              </div>
+              <div className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">bKash</p>
+                    <p className="text-xs text-gray-500">Mobile financial services payment</p>
+                  </div>
+                  <ToggleButton
+                    enabled={paymentSettings.bkash_enabled}
+                    onToggle={() => { setPaymentSettings((p) => ({ ...p, bkash_enabled: !p.bkash_enabled })); setSaved(false); }}
+                  />
+                </div>
+                {paymentSettings.bkash_enabled && (
+                  <div className="mt-3 pl-0 sm:pl-4">
+                    <Field label="Merchant Number" value={paymentSettings.bkash_merchant_number}
+                      onChange={(v) => { setPaymentSettings((p) => ({ ...p, bkash_merchant_number: v })); setSaved(false); }}
+                      placeholder="01XXXXXXXXX" />
+                  </div>
+                )}
+              </div>
+              <div className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Nagad</p>
+                    <p className="text-xs text-gray-500">Digital financial service by Bangladesh Post Office</p>
+                  </div>
+                  <ToggleButton
+                    enabled={paymentSettings.nagad_enabled}
+                    onToggle={() => { setPaymentSettings((p) => ({ ...p, nagad_enabled: !p.nagad_enabled })); setSaved(false); }}
+                  />
+                </div>
+                {paymentSettings.nagad_enabled && (
+                  <div className="mt-3 pl-0 sm:pl-4">
+                    <Field label="Merchant ID" value={paymentSettings.nagad_merchant_id}
+                      onChange={(v) => { setPaymentSettings((p) => ({ ...p, nagad_merchant_id: v })); setSaved(false); }}
+                      placeholder="Merchant ID" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Order Limits */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Order Limits</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Minimum Order Amount (BDT)</label>
+                <input type="number" min={0} value={paymentSettings.min_order_amount}
+                  onChange={(e) => { setPaymentSettings((p) => ({ ...p, min_order_amount: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="0" />
+                <p className="mt-1 text-xs text-gray-500">Set to 0 for no minimum</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SHIPPING TAB ==================== */}
+      {activeTab === 'shipping' && (
+        <div className="space-y-6">
+          {/* Free Shipping */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-gray-400" />
+                <h2 className="text-lg font-semibold text-gray-900">Free Shipping</h2>
+              </div>
+              <ToggleButton
+                enabled={shippingSettings.free_shipping_enabled}
+                onToggle={() => { setShippingSettings((p) => ({ ...p, free_shipping_enabled: !p.free_shipping_enabled })); setSaved(false); }}
+              />
+            </div>
+            {shippingSettings.free_shipping_enabled && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Free Shipping Threshold (BDT)</label>
+                <input type="number" min={0} value={shippingSettings.free_shipping_threshold}
+                  onChange={(e) => { setShippingSettings((p) => ({ ...p, free_shipping_threshold: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full max-w-xs rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                <p className="mt-1 text-xs text-gray-500">Orders above this amount qualify for free shipping</p>
+              </div>
+            )}
+          </div>
+
+          {/* Shipping Rates */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Shipping Rates</h2>
+              <ToggleButton
+                enabled={shippingSettings.flat_rate_enabled}
+                onToggle={() => { setShippingSettings((p) => ({ ...p, flat_rate_enabled: !p.flat_rate_enabled })); setSaved(false); }}
+              />
+            </div>
+            {shippingSettings.flat_rate_enabled && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Default Flat Rate (BDT)</label>
+                    <input type="number" min={0} value={shippingSettings.flat_rate_amount}
+                      onChange={(e) => { setShippingSettings((p) => ({ ...p, flat_rate_amount: Number(e.target.value) })); setSaved(false); }}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Inside Dhaka (BDT)</label>
+                    <input type="number" min={0} value={shippingSettings.inside_dhaka_rate}
+                      onChange={(e) => { setShippingSettings((p) => ({ ...p, inside_dhaka_rate: Number(e.target.value) })); setSaved(false); }}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Outside Dhaka (BDT)</label>
+                    <input type="number" min={0} value={shippingSettings.outside_dhaka_rate}
+                      onChange={(e) => { setShippingSettings((p) => ({ ...p, outside_dhaka_rate: Number(e.target.value) })); setSaved(false); }}
+                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Delivery Estimates */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Delivery Estimates</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Inside Dhaka" value={shippingSettings.estimated_delivery_dhaka}
+                onChange={(v) => { setShippingSettings((p) => ({ ...p, estimated_delivery_dhaka: v })); setSaved(false); }}
+                placeholder="1-2 days" />
+              <Field label="Outside Dhaka" value={shippingSettings.estimated_delivery_outside}
+                onChange={(v) => { setShippingSettings((p) => ({ ...p, estimated_delivery_outside: v })); setSaved(false); }}
+                placeholder="3-5 days" />
+            </div>
+          </div>
+
+          {/* Shipping Policy */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Shipping Policy</h2>
+            <textarea rows={5} value={shippingSettings.shipping_policy}
+              onChange={(e) => { setShippingSettings((p) => ({ ...p, shipping_policy: e.target.value })); setSaved(false); }}
+              placeholder="Enter your store's shipping policy. This will be displayed on your storefront."
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
+        </div>
+      )}
+
+      {/* ==================== EMAIL TAB ==================== */}
+      {activeTab === 'email' && (
+        <div className="space-y-6">
+          {/* SMTP Configuration */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Mail className="h-5 w-5 text-gray-400" />
+              <h2 className="text-lg font-semibold text-gray-900">SMTP Configuration</h2>
+            </div>
+            <p className="mb-4 text-sm text-gray-500">Configure your email server for sending transactional emails.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="SMTP Host" value={emailSettings.smtp_host}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_host: v })); setSaved(false); }}
+                placeholder="smtp.gmail.com" />
+              <Field label="SMTP Port" value={emailSettings.smtp_port}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_port: v })); setSaved(false); }}
+                placeholder="587" />
+              <Field label="Username" value={emailSettings.smtp_username}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_username: v })); setSaved(false); }}
+                placeholder="your@email.com" />
+              <Field label="Password" type="password" value={emailSettings.smtp_password}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_password: v })); setSaved(false); }}
+                placeholder="App password" />
+              <Field label="From Name" value={emailSettings.smtp_from_name}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_from_name: v })); setSaved(false); }}
+                placeholder="My Store" />
+              <Field label="From Email" type="email" value={emailSettings.smtp_from_email}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_from_email: v })); setSaved(false); }}
+                placeholder="noreply@mystore.com" />
+            </div>
+            <div className="mt-4">
+              <SelectField label="Encryption" value={emailSettings.smtp_encryption}
+                onChange={(v) => { setEmailSettings((p) => ({ ...p, smtp_encryption: v as 'tls' | 'ssl' | 'none' })); setSaved(false); }}
+                options={[
+                  { value: 'tls', label: 'TLS (Recommended)' },
+                  { value: 'ssl', label: 'SSL' },
+                  { value: 'none', label: 'None' },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Notification Preferences */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-2 text-lg font-semibold text-gray-900">Notification Preferences</h2>
+            <p className="mb-4 text-sm text-gray-500">Choose which events trigger email notifications</p>
+            <div className="divide-y divide-gray-100">
+              {([
+                ['notify_order_placed', 'Order Placed', 'Send email when a new order is placed'],
+                ['notify_order_confirmed', 'Order Confirmed', 'Send email when an order is confirmed'],
+                ['notify_order_shipped', 'Order Shipped', 'Send email with tracking info when order ships'],
+                ['notify_order_delivered', 'Order Delivered', 'Send email when order is delivered'],
+                ['notify_order_cancelled', 'Order Cancelled', 'Send email when an order is cancelled'],
+                ['notify_low_stock', 'Low Stock Alert', 'Notify admin when product stock is low'],
+                ['notify_new_customer', 'New Customer', 'Notify admin when a new customer registers'],
+              ] as const).map(([key, label, desc]) => (
+                <div key={key} className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{label}</p>
+                    <p className="text-xs text-gray-500">{desc}</p>
+                  </div>
+                  <ToggleButton
+                    enabled={emailSettings[key]}
+                    onToggle={() => { setEmailSettings((p) => ({ ...p, [key]: !p[key] })); setSaved(false); }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SECURITY TAB ==================== */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          {/* Password Policy */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-gray-400" />
+              <h2 className="text-lg font-semibold text-gray-900">Password Policy</h2>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Minimum Password Length</label>
+                <input type="number" min={6} max={32} value={securitySettings.password_min_length}
+                  onChange={(e) => { setSecuritySettings((p) => ({ ...p, password_min_length: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full max-w-xs rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div className="divide-y divide-gray-100">
+                {([
+                  ['password_require_uppercase', 'Require Uppercase Letter', 'At least one uppercase character (A-Z)'],
+                  ['password_require_number', 'Require Number', 'At least one numeric digit (0-9)'],
+                  ['password_require_special', 'Require Special Character', 'At least one special character (!@#$%^&*)'],
+                ] as const).map(([key, label, desc]) => (
+                  <div key={key} className="flex items-center justify-between py-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{label}</p>
+                      <p className="text-xs text-gray-500">{desc}</p>
+                    </div>
+                    <ToggleButton
+                      enabled={securitySettings[key]}
+                      onToggle={() => { setSecuritySettings((p) => ({ ...p, [key]: !p[key] })); setSaved(false); }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Two-Factor Authentication */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Two-Factor Authentication</h2>
+                <p className="mt-1 text-sm text-gray-500">Require 2FA for admin and staff accounts</p>
+              </div>
+              <ToggleButton
+                enabled={securitySettings.two_factor_enabled}
+                onToggle={() => { setSecuritySettings((p) => ({ ...p, two_factor_enabled: !p.two_factor_enabled })); setSaved(false); }}
+              />
+            </div>
+          </div>
+
+          {/* Session & Rate Limiting */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Session & Rate Limiting</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Session Timeout (minutes)</label>
+                <input type="number" min={5} max={1440} value={securitySettings.session_timeout_minutes}
+                  onChange={(e) => { setSecuritySettings((p) => ({ ...p, session_timeout_minutes: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                <p className="mt-1 text-xs text-gray-500">Auto-logout after inactivity</p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Max Login Attempts</label>
+                <input type="number" min={3} max={20} value={securitySettings.max_login_attempts}
+                  onChange={(e) => { setSecuritySettings((p) => ({ ...p, max_login_attempts: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                <p className="mt-1 text-xs text-gray-500">Lock account after failed attempts</p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Lockout Duration (minutes)</label>
+                <input type="number" min={1} max={60} value={securitySettings.lockout_duration_minutes}
+                  onChange={(e) => { setSecuritySettings((p) => ({ ...p, lockout_duration_minutes: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">API Rate Limit (requests/min)</label>
+                <input type="number" min={10} max={1000} value={securitySettings.api_rate_limit}
+                  onChange={(e) => { setSecuritySettings((p) => ({ ...p, api_rate_limit: Number(e.target.value) })); setSaved(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -606,6 +1014,15 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
           className="flex-1 rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
       </div>
     </div>
+  );
+}
+
+function ToggleButton({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle}
+      className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', enabled ? 'bg-primary' : 'bg-gray-200')}>
+      <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', enabled ? 'translate-x-6' : 'translate-x-1')} />
+    </button>
   );
 }
 

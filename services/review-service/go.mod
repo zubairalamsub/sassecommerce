@@ -3,6 +3,7 @@ module github.com/ecommerce/review-service
 go 1.21
 
 require (
+	github.com/ecommerce/shared/go v0.1.0
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.5.0
@@ -11,6 +12,8 @@ require (
 	github.com/stretchr/testify v1.8.4
 	go.mongodb.org/mongo-driver v1.13.1
 )
+
+replace github.com/ecommerce/shared/go => ../../shared/go
 
 require (
 	github.com/bytedance/sonic v1.10.1 // indirect

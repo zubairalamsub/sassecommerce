@@ -156,6 +156,14 @@ export const categoryApi = {
     request<CategoryListResponse>('product', `/api/v1/categories?tenant_id=${tenantId}`, { tenantId }),
   get: (id: string, tenantId: string) =>
     request<CategoryResponse>('product', `/api/v1/categories/${id}`, { tenantId }),
+  create: (data: CreateCategoryRequest, tenantId: string) =>
+    request<CategoryResponse>('product', '/api/v1/categories', { method: 'POST', body: data, tenantId }),
+  update: (id: string, data: UpdateCategoryRequest, tenantId: string) =>
+    request<CategoryResponse>('product', `/api/v1/categories/${id}`, { method: 'PUT', body: data, tenantId }),
+  delete: (id: string, tenantId: string) =>
+    request<void>('product', `/api/v1/categories/${id}`, { method: 'DELETE', tenantId }),
+  updateStatus: (id: string, status: 'active' | 'inactive', tenantId: string) =>
+    request<CategoryResponse>('product', `/api/v1/categories/${id}/status`, { method: 'PATCH', body: { status }, tenantId }),
 };
 
 // Order Service
@@ -385,6 +393,29 @@ export interface CategoryListResponse {
   limit?: number;
   offset?: number;
   total?: number;
+}
+
+export interface CreateCategoryRequest {
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  parent_id?: string | null;
+  image?: string;
+  icon?: string;
+  sort_order?: number;
+  created_by: string;
+}
+
+export interface UpdateCategoryRequest {
+  name?: string;
+  slug?: string;
+  description?: string;
+  parent_id?: string | null;
+  image?: string;
+  icon?: string;
+  sort_order?: number;
+  updated_by: string;
 }
 
 export interface Order {

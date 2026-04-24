@@ -1,9 +1,11 @@
 using Ecommerce.InventoryService.DTOs;
 using Ecommerce.InventoryService.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce.InventoryService.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/v1/[controller]")]
 public class InventoryController : ControllerBase

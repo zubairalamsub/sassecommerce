@@ -46,6 +46,11 @@ public class PaymentResponse
     public string? GatewayName { get; set; }
     public string? GatewayTransactionId { get; set; }
     public string? Description { get; set; }
+    /// <summary>
+    /// Redirect URL for gateway-hosted payment pages (SSLCommerz).
+    /// Frontend should redirect the customer to this URL to complete payment.
+    /// </summary>
+    public string? RedirectUrl { get; set; }
     public DateTime? ProcessedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; }

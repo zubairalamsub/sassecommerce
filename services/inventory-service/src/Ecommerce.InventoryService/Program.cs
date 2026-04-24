@@ -1,8 +1,11 @@
+using System.Text;
 using Ecommerce.InventoryService.Data;
 using Ecommerce.InventoryService.Messaging;
 using Ecommerce.InventoryService.Repositories;
 using Ecommerce.InventoryService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,6 +53,22 @@ builder.Services.AddSingleton<IEventPublisher, KafkaEventPublisher>();
 // Register Services
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 
+// Configure JWT Authentication
+var jwtSecret = builder.Configuration["JWT_SECRET"] ?? "your-secret-key-change-in-production-12345";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
 // Configure CORS
 builder.Services.AddCors(options =>
 {
@@ -74,6 +93,7 @@ app.UseSerilogRequestLogging();
 
 app.UseCors();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

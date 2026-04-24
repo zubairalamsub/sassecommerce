@@ -122,8 +122,20 @@ public class PaymentService : IPaymentService
             CreatedBy = request.CreatedBy
         };
 
-        if (gatewayResponse.Success)
+        if (gatewayResponse.Success && !string.IsNullOrEmpty(gatewayResponse.RedirectUrl))
         {
+            // Redirect-based gateway (SSLCommerz) — payment stays Processing until IPN callback
+            payment.Status = PaymentStatus.Processing;
+            payment.GatewayTransactionId = gatewayResponse.TransactionId;
+            payment.GatewayResponse = gatewayResponse.RawResponse;
+            transaction.Status = TransactionStatus.Pending;
+
+            _logger.LogInformation("Payment awaiting redirect: {PaymentId}, RedirectUrl={RedirectUrl}",
+                payment.Id, gatewayResponse.RedirectUrl);
+        }
+        else if (gatewayResponse.Success)
+        {
+            // Direct-charge gateway — payment completed immediately
             payment.Status = PaymentStatus.Completed;
             payment.GatewayTransactionId = gatewayResponse.TransactionId;
             payment.GatewayResponse = gatewayResponse.RawResponse;
@@ -148,8 +160,8 @@ public class PaymentService : IPaymentService
         await _paymentRepository.UpdateAsync(payment, cancellationToken);
         await _transactionRepository.CreateAsync(transaction, cancellationToken);
 
-        // Publish payment event
-        if (gatewayResponse.Success)
+        // Publish events (skip for redirect-based — events fire after IPN callback)
+        if (gatewayResponse.Success && string.IsNullOrEmpty(gatewayResponse.RedirectUrl))
         {
             await _eventPublisher.PublishAsync("PaymentCompleted", new Dictionary<string, object>
             {
@@ -161,7 +173,7 @@ public class PaymentService : IPaymentService
                 ["currency"] = payment.Currency
             }, cancellationToken);
         }
-        else
+        else if (!gatewayResponse.Success)
         {
             await _eventPublisher.PublishAsync("PaymentFailed", new Dictionary<string, object>
             {
@@ -174,7 +186,9 @@ public class PaymentService : IPaymentService
             }, cancellationToken);
         }
 
-        return _mapper.Map<PaymentResponse>(payment);
+        var response = _mapper.Map<PaymentResponse>(payment);
+        response.RedirectUrl = gatewayResponse.RedirectUrl;
+        return response;
     }
 
     public async Task<PaymentDetailResponse?> GetPaymentByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -248,6 +262,121 @@ public class PaymentService : IPaymentService
         await _paymentRepository.UpdateAsync(payment, cancellationToken);
 
         _logger.LogInformation("Payment cancelled: {PaymentId}, Reason: {Reason}", id, request.Reason);
+
+        return _mapper.Map<PaymentResponse>(payment);
+    }
+
+    public async Task<PaymentResponse?> CompleteGatewayPaymentAsync(string gatewayTransactionId, string bankTransactionId, decimal amount, string rawResponse, CancellationToken cancellationToken = default)
+    {
+        var payment = await _paymentRepository.GetByGatewayTransactionIdAsync(gatewayTransactionId, cancellationToken);
+        if (payment == null)
+        {
+            _logger.LogWarning("Gateway callback for unknown transaction: {TranId}", gatewayTransactionId);
+            return null;
+        }
+
+        if (payment.Status != PaymentStatus.Processing)
+        {
+            _logger.LogWarning("Gateway callback for non-processing payment: {PaymentId}, Status={Status}", payment.Id, payment.Status);
+            return _mapper.Map<PaymentResponse>(payment);
+        }
+
+        // Verify amount matches
+        if (amount != payment.Amount)
+        {
+            _logger.LogWarning("Amount mismatch for payment {PaymentId}: expected={Expected}, received={Received}",
+                payment.Id, payment.Amount, amount);
+        }
+
+        payment.Status = PaymentStatus.Completed;
+        payment.GatewayResponse = rawResponse;
+        payment.CompletedAt = DateTime.UtcNow;
+
+        // Record the completion transaction
+        var transaction = new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            TenantId = payment.TenantId,
+            PaymentId = payment.Id,
+            Type = TransactionType.Capture,
+            Amount = amount,
+            Currency = payment.Currency,
+            GatewayTransactionId = bankTransactionId,
+            GatewayResponse = rawResponse,
+            Status = TransactionStatus.Success,
+            TransactionDate = DateTime.UtcNow,
+            Notes = "SSLCommerz IPN callback - payment confirmed"
+        };
+
+        await _paymentRepository.UpdateAsync(payment, cancellationToken);
+        await _transactionRepository.CreateAsync(transaction, cancellationToken);
+
+        _logger.LogInformation("Payment completed via gateway callback: {PaymentId}, BankTranId={BankTranId}",
+            payment.Id, bankTransactionId);
+
+        await _eventPublisher.PublishAsync("PaymentCompleted", new Dictionary<string, object>
+        {
+            ["tenant_id"] = payment.TenantId,
+            ["payment_id"] = payment.Id.ToString(),
+            ["order_id"] = payment.OrderId,
+            ["customer_id"] = payment.CustomerId,
+            ["amount"] = payment.Amount,
+            ["currency"] = payment.Currency
+        }, cancellationToken);
+
+        return _mapper.Map<PaymentResponse>(payment);
+    }
+
+    public async Task<PaymentResponse?> FailGatewayPaymentAsync(string gatewayTransactionId, string reason, string rawResponse, CancellationToken cancellationToken = default)
+    {
+        var payment = await _paymentRepository.GetByGatewayTransactionIdAsync(gatewayTransactionId, cancellationToken);
+        if (payment == null)
+        {
+            _logger.LogWarning("Gateway fail callback for unknown transaction: {TranId}", gatewayTransactionId);
+            return null;
+        }
+
+        if (payment.Status != PaymentStatus.Processing)
+        {
+            _logger.LogWarning("Gateway fail callback for non-processing payment: {PaymentId}, Status={Status}", payment.Id, payment.Status);
+            return _mapper.Map<PaymentResponse>(payment);
+        }
+
+        payment.Status = PaymentStatus.Failed;
+        payment.FailureReason = reason;
+        payment.GatewayResponse = rawResponse;
+        payment.FailedAt = DateTime.UtcNow;
+
+        var transaction = new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            TenantId = payment.TenantId,
+            PaymentId = payment.Id,
+            Type = TransactionType.Charge,
+            Amount = payment.Amount,
+            Currency = payment.Currency,
+            GatewayTransactionId = gatewayTransactionId,
+            GatewayResponse = rawResponse,
+            Status = TransactionStatus.Failed,
+            GatewayErrorMessage = reason,
+            TransactionDate = DateTime.UtcNow,
+            Notes = "SSLCommerz callback - payment failed"
+        };
+
+        await _paymentRepository.UpdateAsync(payment, cancellationToken);
+        await _transactionRepository.CreateAsync(transaction, cancellationToken);
+
+        _logger.LogWarning("Payment failed via gateway callback: {PaymentId}, Reason={Reason}", payment.Id, reason);
+
+        await _eventPublisher.PublishAsync("PaymentFailed", new Dictionary<string, object>
+        {
+            ["tenant_id"] = payment.TenantId,
+            ["payment_id"] = payment.Id.ToString(),
+            ["order_id"] = payment.OrderId,
+            ["customer_id"] = payment.CustomerId,
+            ["amount"] = payment.Amount,
+            ["reason"] = reason
+        }, cancellationToken);
 
         return _mapper.Map<PaymentResponse>(payment);
     }

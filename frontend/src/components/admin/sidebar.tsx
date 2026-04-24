@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
   ShoppingCart,
   Warehouse,
   Users,
@@ -13,6 +14,7 @@ import {
   Settings,
   LogOut,
   BarChart3,
+  CreditCard,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import ThemeSwitcher from '@/components/ui/theme-switcher';
@@ -20,10 +22,12 @@ import ThemeSwitcher from '@/components/ui/theme-switcher';
 const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/products', label: 'Products', icon: Package },
+  { href: '/admin/categories', label: 'Categories', icon: FolderTree },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/inventory', label: 'Inventory', icon: Warehouse },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/users', label: 'Users', icon: UserCog },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];

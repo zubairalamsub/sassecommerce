@@ -24,7 +24,7 @@ export default function AuthGuard({ children, requiredRole, redirectTo }: AuthGu
     if (!hasRole(requiredRole)) {
       // Authenticated but wrong role — redirect to their appropriate area
       if (user?.role === 'super_admin') {
-        router.replace('/super-admin/dashboard');
+        router.replace('/platform/dashboard');
       } else if (user?.role === 'admin' || user?.role === 'moderator') {
         router.replace('/admin/dashboard');
       } else {
@@ -49,7 +49,7 @@ export default function AuthGuard({ children, requiredRole, redirectTo }: AuthGu
 function getLoginPath(role: UserRole): string {
   switch (role) {
     case 'super_admin':
-      return '/super-admin/login';
+      return '/platform/login';
     case 'admin':
     case 'moderator':
       return '/admin/login';

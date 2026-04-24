@@ -15,6 +15,7 @@ import (
 	"github.com/ecommerce/search-service/internal/repository"
 	"github.com/ecommerce/search-service/internal/service"
 	"github.com/ecommerce/search-service/pkg/logger"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gin-contrib/cors"
@@ -85,6 +86,13 @@ func main() {
 			"time":    time.Now().UTC(),
 		})
 	})
+
+	// JWT Auth middleware
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your-secret-key-change-in-production-12345"
+	}
+	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 
 	api.RegisterRoutes(router, handler)
 

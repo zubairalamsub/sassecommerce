@@ -6,6 +6,8 @@ public interface IPaymentService
 {
     // Payment operations
     Task<PaymentResponse> ProcessPaymentAsync(CreatePaymentRequest request, CancellationToken cancellationToken = default);
+    Task<PaymentResponse?> CompleteGatewayPaymentAsync(string gatewayTransactionId, string bankTransactionId, decimal amount, string rawResponse, CancellationToken cancellationToken = default);
+    Task<PaymentResponse?> FailGatewayPaymentAsync(string gatewayTransactionId, string reason, string rawResponse, CancellationToken cancellationToken = default);
     Task<PaymentDetailResponse?> GetPaymentByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<PaymentDetailResponse?> GetPaymentByOrderIdAsync(string tenantId, string orderId, CancellationToken cancellationToken = default);
     Task<(List<PaymentResponse> Items, int Total)> GetPaymentsPagedAsync(string tenantId, int offset, int limit, string? status = null, CancellationToken cancellationToken = default);

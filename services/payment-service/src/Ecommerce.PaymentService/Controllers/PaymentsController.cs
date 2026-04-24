@@ -1,9 +1,11 @@
 using Ecommerce.PaymentService.DTOs;
 using Ecommerce.PaymentService.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ecommerce.PaymentService.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/v1/[controller]")]
 public class PaymentsController : ControllerBase
@@ -32,6 +34,13 @@ public class PaymentsController : ControllerBase
             if (result.Status == "Failed")
             {
                 return UnprocessableEntity(new { error = result.FailureReason, payment = result });
+            }
+
+            // For redirect-based gateways (SSLCommerz), return 200 with redirect_url
+            // Frontend should redirect the customer to complete payment
+            if (!string.IsNullOrEmpty(result.RedirectUrl))
+            {
+                return Ok(result);
             }
 
             return CreatedAtAction(nameof(GetPayment), new { id = result.Id }, result);

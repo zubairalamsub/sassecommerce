@@ -1,8 +1,11 @@
+using System.Text;
 using Ecommerce.PaymentService.Data;
 using Ecommerce.PaymentService.Messaging;
 using Ecommerce.PaymentService.Repositories;
 using Ecommerce.PaymentService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,7 +52,50 @@ builder.Services.AddSingleton<IEventPublisher, KafkaEventPublisher>();
 
 // Register Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IPaymentGateway, SimulatedPaymentGateway>();
+
+// Register Payment Gateway — SSLCommerz for production, Simulated for development
+var sslCommerzStoreId = builder.Configuration["SSLCOMMERZ_STORE_ID"];
+if (!string.IsNullOrEmpty(sslCommerzStoreId))
+{
+    var paymentServiceBaseUrl = builder.Configuration["PAYMENT_SERVICE_URL"] ?? "http://localhost:8085";
+    var sslCommerzConfig = new SslCommerzConfig
+    {
+        StoreId = sslCommerzStoreId,
+        StorePassword = builder.Configuration["SSLCOMMERZ_STORE_PASSWORD"] ?? "",
+        IsSandbox = builder.Configuration["SSLCOMMERZ_SANDBOX"]?.ToLower() != "false",
+        SuccessUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/success",
+        FailUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/fail",
+        CancelUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/cancel",
+        IpnUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/ipn",
+    };
+
+    builder.Services.AddSingleton(sslCommerzConfig);
+    builder.Services.AddHttpClient<SslCommerzPaymentGateway>();
+    builder.Services.AddScoped<IPaymentGateway, SslCommerzPaymentGateway>();
+
+    Log.Information("Payment gateway: SSLCommerz ({Mode})", sslCommerzConfig.IsSandbox ? "Sandbox" : "Production");
+}
+else
+{
+    builder.Services.AddScoped<IPaymentGateway, SimulatedPaymentGateway>();
+    Log.Information("Payment gateway: Simulated (set SSLCOMMERZ_STORE_ID to enable SSLCommerz)");
+}
+
+// Configure JWT Authentication
+var jwtSecret = builder.Configuration["JWT_SECRET"] ?? "your-secret-key-change-in-production-12345";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
 
 // Configure CORS
 builder.Services.AddCors(options =>
@@ -75,6 +121,7 @@ app.UseSerilogRequestLogging();
 
 app.UseCors();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

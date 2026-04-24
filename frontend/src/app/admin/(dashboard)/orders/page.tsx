@@ -4,10 +4,8 @@ import { useState, useEffect } from 'react';
 import { Eye, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatCurrency, formatDate, statusColor } from '@/lib/utils';
-import { orderApi, type Order } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
-
-type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+import { useOrderStore, type OrderStatus } from '@/stores/orders';
 
 const tabs: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -18,58 +16,14 @@ const tabs: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Cancelled', value: 'cancelled' },
 ];
 
-const demoOrders = [
-  { id: 'ORD-2026-001', customer_id: 'cu-001', order_number: 'ORD-2026-001', customer: 'Rahim Uddin', items: 3, total: 4500, status: 'delivered' as OrderStatus, date: '2026-04-17' },
-  { id: 'ORD-2026-002', customer_id: 'cu-002', order_number: 'ORD-2026-002', customer: 'Fatima Akter', items: 1, total: 15000, status: 'shipped' as OrderStatus, date: '2026-04-17' },
-  { id: 'ORD-2026-003', customer_id: 'cu-003', order_number: 'ORD-2026-003', customer: 'Kamal Hossain', items: 2, total: 3200, status: 'confirmed' as OrderStatus, date: '2026-04-16' },
-  { id: 'ORD-2026-004', customer_id: 'cu-004', order_number: 'ORD-2026-004', customer: 'Nusrat Jahan', items: 4, total: 8750, status: 'pending' as OrderStatus, date: '2026-04-16' },
-  { id: 'ORD-2026-005', customer_id: 'cu-005', order_number: 'ORD-2026-005', customer: 'Shakib Ahmed', items: 1, total: 2100, status: 'cancelled' as OrderStatus, date: '2026-04-15' },
-  { id: 'ORD-2026-006', customer_id: 'cu-006', order_number: 'ORD-2026-006', customer: 'Tahmina Begum', items: 2, total: 6300, status: 'pending' as OrderStatus, date: '2026-04-15' },
-];
-
-interface DisplayOrder {
-  id: string;
-  order_number: string;
-  customer: string;
-  items: number;
-  total: number;
-  status: OrderStatus;
-  date: string;
-}
-
 export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState<OrderStatus | 'all'>('all');
-  const [orders, setOrders] = useState<DisplayOrder[]>(demoOrders);
-  const [loading, setLoading] = useState(true);
+  const { orders, loading, fetchOrders } = useOrderStore();
   const { tenantId } = useAuthStore();
 
   useEffect(() => {
-    async function loadOrders() {
-      if (!tenantId) {
-        setOrders(demoOrders);
-        setLoading(false);
-        return;
-      }
-      try {
-        const res = await orderApi.listByTenant(tenantId);
-        const mapped: DisplayOrder[] = res.data.map((o: Order) => ({
-          id: o.id,
-          order_number: o.order_number,
-          customer: o.customer_id,
-          items: o.items?.length || 0,
-          total: o.total,
-          status: o.status,
-          date: o.created_at?.split('T')[0] || '',
-        }));
-        setOrders(mapped.length > 0 ? mapped : demoOrders);
-      } catch {
-        setOrders(demoOrders);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadOrders();
-  }, [tenantId]);
+    if (tenantId) fetchOrders(tenantId);
+  }, [tenantId, fetchOrders]);
 
   const filtered =
     activeTab === 'all' ? orders : orders.filter((o) => o.status === activeTab);

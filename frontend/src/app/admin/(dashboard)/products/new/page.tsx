@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, X, Upload, Save } from 'lucide-react';
+import { ArrowLeft, Plus, X, Save, Link2 } from 'lucide-react';
 import { useProductStore } from '@/stores/products';
 import { useAuthStore } from '@/stores/auth';
+import FileUpload, { type UploadedFile } from '@/components/ui/file-upload';
 
 interface Variant {
   id: string;
@@ -16,11 +17,6 @@ interface Variant {
   stock: string;
 }
 
-interface ImageEntry {
-  id: string;
-  url: string;
-  altText: string;
-}
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -55,7 +51,8 @@ export default function NewProductPage() {
   const [variants, setVariants] = useState<Variant[]>([]);
 
   // Images
-  const [images, setImages] = useState<ImageEntry[]>([]);
+  const [imageFiles, setImageFiles] = useState<UploadedFile[]>([]);
+  const [imageUrlInput, setImageUrlInput] = useState('');
 
   function generateSlug(value: string) {
     return value
@@ -88,16 +85,34 @@ export default function NewProductPage() {
     setVariants(variants.filter((v) => v.id !== id));
   }
 
-  function addImage() {
-    setImages([...images, { id: `img-${Date.now()}`, url: '', altText: '' }]);
+  function handleFilesAdded(files: File[]) {
+    const newEntries: UploadedFile[] = files.map((file) => ({
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: URL.createObjectURL(file),
+      progress: 100,
+    }));
+    setImageFiles((prev) => [...prev, ...newEntries]);
   }
 
-  function updateImage(id: string, field: 'url' | 'altText', value: string) {
-    setImages(images.map((img) => (img.id === id ? { ...img, [field]: value } : img)));
+  function handleFileRemoved(id: string) {
+    setImageFiles((prev) => {
+      const file = prev.find((f) => f.id === id);
+      if (file?.url?.startsWith('blob:')) URL.revokeObjectURL(file.url);
+      return prev.filter((f) => f.id !== id);
+    });
   }
 
-  function removeImage(id: string) {
-    setImages(images.filter((img) => img.id !== id));
+  function addImageByUrl() {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    setImageFiles((prev) => [
+      ...prev,
+      { id: `url-${Date.now()}`, name: url.split('/').pop() || 'image', size: 0, type: 'image/*', url },
+    ]);
+    setImageUrlInput('');
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -124,7 +139,7 @@ export default function NewProductPage() {
           category_id: category,
           status,
           tags: parsedTags,
-          images: images.filter((img) => img.url).map((img) => img.url),
+          images: imageFiles.filter((f) => f.url).map((f) => f.url!),
           variants: variants.map((v) => ({
             name: v.name,
             value: v.value,
@@ -379,68 +394,37 @@ export default function NewProductPage() {
 
         {/* Images */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Images</h2>
-            <button
-              type="button"
-              onClick={addImage}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <Upload className="h-4 w-4" />
-              Add Image URL
-            </button>
-          </div>
-          {images.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 py-12 text-center">
-              <Upload className="mb-2 h-8 w-8 text-gray-300" />
-              <p className="text-sm text-gray-500">No images added yet</p>
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Images</h2>
+          <FileUpload
+            files={imageFiles}
+            onFilesAdded={handleFilesAdded}
+            onFileRemoved={handleFileRemoved}
+            accept="image/*"
+            multiple
+            maxSize={5 * 1024 * 1024}
+            maxFiles={10}
+          />
+          <div className="mt-4">
+            <label className="mb-1.5 block text-xs font-medium text-gray-500">Or add by URL</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={imageUrlInput}
+                onChange={(e) => setImageUrlInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addImageByUrl(); } }}
+                placeholder="https://cdn.example.com/image.jpg"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
               <button
                 type="button"
-                onClick={addImage}
-                className="mt-2 text-sm font-medium text-primary hover:text-primary-dark"
+                onClick={addImageByUrl}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
-                Add image URL
+                <Link2 className="h-4 w-4" />
+                Add
               </button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {images.map((img, index) => (
-                <div key={img.id} className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
-                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400 overflow-hidden">
-                    {img.url ? (
-                      <img src={img.url} alt={img.altText || `Image ${index + 1}`} className="h-full w-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = `<span class="text-center text-[10px] break-all px-1 text-gray-400">${img.url.slice(-15)}</span>`; }} />
-                    ) : (
-                      `#${index + 1}`
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <input
-                      type="url"
-                      value={img.url}
-                      onChange={(e) => updateImage(img.id, 'url', e.target.value)}
-                      placeholder="https://cdn.example.com/image.jpg"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                    <input
-                      type="text"
-                      value={img.altText}
-                      onChange={(e) => updateImage(img.id, 'altText', e.target.value)}
-                      placeholder="Alt text"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeImage(img.id)}
-                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Variants */}

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"os"
+
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -36,6 +39,13 @@ func (r *Router) Setup() *gin.Engine {
 			"service": "order-service",
 		})
 	})
+
+	// JWT Auth middleware
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your-secret-key-change-in-production-12345"
+	}
+	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 
 	// API routes
 	v1 := router.Group("/api/v1")

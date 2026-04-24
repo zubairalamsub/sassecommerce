@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
-
-	"os"
-	"strings"
 
 	"github.com/ecommerce/shipping-service/internal/api"
 	"github.com/ecommerce/shipping-service/internal/config"
@@ -20,6 +18,7 @@ import (
 	"github.com/ecommerce/shipping-service/internal/service"
 	"github.com/ecommerce/shipping-service/pkg/database"
 	"github.com/ecommerce/shipping-service/pkg/logger"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -86,6 +85,10 @@ func main() {
 			"time":    time.Now().UTC(),
 		})
 	})
+
+	// JWT Auth middleware
+	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production-12345")
+	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 
 	// Register API routes
 	api.RegisterRoutes(router, handler)

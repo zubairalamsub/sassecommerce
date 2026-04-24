@@ -26,6 +26,11 @@ public class GatewayResponse
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }
     public string? RawResponse { get; set; }
+    /// <summary>
+    /// For redirect-based gateways (SSLCommerz, bKash etc.), the URL to redirect the customer to.
+    /// When set, the payment stays in Processing until the gateway callback confirms completion.
+    /// </summary>
+    public string? RedirectUrl { get; set; }
 }
 
 public interface IPaymentGateway

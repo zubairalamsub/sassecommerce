@@ -3,6 +3,7 @@ module github.com/yourusername/ecommerce/order-service
 go 1.21
 
 require (
+	github.com/ecommerce/shared/go v0.1.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
@@ -10,6 +11,8 @@ require (
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.26.0
 )
+
+replace github.com/ecommerce/shared/go => ../../shared/go
 
 require (
 	github.com/bytedance/sonic v1.9.1 // indirect

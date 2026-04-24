@@ -27,7 +27,7 @@ export default function AdminLoginPage() {
       if (result.user.role === 'admin' || result.user.role === 'moderator') {
         router.push('/admin/dashboard');
       } else if (result.user.role === 'super_admin') {
-        setError('Please use the platform admin login');
+        router.push('/platform/dashboard');
       } else {
         setError('This account does not have admin access');
       }

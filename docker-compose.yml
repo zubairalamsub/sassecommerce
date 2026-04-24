@@ -214,6 +214,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: inventory_db
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
@@ -240,7 +241,14 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: payment_db
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
+      # SSLCommerz - set store credentials to enable (leave empty for simulated gateway)
+      SSLCOMMERZ_STORE_ID: ""
+      SSLCOMMERZ_STORE_PASSWORD: ""
+      SSLCOMMERZ_SANDBOX: "true"
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      FRONTEND_URL: http://localhost:3000
     depends_on:
       postgres:
         condition: service_healthy
@@ -267,6 +275,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: shipping_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
@@ -290,6 +299,7 @@ services:
       ENVIRONMENT: development
       MONGO_URI: mongodb://admin:admin123@mongodb:27017
       MONGO_DB_NAME: notification_db
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: notification-service
     depends_on:
@@ -314,6 +324,7 @@ services:
       ENVIRONMENT: development
       MONGO_URI: mongodb://admin:admin123@mongodb:27017
       MONGO_DB_NAME: review_db
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: review-service
     depends_on:
@@ -339,6 +350,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: redis123
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: cart-service
     depends_on:
@@ -363,6 +375,7 @@ services:
       ENVIRONMENT: development
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_INDEX: products
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: search-service
     depends_on:
@@ -391,6 +404,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: promotion_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: promotion-service
     depends_on:
@@ -419,6 +433,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: config_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
     depends_on:
       postgres:
         condition: service_healthy
@@ -442,6 +457,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: order_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
       KAFKA_ENABLED: "true"
       INVENTORY_SERVICE_URL: http://inventory-service:8084
@@ -473,6 +489,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: analytics_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: analytics-service
     depends_on:
@@ -501,6 +518,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: recommendation_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: recommendation-service
     depends_on:
@@ -529,6 +547,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: vendor_db
       DB_SSLMODE: disable
+      JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: vendor-service
     depends_on:

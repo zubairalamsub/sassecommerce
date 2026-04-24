@@ -42,6 +42,12 @@ public class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey, cancellationToken);
     }
 
+    public async Task<Payment?> GetByGatewayTransactionIdAsync(string gatewayTransactionId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Payments
+            .FirstOrDefaultAsync(p => p.GatewayTransactionId == gatewayTransactionId, cancellationToken);
+    }
+
     public async Task<List<Payment>> GetByCustomerIdAsync(string tenantId, string customerId, CancellationToken cancellationToken = default)
     {
         return await _context.Payments

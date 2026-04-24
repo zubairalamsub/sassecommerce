@@ -9,6 +9,10 @@ import {
   CreditCard,
   Settings,
   LogOut,
+  Users,
+  Plug,
+  FileText,
+  Server,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 
@@ -16,6 +20,10 @@ const navItems = [
   { href: '/super-admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/super-admin/tenants', label: 'Tenants', icon: Building2 },
   { href: '/super-admin/plans', label: 'Plans & Billing', icon: CreditCard },
+  { href: '/super-admin/users', label: 'Users & Roles', icon: Users },
+  { href: '/super-admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/super-admin/content', label: 'Content & Branding', icon: FileText },
+  { href: '/super-admin/system', label: 'System', icon: Server },
   { href: '/super-admin/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -38,7 +46,7 @@ export default function SuperAdminSidebar() {
         <span className="text-lg font-semibold text-gray-900">Saajan Platform</span>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =

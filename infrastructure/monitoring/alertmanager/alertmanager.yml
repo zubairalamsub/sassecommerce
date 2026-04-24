@@ -1,0 +1,52 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "job"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "default"
+
+  routes:
+    # Critical alerts — immediate notification
+    - match:
+        severity: critical
+      receiver: "critical"
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts — batched
+    - match:
+        severity: warning
+      receiver: "default"
+      group_wait: 1m
+      repeat_interval: 4h
+
+receivers:
+  - name: "default"
+    # Configure your notification channels below:
+    # webhook_configs:
+    #   - url: "http://your-webhook-endpoint/alerts"
+    #     send_resolved: true
+
+  - name: "critical"
+    # Configure critical alert channels:
+    # webhook_configs:
+    #   - url: "http://your-webhook-endpoint/critical-alerts"
+    #     send_resolved: true
+    # email_configs:
+    #   - to: "oncall@your-domain.com"
+    #     from: "alertmanager@your-domain.com"
+    #     smarthost: "smtp.your-domain.com:587"
+    #     auth_username: "alertmanager@your-domain.com"
+    #     auth_password: "your-password"
+    #     send_resolved: true
+
+inhibit_rules:
+  # If a critical alert fires, suppress warnings for the same service
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ["alertname", "job"]

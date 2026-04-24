@@ -1,0 +1,174 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Microservices (Go) ──────────────────────────────────────
+  - job_name: "order-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["order-service:8080"]
+        labels:
+          service: order-service
+          language: go
+
+  - job_name: "tenant-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["tenant-service:8080"]
+        labels:
+          service: tenant-service
+          language: go
+
+  - job_name: "user-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["user-service:8082"]
+        labels:
+          service: user-service
+          language: go
+
+  - job_name: "product-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["product-service:8083"]
+        labels:
+          service: product-service
+          language: go
+
+  - job_name: "shipping-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["shipping-service:8086"]
+        labels:
+          service: shipping-service
+          language: go
+
+  - job_name: "notification-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["notification-service:8087"]
+        labels:
+          service: notification-service
+          language: go
+
+  - job_name: "review-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["review-service:8088"]
+        labels:
+          service: review-service
+          language: go
+
+  - job_name: "cart-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cart-service:8089"]
+        labels:
+          service: cart-service
+          language: go
+
+  - job_name: "search-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["search-service:8090"]
+        labels:
+          service: search-service
+          language: go
+
+  - job_name: "promotion-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["promotion-service:8091"]
+        labels:
+          service: promotion-service
+          language: go
+
+  - job_name: "vendor-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["vendor-service:8092"]
+        labels:
+          service: vendor-service
+          language: go
+
+  - job_name: "analytics-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["analytics-service:8093"]
+        labels:
+          service: analytics-service
+          language: go
+
+  - job_name: "recommendation-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["recommendation-service:8094"]
+        labels:
+          service: recommendation-service
+          language: go
+
+  - job_name: "config-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["config-service:8095"]
+        labels:
+          service: config-service
+          language: go
+
+  # ── Microservices (.NET) ────────────────────────────────────
+  - job_name: "inventory-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["inventory-service:8084"]
+        labels:
+          service: inventory-service
+          language: dotnet
+
+  - job_name: "payment-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["payment-service:8085"]
+        labels:
+          service: payment-service
+          language: dotnet
+
+  # ── Infrastructure Exporters ────────────────────────────────
+  - job_name: "postgres-exporter"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: "mongodb-exporter"
+    static_configs:
+      - targets: ["mongodb-exporter:9216"]
+
+  - job_name: "redis-exporter"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: "kafka-exporter"
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+
+  - job_name: "elasticsearch-exporter"
+    static_configs:
+      - targets: ["elasticsearch-exporter:9114"]
+
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]

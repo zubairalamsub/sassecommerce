@@ -1,0 +1,63 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Collect logs from all Docker containers
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/log/docker/*log
+
+  # Collect container logs via Docker socket
+  - job_name: containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: network
+            values: ["ecommerce_ecommerce-network"]
+    relabel_configs:
+      # Extract container name
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+      # Extract service name from container name
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/?(.*)"
+        target_label: "service"
+      # Add log stream label
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: "stream"
+
+    pipeline_stages:
+      # Try to parse JSON logs (Go services emit JSON)
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            timestamp: time
+            error: error
+            service: service
+            trace_id: trace_id
+      # Fallback: extract log level from text logs
+      - regex:
+          expression: "(?i)(?P<level>debug|info|warn|warning|error|fatal|panic)"
+      # Map parsed level to label
+      - labels:
+          level:
+          service:
+      # Drop debug logs in production to save storage
+      # Uncomment below to enable:
+      # - match:
+      #     selector: '{level="debug"}'
+      #     action: drop

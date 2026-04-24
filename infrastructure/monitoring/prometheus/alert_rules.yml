@@ -1,0 +1,207 @@
+groups:
+  # ── Service Health ──────────────────────────────────────────
+  - name: service_health
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_requests_total[5m])) by (job)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} has >5% error rate (current: {{ $value | humanizePercentage }})."
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} p95 latency is above 2s (current: {{ $value | humanizeDuration }})."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 512
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} is using {{ $value | humanize }}MB of memory."
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  - name: postgresql
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance has been unreachable for more than 1 minute."
+
+      - alert: PostgresHighConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL high connection count"
+          description: "PostgreSQL has {{ $value }} active connections (threshold: 80)."
+
+      - alert: PostgresSlowQueries
+        expr: pg_stat_activity_max_tx_duration{datname!~"template.*"} > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL long-running transaction"
+          description: "A transaction has been running for {{ $value | humanizeDuration }}."
+
+      - alert: PostgresDeadlocks
+        expr: increase(pg_stat_database_deadlocks[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL deadlock detected"
+          description: "{{ $value }} deadlock(s) detected in the last 5 minutes."
+
+  # ── MongoDB ─────────────────────────────────────────────────
+  - name: mongodb
+    rules:
+      - alert: MongoDBDown
+        expr: mongodb_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB is down"
+          description: "MongoDB instance has been unreachable for more than 1 minute."
+
+      - alert: MongoDBHighConnections
+        expr: mongodb_ss_connections{conn_type="current"} > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MongoDB high connection count"
+          description: "MongoDB has {{ $value }} current connections."
+
+  # ── Redis ───────────────────────────────────────────────────
+  - name: redis
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance has been unreachable for more than 1 minute."
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage above 85%"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory."
+
+      - alert: RedisHighKeyEviction
+        expr: increase(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high key eviction rate"
+          description: "Redis evicted {{ $value }} keys in the last 5 minutes."
+
+  # ── Kafka ───────────────────────────────────────────────────
+  - name: kafka
+    rules:
+      - alert: KafkaBrokerDown
+        expr: kafka_brokers < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka broker is down"
+          description: "No Kafka brokers are available."
+
+      - alert: KafkaConsumerLag
+        expr: kafka_consumergroup_lag_sum > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer group {{ $labels.consumergroup }} has lag of {{ $value }} on topic {{ $labels.topic }}."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_topic_partition_under_replicated_partition > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka under-replicated partitions"
+          description: "Topic {{ $labels.topic }} has {{ $value }} under-replicated partitions."
+
+  # ── Elasticsearch ───────────────────────────────────────────
+  - name: elasticsearch
+    rules:
+      - alert: ElasticsearchDown
+        expr: elasticsearch_cluster_health_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch is down"
+          description: "Elasticsearch cluster has been unreachable for more than 1 minute."
+
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch cluster status RED"
+          description: "Elasticsearch cluster health is RED — data loss possible."
+
+      - alert: ElasticsearchClusterYellow
+        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elasticsearch cluster status YELLOW"
+          description: "Elasticsearch cluster health is YELLOW — replicas unassigned."
+
+      - alert: ElasticsearchHighDiskUsage
+        expr: |
+          elasticsearch_filesystem_data_available_bytes
+          /
+          elasticsearch_filesystem_data_size_bytes
+          < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elasticsearch disk usage above 85%"
+          description: "Elasticsearch node has less than 15% disk space remaining."

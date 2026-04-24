@@ -1,0 +1,327 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Infrastructure Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(up{job=~\"postgres-exporter|mongodb-exporter|redis-exporter|kafka-exporter|elasticsearch-exporter\"})",
+          "legendFormat": "Exporters Online"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "green", "value": 5 }
+            ]
+          },
+          "displayName": "Infra Exporters Online"
+        }
+      }
+    },
+    {
+      "title": "── PostgreSQL ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 4 },
+      "options": { "mode": "markdown", "content": "## PostgreSQL" }
+    },
+    {
+      "title": "Active Connections",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 6 },
+      "targets": [
+        { "expr": "pg_stat_activity_count", "legendFormat": "Connections" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "max": 100
+        }
+      }
+    },
+    {
+      "title": "Database Size",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 6 },
+      "targets": [
+        {
+          "expr": "pg_database_size_bytes{datname!~\"template.*|postgres\"}",
+          "legendFormat": "{{ datname }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" } }
+    },
+    {
+      "title": "Transactions per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m]))",
+          "legendFormat": "TPS"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Cache Hit Ratio",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_database_blks_hit) / (sum(pg_stat_database_blks_hit) + sum(pg_stat_database_blks_read))",
+          "legendFormat": "Hit Ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          },
+          "max": 1
+        }
+      }
+    },
+    {
+      "title": "── MongoDB ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 12 },
+      "options": { "mode": "markdown", "content": "## MongoDB" }
+    },
+    {
+      "title": "Current Connections",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "mongodb_ss_connections{conn_type=\"current\"}", "legendFormat": "Current" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 300 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Operations per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 14 },
+      "targets": [
+        { "expr": "rate(mongodb_ss_opcounters{type=\"insert\"}[5m])", "legendFormat": "Insert" },
+        { "expr": "rate(mongodb_ss_opcounters{type=\"query\"}[5m])", "legendFormat": "Query" },
+        { "expr": "rate(mongodb_ss_opcounters{type=\"update\"}[5m])", "legendFormat": "Update" },
+        { "expr": "rate(mongodb_ss_opcounters{type=\"delete\"}[5m])", "legendFormat": "Delete" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Document Metrics",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 14 },
+      "targets": [
+        { "expr": "rate(mongodb_ss_metrics_document{state=\"inserted\"}[5m])", "legendFormat": "Inserted" },
+        { "expr": "rate(mongodb_ss_metrics_document{state=\"returned\"}[5m])", "legendFormat": "Returned" },
+        { "expr": "rate(mongodb_ss_metrics_document{state=\"updated\"}[5m])", "legendFormat": "Updated" },
+        { "expr": "rate(mongodb_ss_metrics_document{state=\"deleted\"}[5m])", "legendFormat": "Deleted" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Memory Usage",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 14 },
+      "targets": [
+        { "expr": "mongodb_ss_mem_resident * 1024 * 1024", "legendFormat": "Resident" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" } }
+    },
+    {
+      "title": "── Redis ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 20 },
+      "options": { "mode": "markdown", "content": "## Redis" }
+    },
+    {
+      "title": "Memory Used",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 22 },
+      "targets": [
+        { "expr": "redis_memory_used_bytes", "legendFormat": "Used" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" } }
+    },
+    {
+      "title": "Connected Clients",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 22 },
+      "targets": [
+        { "expr": "redis_connected_clients", "legendFormat": "Clients" }
+      ]
+    },
+    {
+      "title": "Hit Rate",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 22 },
+      "targets": [
+        {
+          "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)",
+          "legendFormat": "Hit Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.8 },
+              { "color": "green", "value": 0.9 }
+            ]
+          },
+          "max": 1
+        }
+      }
+    },
+    {
+      "title": "Commands per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 22 },
+      "targets": [
+        { "expr": "rate(redis_commands_processed_total[5m])", "legendFormat": "Commands/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "── Kafka ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 28 },
+      "options": { "mode": "markdown", "content": "## Kafka" }
+    },
+    {
+      "title": "Broker Count",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 30 },
+      "targets": [
+        { "expr": "kafka_brokers", "legendFormat": "Brokers" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Messages In per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 30 },
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_topic_partition_current_offset[5m])) by (topic)",
+          "legendFormat": "{{ topic }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Consumer Group Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 30 },
+      "targets": [
+        {
+          "expr": "kafka_consumergroup_lag_sum",
+          "legendFormat": "{{ consumergroup }}"
+        }
+      ]
+    },
+    {
+      "title": "Partition Count per Topic",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 30 },
+      "targets": [
+        {
+          "expr": "count(kafka_topic_partitions) by (topic)",
+          "legendFormat": "{{ topic }}"
+        }
+      ]
+    },
+    {
+      "title": "── Elasticsearch ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 36 },
+      "options": { "mode": "markdown", "content": "## Elasticsearch" }
+    },
+    {
+      "title": "Cluster Health",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 38 },
+      "targets": [
+        { "expr": "elasticsearch_cluster_health_status{color=\"green\"}", "legendFormat": "Green" },
+        { "expr": "elasticsearch_cluster_health_status{color=\"yellow\"}", "legendFormat": "Yellow" },
+        { "expr": "elasticsearch_cluster_health_status{color=\"red\"}", "legendFormat": "Red" }
+      ]
+    },
+    {
+      "title": "Documents Count",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 38 },
+      "targets": [
+        { "expr": "elasticsearch_indices_docs_total", "legendFormat": "Documents" }
+      ]
+    },
+    {
+      "title": "Index Size",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 38 },
+      "targets": [
+        { "expr": "elasticsearch_indices_store_size_bytes_total", "legendFormat": "Size" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decbytes" } }
+    },
+    {
+      "title": "Search Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 38 },
+      "targets": [
+        { "expr": "rate(elasticsearch_indices_search_query_total[5m])", "legendFormat": "Queries/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["ecommerce", "infrastructure"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Infrastructure",
+  "uid": "infrastructure"
+}

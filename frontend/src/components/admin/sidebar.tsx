@@ -15,6 +15,7 @@ import {
   LogOut,
   BarChart3,
   CreditCard,
+  Store,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import ThemeSwitcher from '@/components/ui/theme-switcher';
@@ -26,6 +27,7 @@ const navItems = [
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/inventory', label: 'Inventory', icon: Warehouse },
   { href: '/admin/customers', label: 'Customers', icon: Users },
+  { href: '/admin/vendors', label: 'Vendors', icon: Store },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/users', label: 'Users', icon: UserCog },

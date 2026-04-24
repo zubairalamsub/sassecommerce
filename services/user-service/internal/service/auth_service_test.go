@@ -18,14 +18,18 @@ import (
 
 type AuthServiceTestSuite struct {
 	suite.Suite
-	mockRepo    *mocks.MockUserRepository
-	service     AuthService
-	tokenConfig models.TokenConfig
-	logger      *logrus.Logger
+	mockRepo      *mocks.MockUserRepository
+	mockTokenRepo *mocks.MockTokenRepository
+	mockKafka     *MockKafkaPublisher
+	service       AuthService
+	tokenConfig   models.TokenConfig
+	logger        *logrus.Logger
 }
 
 func (suite *AuthServiceTestSuite) SetupTest() {
 	suite.mockRepo = new(mocks.MockUserRepository)
+	suite.mockTokenRepo = new(mocks.MockTokenRepository)
+	suite.mockKafka = new(MockKafkaPublisher)
 	suite.logger = logrus.New()
 	suite.logger.SetOutput(io.Discard) // Disable logging during tests
 
@@ -35,7 +39,10 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		Issuer:         "test-service",
 	}
 
-	suite.service = NewAuthService(suite.mockRepo, suite.tokenConfig, suite.logger)
+	// Allow any Kafka publish calls (non-blocking in auth service)
+	suite.mockKafka.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	suite.service = NewAuthService(suite.mockRepo, suite.tokenConfig, suite.mockKafka, suite.logger, suite.mockTokenRepo)
 }
 
 func (suite *AuthServiceTestSuite) TestRegister_Success() {
@@ -54,6 +61,9 @@ func (suite *AuthServiceTestSuite) TestRegister_Success() {
 	suite.mockRepo.On("EmailExists", ctx, tenantID, req.Email).Return(false, nil)
 	suite.mockRepo.On("UsernameExists", ctx, tenantID, req.Username).Return(false, nil)
 	suite.mockRepo.On("Create", ctx, mock.AnythingOfType("*models.User")).Return(nil)
+	// Registration triggers email verification
+	suite.mockTokenRepo.On("InvalidateVerificationTokens", ctx, mock.AnythingOfType("string")).Return(nil).Maybe()
+	suite.mockTokenRepo.On("CreateVerificationToken", ctx, mock.AnythingOfType("*models.VerificationToken")).Return(nil).Maybe()
 
 	result, err := suite.service.Register(ctx, req)
 
@@ -315,6 +325,258 @@ func (suite *AuthServiceTestSuite) TestChangePassword_IncorrectOldPassword() {
 	assert.Error(suite.T(), err)
 	assert.Equal(suite.T(), "incorrect old password", err.Error())
 	suite.mockRepo.AssertExpectations(suite.T())
+}
+
+// --- Email Verification Tests ---
+
+func (suite *AuthServiceTestSuite) TestRequestEmailVerification_Success() {
+	ctx := context.Background()
+	userID := uuid.New().String()
+	tenantID := uuid.New().String()
+	email := "test@example.com"
+
+	suite.mockTokenRepo.On("InvalidateVerificationTokens", ctx, userID).Return(nil)
+	suite.mockTokenRepo.On("CreateVerificationToken", ctx, mock.AnythingOfType("*models.VerificationToken")).Return(nil)
+
+	token, err := suite.service.RequestEmailVerification(ctx, userID, tenantID, email)
+
+	assert.NoError(suite.T(), err)
+	assert.NotEmpty(suite.T(), token)
+	assert.Len(suite.T(), token, 64) // 32 bytes = 64 hex chars
+	suite.mockTokenRepo.AssertExpectations(suite.T())
+}
+
+func (suite *AuthServiceTestSuite) TestVerifyEmail_Success() {
+	ctx := context.Background()
+	tokenID := uuid.New().String()
+	userID := uuid.New().String()
+	tenantID := uuid.New().String()
+	tokenStr := "valid-token-string"
+
+	vt := &models.VerificationToken{
+		ID:        tokenID,
+		UserID:    userID,
+		TenantID:  tenantID,
+		Token:     tokenStr,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+
+	suite.mockTokenRepo.On("GetVerificationTokenByToken", ctx, tokenStr).Return(vt, nil)
+	suite.mockRepo.On("SetEmailVerified", ctx, userID).Return(nil)
+	suite.mockTokenRepo.On("MarkVerificationTokenUsed", ctx, tokenID).Return(nil)
+
+	err := suite.service.VerifyEmail(ctx, &models.VerifyEmailRequest{Token: tokenStr})
+
+	assert.NoError(suite.T(), err)
+	suite.mockTokenRepo.AssertExpectations(suite.T())
+	suite.mockRepo.AssertExpectations(suite.T())
+}
+
+func (suite *AuthServiceTestSuite) TestVerifyEmail_InvalidToken() {
+	ctx := context.Background()
+	tokenStr := "invalid-token"
+
+	suite.mockTokenRepo.On("GetVerificationTokenByToken", ctx, tokenStr).Return(nil, errors.New("verification token not found"))
+
+	err := suite.service.VerifyEmail(ctx, &models.VerifyEmailRequest{Token: tokenStr})
+
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "invalid or expired verification token", err.Error())
+}
+
+func (suite *AuthServiceTestSuite) TestVerifyEmail_ExpiredToken() {
+	ctx := context.Background()
+	tokenStr := "expired-token"
+
+	vt := &models.VerificationToken{
+		ID:        uuid.New().String(),
+		UserID:    uuid.New().String(),
+		TenantID:  uuid.New().String(),
+		Token:     tokenStr,
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Already expired
+	}
+
+	suite.mockTokenRepo.On("GetVerificationTokenByToken", ctx, tokenStr).Return(vt, nil)
+
+	err := suite.service.VerifyEmail(ctx, &models.VerifyEmailRequest{Token: tokenStr})
+
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "invalid or expired verification token", err.Error())
+}
+
+func (suite *AuthServiceTestSuite) TestResendEmailVerification_Success() {
+	ctx := context.Background()
+	tenantID := uuid.New().String()
+	userID := uuid.New().String()
+
+	user := &models.User{
+		ID:            userID,
+		TenantID:      tenantID,
+		Email:         "test@example.com",
+		EmailVerified: false,
+		Status:        models.UserStatusActive,
+	}
+
+	suite.mockRepo.On("GetByEmail", ctx, tenantID, user.Email).Return(user, nil)
+	suite.mockTokenRepo.On("InvalidateVerificationTokens", ctx, userID).Return(nil)
+	suite.mockTokenRepo.On("CreateVerificationToken", ctx, mock.AnythingOfType("*models.VerificationToken")).Return(nil)
+
+	req := &models.ResendVerificationRequest{
+		TenantID: tenantID,
+		Email:    user.Email,
+	}
+
+	err := suite.service.ResendEmailVerification(ctx, req)
+
+	assert.NoError(suite.T(), err)
+	suite.mockRepo.AssertExpectations(suite.T())
+}
+
+func (suite *AuthServiceTestSuite) TestResendEmailVerification_AlreadyVerified() {
+	ctx := context.Background()
+	tenantID := uuid.New().String()
+
+	user := &models.User{
+		ID:            uuid.New().String(),
+		TenantID:      tenantID,
+		Email:         "verified@example.com",
+		EmailVerified: true,
+		Status:        models.UserStatusActive,
+	}
+
+	suite.mockRepo.On("GetByEmail", ctx, tenantID, user.Email).Return(user, nil)
+
+	req := &models.ResendVerificationRequest{
+		TenantID: tenantID,
+		Email:    user.Email,
+	}
+
+	err := suite.service.ResendEmailVerification(ctx, req)
+
+	assert.NoError(suite.T(), err) // No error, just silently succeeds
+}
+
+// --- Password Reset Tests ---
+
+func (suite *AuthServiceTestSuite) TestRequestPasswordReset_Success() {
+	ctx := context.Background()
+	tenantID := uuid.New().String()
+	userID := uuid.New().String()
+
+	user := &models.User{
+		ID:        userID,
+		TenantID:  tenantID,
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+		Status:    models.UserStatusActive,
+	}
+
+	suite.mockRepo.On("GetByEmail", ctx, tenantID, user.Email).Return(user, nil)
+	suite.mockTokenRepo.On("InvalidatePasswordResetTokens", ctx, userID).Return(nil)
+	suite.mockTokenRepo.On("CreatePasswordResetToken", ctx, mock.AnythingOfType("*models.PasswordResetToken")).Return(nil)
+
+	req := &models.ForgotPasswordRequest{
+		TenantID: tenantID,
+		Email:    user.Email,
+	}
+
+	err := suite.service.RequestPasswordReset(ctx, req)
+
+	assert.NoError(suite.T(), err)
+	suite.mockRepo.AssertExpectations(suite.T())
+	suite.mockTokenRepo.AssertExpectations(suite.T())
+}
+
+func (suite *AuthServiceTestSuite) TestRequestPasswordReset_NonExistentEmail() {
+	ctx := context.Background()
+	tenantID := uuid.New().String()
+
+	suite.mockRepo.On("GetByEmail", ctx, tenantID, "nobody@example.com").Return(nil, errors.New("user not found"))
+
+	req := &models.ForgotPasswordRequest{
+		TenantID: tenantID,
+		Email:    "nobody@example.com",
+	}
+
+	err := suite.service.RequestPasswordReset(ctx, req)
+
+	// Should NOT return error (prevents email enumeration)
+	assert.NoError(suite.T(), err)
+}
+
+func (suite *AuthServiceTestSuite) TestResetPassword_Success() {
+	ctx := context.Background()
+	tokenID := uuid.New().String()
+	userID := uuid.New().String()
+	tenantID := uuid.New().String()
+	tokenStr := "valid-reset-token"
+
+	prt := &models.PasswordResetToken{
+		ID:        tokenID,
+		UserID:    userID,
+		TenantID:  tenantID,
+		Token:     tokenStr,
+		ExpiresAt: time.Now().Add(30 * time.Minute),
+	}
+
+	suite.mockTokenRepo.On("GetPasswordResetTokenByToken", ctx, tokenStr).Return(prt, nil)
+	suite.mockRepo.On("UpdatePassword", ctx, userID, mock.AnythingOfType("string")).Return(nil)
+	suite.mockTokenRepo.On("MarkPasswordResetTokenUsed", ctx, tokenID).Return(nil)
+	suite.mockTokenRepo.On("InvalidatePasswordResetTokens", ctx, userID).Return(nil)
+
+	req := &models.ResetPasswordRequest{
+		Token:       tokenStr,
+		NewPassword: "newpassword123",
+	}
+
+	err := suite.service.ResetPassword(ctx, req)
+
+	assert.NoError(suite.T(), err)
+	suite.mockTokenRepo.AssertExpectations(suite.T())
+	suite.mockRepo.AssertExpectations(suite.T())
+}
+
+func (suite *AuthServiceTestSuite) TestResetPassword_InvalidToken() {
+	ctx := context.Background()
+	tokenStr := "invalid-reset-token"
+
+	suite.mockTokenRepo.On("GetPasswordResetTokenByToken", ctx, tokenStr).Return(nil, errors.New("password reset token not found"))
+
+	req := &models.ResetPasswordRequest{
+		Token:       tokenStr,
+		NewPassword: "newpassword123",
+	}
+
+	err := suite.service.ResetPassword(ctx, req)
+
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "invalid or expired reset token", err.Error())
+}
+
+func (suite *AuthServiceTestSuite) TestResetPassword_ExpiredToken() {
+	ctx := context.Background()
+	tokenStr := "expired-reset-token"
+
+	prt := &models.PasswordResetToken{
+		ID:        uuid.New().String(),
+		UserID:    uuid.New().String(),
+		TenantID:  uuid.New().String(),
+		Token:     tokenStr,
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Already expired
+	}
+
+	suite.mockTokenRepo.On("GetPasswordResetTokenByToken", ctx, tokenStr).Return(prt, nil)
+
+	req := &models.ResetPasswordRequest{
+		Token:       tokenStr,
+		NewPassword: "newpassword123",
+	}
+
+	err := suite.service.ResetPassword(ctx, req)
+
+	assert.Error(suite.T(), err)
+	assert.Equal(suite.T(), "invalid or expired reset token", err.Error())
 }
 
 func TestAuthServiceTestSuite(t *testing.T) {

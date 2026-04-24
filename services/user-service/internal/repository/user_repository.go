@@ -18,6 +18,8 @@ type UserRepository interface {
 	List(ctx context.Context, tenantID string, offset, limit int) ([]models.User, int64, error)
 	Update(ctx context.Context, user *models.User) error
 	UpdateLastLogin(ctx context.Context, userID string) error
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	SetEmailVerified(ctx context.Context, userID string) error
 	Delete(ctx context.Context, id string) error
 	EmailExists(ctx context.Context, tenantID, email string) (bool, error)
 	UsernameExists(ctx context.Context, tenantID, username string) (bool, error)
@@ -206,4 +208,42 @@ func (r *userRepository) UsernameExists(ctx context.Context, tenantID, username 
 	}
 
 	return count > 0, nil
+}
+
+// UpdatePassword updates only the password hash for a user
+func (r *userRepository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	result := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("id = ? AND deleted_at IS NULL", userID).
+		Updates(map[string]interface{}{
+			"password_hash": passwordHash,
+			"updated_at":    time.Now(),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// SetEmailVerified marks a user's email as verified
+func (r *userRepository) SetEmailVerified(ctx context.Context, userID string) error {
+	result := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("id = ? AND deleted_at IS NULL", userID).
+		Updates(map[string]interface{}{
+			"email_verified": true,
+			"updated_at":     time.Now(),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }

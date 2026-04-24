@@ -187,3 +187,152 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 		},
 	})
 }
+
+// VerifyEmail handles email verification
+// @Summary Verify email
+// @Description Verify user email with token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.VerifyEmailRequest true "Verify email request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/auth/verify-email [post]
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	var req models.VerifyEmailRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.WithError(err).Warn("Invalid verify email request")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.VerifyEmail(c.Request.Context(), &req); err != nil {
+		status := http.StatusBadRequest
+		c.JSON(status, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Email verified successfully",
+	})
+}
+
+// ResendVerification handles resending the verification email
+// @Summary Resend verification email
+// @Description Resend email verification token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.ResendVerificationRequest true "Resend verification request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/auth/resend-verification [post]
+func (h *AuthHandler) ResendVerification(c *gin.Context) {
+	var req models.ResendVerificationRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.WithError(err).Warn("Invalid resend verification request")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.ResendEmailVerification(c.Request.Context(), &req); err != nil {
+		h.logger.WithError(err).Error("Failed to resend verification email")
+	}
+
+	// Always return success to prevent email enumeration
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "If the email exists and is not verified, a verification email will be sent",
+	})
+}
+
+// ForgotPassword handles forgot password requests
+// @Summary Forgot password
+// @Description Request a password reset token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.ForgotPasswordRequest true "Forgot password request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/auth/forgot-password [post]
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req models.ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.WithError(err).Warn("Invalid forgot password request")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.RequestPasswordReset(c.Request.Context(), &req); err != nil {
+		h.logger.WithError(err).Error("Failed to process password reset request")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Always return success to prevent email enumeration
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "If the email exists, a password reset link will be sent",
+	})
+}
+
+// ResetPassword handles password reset with token
+// @Summary Reset password
+// @Description Reset password using a reset token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.ResetPasswordRequest true "Reset password request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/v1/auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req models.ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.WithError(err).Warn("Invalid reset password request")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.ResetPassword(c.Request.Context(), &req); err != nil {
+		status := http.StatusBadRequest
+		c.JSON(status, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Password reset successfully",
+	})
+}

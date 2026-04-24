@@ -1,73 +1,64 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Check, Star } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
+import { useTenantStore } from '@/stores/tenants';
 
-interface Plan {
+interface PlanDef {
   name: string;
+  tier: string;
   price: number;
-  period: string;
   description: string;
   features: string[];
-  subscribers: number;
   popular: boolean;
   tierColor: string;
 }
 
-const plans: Plan[] = [
+const planDefs: PlanDef[] = [
   {
-    name: 'Free',
-    price: 0,
-    period: '/mo',
+    name: 'Free', tier: 'free', price: 0,
     description: 'For trying out the platform',
     features: ['100 products', '2 staff members', 'Basic support'],
-    subscribers: 4,
-    popular: false,
-    tierColor: 'border-gray-200',
+    popular: false, tierColor: 'border-gray-200',
   },
   {
-    name: 'Starter',
-    price: 2999,
-    period: '/mo',
+    name: 'Starter', tier: 'starter', price: 2999,
     description: 'For small businesses getting started',
     features: ['1,000 products', '5 staff members', 'Email support'],
-    subscribers: 3,
-    popular: false,
-    tierColor: 'border-blue-200',
+    popular: false, tierColor: 'border-blue-200',
   },
   {
-    name: 'Professional',
-    price: 7999,
-    period: '/mo',
+    name: 'Professional', tier: 'professional', price: 7999,
     description: 'For growing businesses',
-    features: [
-      'Unlimited products',
-      '15 staff members',
-      'Priority support',
-      'Analytics',
-    ],
-    subscribers: 3,
-    popular: true,
-    tierColor: 'border-indigo-400',
+    features: ['Unlimited products', '15 staff members', 'Priority support', 'Analytics'],
+    popular: true, tierColor: 'border-indigo-400',
   },
   {
-    name: 'Enterprise',
-    price: 19999,
-    period: '/mo',
+    name: 'Enterprise', tier: 'enterprise', price: 19999,
     description: 'For large-scale operations',
-    features: [
-      'Unlimited everything',
-      'Dedicated support',
-      'Custom integrations',
-      'SLA',
-    ],
-    subscribers: 2,
-    popular: false,
-    tierColor: 'border-purple-200',
+    features: ['Unlimited everything', 'Dedicated support', 'Custom integrations', 'SLA'],
+    popular: false, tierColor: 'border-purple-200',
   },
 ];
 
 export default function PlansPage() {
+  const { tenants, fetchTenants } = useTenantStore();
+
+  useEffect(() => {
+    fetchTenants();
+  }, [fetchTenants]);
+
+  const subscriberCounts = tenants.reduce<Record<string, number>>((acc, t) => {
+    acc[t.tier] = (acc[t.tier] || 0) + 1;
+    return acc;
+  }, {});
+
+  const plans = planDefs.map((p) => ({
+    ...p,
+    subscribers: subscriberCounts[p.tier] || 0,
+  }));
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -107,19 +98,14 @@ export default function PlansPage() {
                 {plan.price === 0 ? 'Free' : formatCurrency(plan.price)}
               </span>
               {plan.price > 0 && (
-                <span className="text-sm text-gray-500">{plan.period}</span>
+                <span className="text-sm text-gray-500">/mo</span>
               )}
             </div>
 
             <ul className="mb-6 flex-1 space-y-3">
               {plan.features.map((feature) => (
                 <li key={feature} className="flex items-start gap-2">
-                  <Check
-                    className={cn(
-                      'mt-0.5 h-4 w-4 shrink-0',
-                      plan.popular ? 'text-indigo-600' : 'text-gray-400',
-                    )}
-                  />
+                  <Check className={cn('mt-0.5 h-4 w-4 shrink-0', plan.popular ? 'text-indigo-600' : 'text-gray-400')} />
                   <span className="text-sm text-gray-600">{feature}</span>
                 </li>
               ))}
@@ -127,10 +113,8 @@ export default function PlansPage() {
 
             <div className="border-t border-gray-100 pt-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Current subscribers</span>
-                <span className="text-sm font-semibold text-gray-900">
-                  {plan.subscribers}
-                </span>
+                <span className="text-sm text-gray-500">Active stores</span>
+                <span className="text-sm font-semibold text-gray-900">{plan.subscribers}</span>
               </div>
             </div>
           </div>
@@ -146,16 +130,13 @@ export default function PlansPage() {
               <tr className="border-b border-gray-100 text-left text-sm text-gray-500">
                 <th className="pb-3 font-medium">Plan</th>
                 <th className="pb-3 font-medium">Price</th>
-                <th className="pb-3 font-medium">Subscribers</th>
+                <th className="pb-3 font-medium">Stores</th>
                 <th className="pb-3 text-right font-medium">Monthly Revenue</th>
               </tr>
             </thead>
             <tbody>
               {plans.map((plan) => (
-                <tr
-                  key={plan.name}
-                  className="border-b border-gray-50 transition-colors hover:bg-gray-50"
-                >
+                <tr key={plan.name} className="border-b border-gray-50 transition-colors hover:bg-gray-50">
                   <td className="py-3 text-sm font-medium text-gray-900">{plan.name}</td>
                   <td className="py-3 text-sm text-gray-500">
                     {plan.price === 0 ? 'Free' : formatCurrency(plan.price)}
@@ -167,13 +148,9 @@ export default function PlansPage() {
                 </tr>
               ))}
               <tr className="bg-gray-50">
-                <td className="py-3 text-sm font-semibold text-gray-900" colSpan={3}>
-                  Total MRR
-                </td>
+                <td className="py-3 text-sm font-semibold text-gray-900" colSpan={3}>Total MRR</td>
                 <td className="py-3 text-right text-sm font-bold text-indigo-600">
-                  {formatCurrency(
-                    plans.reduce((sum, p) => sum + p.price * p.subscribers, 0),
-                  )}
+                  {formatCurrency(plans.reduce((sum, p) => sum + p.price * p.subscribers, 0))}
                 </td>
               </tr>
             </tbody>

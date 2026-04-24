@@ -66,6 +66,7 @@ func main() {
 	// Initialize Kafka components if enabled
 	var finalEventStore eventstore.EventStore = eventStore
 	var consumer messaging.EventConsumer
+	var externalConsumer *messaging.ExternalEventConsumer
 
 	if cfg.Kafka.Enabled {
 		// Initialize Kafka publisher
@@ -88,7 +89,7 @@ func main() {
 			logger,
 		)
 
-		// Initialize Kafka consumer
+		// Initialize Kafka consumer (internal order-events for CQRS projections)
 		consumer = messaging.NewKafkaEventConsumer(
 			cfg.Kafka.Brokers,
 			cfg.Kafka.Topic,
@@ -107,12 +108,29 @@ func main() {
 		logger.Info("Kafka consumer started",
 			zap.String("group_id", cfg.Kafka.ConsumerGroup),
 		)
+
 	} else {
 		logger.Warn("Kafka is disabled - events will not be published")
 	}
 
 	// Initialize command handler
 	commandHandler := commands.NewCommandHandler(finalEventStore, logger)
+
+	// Start external event consumer (payment-events, inventory-events, shipping-events)
+	if cfg.Kafka.Enabled {
+		adapter := &commandAdapter{handler: commandHandler}
+		externalConsumer = messaging.NewExternalEventConsumer(
+			cfg.Kafka.Brokers,
+			"order-service-external",
+			adapter,
+			logger,
+		)
+		ctx := context.Background()
+		if err := externalConsumer.Start(ctx); err != nil {
+			logger.Fatal("Failed to start external event consumer", zap.Error(err))
+		}
+		logger.Info("External event consumer started")
+	}
 
 	// Initialize API handlers
 	apiCommandHandler := api.NewCommandHandler(
@@ -151,6 +169,9 @@ func main() {
 	if consumer != nil {
 		consumer.Stop()
 	}
+	if externalConsumer != nil {
+		externalConsumer.Stop()
+	}
 
 	logger.Info("Server shutdown complete")
 }
@@ -182,6 +203,42 @@ func initLogger(level string) (*zap.Logger, error) {
 	}
 
 	return config.Build()
+}
+
+// commandAdapter adapts messaging.OrderCommand to commands.Command for the CommandHandler.
+// This breaks the import cycle between messaging and commands packages.
+type commandAdapter struct {
+	handler *commands.CommandHandler
+}
+
+func (a *commandAdapter) Handle(cmd messaging.OrderCommand) error {
+	switch c := cmd.(type) {
+	case messaging.ConfirmOrderCmd:
+		return a.handler.Handle(commands.ConfirmOrderCommand{
+			OrderID:     c.OrderID,
+			ConfirmedBy: c.ConfirmedBy,
+		})
+	case messaging.CancelOrderCmd:
+		return a.handler.Handle(commands.CancelOrderCommand{
+			OrderID:     c.OrderID,
+			Reason:      c.Reason,
+			CancelledBy: c.CancelledBy,
+		})
+	case messaging.ShipOrderCmd:
+		return a.handler.Handle(commands.ShipOrderCommand{
+			OrderID:        c.OrderID,
+			TrackingNumber: c.TrackingNumber,
+			Carrier:        c.Carrier,
+			ShippedBy:      c.ShippedBy,
+		})
+	case messaging.DeliverOrderCmd:
+		return a.handler.Handle(commands.DeliverOrderCommand{
+			OrderID:    c.OrderID,
+			ReceivedBy: c.ReceivedBy,
+		})
+	default:
+		return fmt.Errorf("unknown external command type: %T", cmd)
+	}
 }
 
 // initDatabase initializes the database connection

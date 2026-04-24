@@ -1,18 +1,35 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
+import { useAuthStore } from '@/stores/auth';
 import { formatCurrency } from '@/lib/utils';
 
+const TENANT_ID = 'tenant_saajan';
 const SHIPPING_COST = 100;
 
 export default function CartPage() {
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const fetchFromBackend = useCartStore((s) => s.fetchFromBackend);
   const total = useCartStore((s) => s.total);
   const itemCount = useCartStore((s) => s.itemCount);
+
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Sync cart from backend on mount when authenticated
+  useEffect(() => {
+    if (isAuthenticated() && user && token) {
+      fetchFromBackend({ userId: user.id, tenantId: TENANT_ID, token });
+    }
+  }, [user?.id, token, isAuthenticated, fetchFromBackend]);
+
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
   const subtotal = total();
   const shipping = items.length > 0 ? SHIPPING_COST : 0;
@@ -57,9 +74,13 @@ export default function CartPage() {
               >
                 {/* Image placeholder */}
                 <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5">
-                  <span className="text-2xl font-bold text-primary/40">
-                    {item.name.charAt(0)}
-                  </span>
+                  {item.image ? (
+                    <img src={item.image} alt={item.name} className="h-full w-full rounded-lg object-cover" />
+                  ) : (
+                    <span className="text-2xl font-bold text-primary/40">
+                      {item.name.charAt(0)}
+                    </span>
+                  )}
                 </div>
 
                 {/* Item details */}
@@ -77,7 +98,7 @@ export default function CartPage() {
                     <div className="inline-flex items-center rounded-lg border border-gray-200">
                       <button
                         onClick={() =>
-                          updateQuantity(item.productId, item.quantity - 1, item.variantId)
+                          updateQuantity(item.productId, item.quantity - 1, item.variantId, auth)
                         }
                         className="flex h-8 w-8 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
                       >
@@ -88,7 +109,7 @@ export default function CartPage() {
                       </span>
                       <button
                         onClick={() =>
-                          updateQuantity(item.productId, item.quantity + 1, item.variantId)
+                          updateQuantity(item.productId, item.quantity + 1, item.variantId, auth)
                         }
                         className="flex h-8 w-8 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
                       >
@@ -103,7 +124,7 @@ export default function CartPage() {
 
                     {/* Remove button */}
                     <button
-                      onClick={() => removeItem(item.productId, item.variantId)}
+                      onClick={() => removeItem(item.productId, item.variantId, auth)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
                       title="Remove item"
                     >
@@ -161,7 +182,7 @@ export default function CartPage() {
             </Link>
 
             <p className="mt-4 text-center text-xs text-gray-400">
-              Shipping calculated as flat BDT 100 for all orders
+              Shipping calculated at checkout
             </p>
           </div>
         </div>

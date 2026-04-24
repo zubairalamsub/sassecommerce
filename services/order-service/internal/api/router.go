@@ -2,6 +2,7 @@ package api
 
 import (
 	"os"
+	"time"
 
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
@@ -40,39 +41,50 @@ func (r *Router) Setup() *gin.Engine {
 		})
 	})
 
-	// JWT Auth middleware
+	// Rate limiting
+	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+		Rate:   100,
+		Window: time.Minute,
+	}))
+
+	// JWT Auth config
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production-12345"
 	}
-	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
+	authMw := sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret})
 
 	// API routes
 	v1 := router.Group("/api/v1")
 	{
-		// Order commands (write operations)
+		// Guest-accessible routes (no auth required)
 		orders := v1.Group("/orders")
 		{
-			orders.POST("", r.commandHandler.CreateOrder)
-			orders.POST("/:id/items", r.commandHandler.AddOrderItem)
-			orders.DELETE("/:id/items/:itemId", r.commandHandler.RemoveOrderItem)
-			orders.POST("/:id/confirm", r.commandHandler.ConfirmOrder)
-			orders.POST("/:id/cancel", r.commandHandler.CancelOrder)
-			orders.POST("/:id/ship", r.commandHandler.ShipOrder)
-			orders.POST("/:id/deliver", r.commandHandler.DeliverOrder)
-
-			// Order queries (read operations)
-			orders.GET("/:id", r.queryHandler.GetOrder)
+			orders.POST("", r.commandHandler.CreateOrder)   // Guest checkout
+			orders.GET("/:id", r.queryHandler.GetOrder)     // Order tracking
 		}
 
-		// Query by customer
+		// Authenticated order operations
+		authOrders := v1.Group("/orders")
+		authOrders.Use(authMw)
+		{
+			authOrders.POST("/:id/items", r.commandHandler.AddOrderItem)
+			authOrders.DELETE("/:id/items/:itemId", r.commandHandler.RemoveOrderItem)
+			authOrders.POST("/:id/confirm", r.commandHandler.ConfirmOrder)
+			authOrders.POST("/:id/cancel", r.commandHandler.CancelOrder)
+			authOrders.POST("/:id/ship", r.commandHandler.ShipOrder)
+			authOrders.POST("/:id/deliver", r.commandHandler.DeliverOrder)
+		}
+
+		// Authenticated query routes
 		customers := v1.Group("/customers")
+		customers.Use(authMw)
 		{
 			customers.GET("/:customerId/orders", r.queryHandler.GetOrdersByCustomer)
 		}
 
-		// Query by tenant
 		tenants := v1.Group("/tenants")
+		tenants.Use(authMw)
 		{
 			tenants.GET("/:tenantId/orders", r.queryHandler.GetOrdersByTenant)
 		}

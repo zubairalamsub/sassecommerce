@@ -25,9 +25,11 @@ type Product struct {
 	Variants    []ProductVariant   `bson:"variants" json:"variants,omitempty"`
 	Attributes  map[string]string  `bson:"attributes" json:"attributes,omitempty"`
 	SEO         SEOMetadata        `bson:"seo" json:"seo,omitempty"`
-	Weight      float64            `bson:"weight" json:"weight,omitempty"`
-	Dimensions  Dimensions         `bson:"dimensions" json:"dimensions,omitempty"`
-	CreatedBy   string             `bson:"created_by" json:"created_by"`
+	Weight         float64            `bson:"weight" json:"weight,omitempty"`
+	Dimensions     Dimensions         `bson:"dimensions" json:"dimensions,omitempty"`
+	InStock        bool               `bson:"in_stock" json:"in_stock"`
+	StockQuantity  int                `bson:"stock_quantity" json:"stock_quantity"`
+	CreatedBy      string             `bson:"created_by" json:"created_by"`
 	UpdatedBy   string             `bson:"updated_by" json:"updated_by,omitempty"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
@@ -134,6 +136,8 @@ type ProductResponse struct {
 	SEO            SEOMetadata        `json:"seo,omitempty"`
 	Weight         float64            `json:"weight,omitempty"`
 	Dimensions     Dimensions         `json:"dimensions,omitempty"`
+	InStock        bool               `json:"in_stock"`
+	StockQuantity  int                `json:"stock_quantity"`
 	CreatedBy      string             `json:"created_by"`
 	UpdatedBy      string             `json:"updated_by,omitempty"`
 	CreatedAt      time.Time          `json:"created_at"`
@@ -162,6 +166,8 @@ func (p *Product) ToResponse() *ProductResponse {
 		SEO:            p.SEO,
 		Weight:         p.Weight,
 		Dimensions:     p.Dimensions,
+		InStock:        p.InStock,
+		StockQuantity:  p.StockQuantity,
 		CreatedBy:      p.CreatedBy,
 		UpdatedBy:      p.UpdatedBy,
 		CreatedAt:      p.CreatedAt,

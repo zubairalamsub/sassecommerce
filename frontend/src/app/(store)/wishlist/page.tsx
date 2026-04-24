@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { Heart, ShoppingCart, Trash2, Check } from 'lucide-react';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useCartStore } from '@/stores/cart';
+import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, cn } from '@/lib/utils';
+
+const TENANT_ID = 'tenant_saajan';
 
 const gradients = [
   'from-rose-100 to-pink-200 dark:from-rose-900/40 dark:to-pink-900/40',
@@ -16,12 +19,24 @@ const gradients = [
 ];
 
 export default function WishlistPage() {
-  const { items, removeItem, clear } = useWishlistStore();
+  const { items, removeItem, clear, fetchFromBackend } = useWishlistStore();
   const addCartItem = useCartStore((s) => s.addItem);
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Sync from backend when authenticated
+  useEffect(() => {
+    if (isAuthenticated() && user && token) {
+      fetchFromBackend({ userId: user.id, tenantId: TENANT_ID, token });
+    }
+  }, [user?.id, token, isAuthenticated, fetchFromBackend]);
+
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
   function handleAddToCart(item: typeof items[0]) {
     addCartItem({
@@ -30,6 +45,7 @@ export default function WishlistPage() {
       sku: '',
       price: item.price,
       quantity: 1,
+      image: item.image,
     });
     setAddedId(item.productId);
     setTimeout(() => setAddedId(null), 1500);
@@ -54,8 +70,10 @@ export default function WishlistPage() {
           </p>
         </div>
         {items.length > 0 && (
-          <button onClick={clear}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover transition-colors">
+          <button
+            onClick={() => clear(auth)}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-hover transition-colors"
+          >
             Clear All
           </button>
         )}
@@ -66,8 +84,10 @@ export default function WishlistPage() {
           <Heart className="mx-auto h-12 w-12 text-text-muted" />
           <p className="mt-4 text-lg font-medium text-text">Your wishlist is empty</p>
           <p className="mt-1 text-sm text-text-secondary">Save items you love for later</p>
-          <Link href="/products"
-            className="mt-6 inline-block rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary-dark transition-colors">
+          <Link
+            href="/products"
+            className="mt-6 inline-block rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
+          >
             Browse Products
           </Link>
         </div>
@@ -76,8 +96,10 @@ export default function WishlistPage() {
           {items.map((item, index) => {
             const isAdded = addedId === item.productId;
             return (
-              <div key={item.productId}
-                className="group rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+              <div
+                key={item.productId}
+                className="group rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+              >
                 <Link href={`/products/${item.slug}`}>
                   <div className={cn('relative h-52 bg-gradient-to-br flex items-center justify-center overflow-hidden', gradients[index % gradients.length])}>
                     {item.image ? (
@@ -89,17 +111,30 @@ export default function WishlistPage() {
                 </Link>
                 <div className="p-4">
                   <Link href={`/products/${item.slug}`}>
-                    <h3 className="text-sm font-semibold text-text line-clamp-1 group-hover:text-primary transition-colors">{item.name}</h3>
+                    <h3 className="text-sm font-semibold text-text line-clamp-1 group-hover:text-primary transition-colors">
+                      {item.name}
+                    </h3>
                   </Link>
                   <p className="mt-2 text-lg font-bold text-text">{formatCurrency(item.price)}</p>
                   <div className="mt-3 flex gap-2">
-                    <button onClick={() => handleAddToCart(item)} disabled={isAdded}
-                      className={cn('flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-all duration-300',
-                        isAdded ? 'bg-green-500 text-white' : 'bg-primary text-white hover:bg-primary-dark')}>
-                      {isAdded ? <><Check className="h-3.5 w-3.5" /> Added!</> : <><ShoppingCart className="h-3.5 w-3.5" /> Add to Cart</>}
+                    <button
+                      onClick={() => handleAddToCart(item)}
+                      disabled={isAdded}
+                      className={cn(
+                        'flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-all duration-300',
+                        isAdded ? 'bg-green-500 text-white' : 'bg-primary text-white hover:bg-primary-dark',
+                      )}
+                    >
+                      {isAdded ? (
+                        <><Check className="h-3.5 w-3.5" /> Added!</>
+                      ) : (
+                        <><ShoppingCart className="h-3.5 w-3.5" /> Add to Cart</>
+                      )}
                     </button>
-                    <button onClick={() => removeItem(item.productId)}
-                      className="flex items-center justify-center rounded-xl border border-border px-3 text-text-muted hover:text-red-500 hover:border-red-300 transition-colors">
+                    <button
+                      onClick={() => removeItem(item.productId, auth)}
+                      className="flex items-center justify-center rounded-xl border border-border px-3 text-text-muted hover:text-red-500 hover:border-red-300 transition-colors"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>

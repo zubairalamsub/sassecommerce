@@ -50,6 +50,9 @@ builder.Services.AddScoped<IRefundRepository, RefundRepository>();
 // Register Kafka Event Publisher
 builder.Services.AddSingleton<IEventPublisher, KafkaEventPublisher>();
 
+// Register Kafka Event Consumer (background service)
+builder.Services.AddHostedService<OrderEventConsumer>();
+
 // Register Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 

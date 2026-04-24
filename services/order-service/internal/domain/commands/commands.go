@@ -12,6 +12,9 @@ type CreateOrderCommand struct {
 	OrderID          string
 	TenantID         string
 	CustomerID       string
+	GuestEmail       string
+	GuestName        string
+	GuestPhone       string
 	ShippingAddress  events.Address
 	BillingAddress   events.Address
 }

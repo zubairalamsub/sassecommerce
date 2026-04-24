@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/product-service/internal/models"
 	"github.com/ecommerce/product-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -348,18 +349,28 @@ func (h *ProductHandler) UpdateProductStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Product status updated successfully"})
 }
 
-// RegisterRoutes registers all product routes
-func (h *ProductHandler) RegisterRoutes(router *gin.RouterGroup) {
+// RegisterRoutes registers all product routes with auth middleware for write operations.
+// authMiddleware is variadic for backward compatibility — if provided, write routes
+// require authentication and admin/moderator role.
+func (h *ProductHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...gin.HandlerFunc) {
 	products := router.Group("/products")
 	{
-		products.POST("", h.CreateProduct)
+		// Public read routes
 		products.GET("", h.ListProducts)
 		products.GET("/search", h.SearchProducts)
 		products.GET("/sku/:sku", h.GetProductBySKU)
 		products.GET("/category/:category_id", h.ListProductsByCategory)
 		products.GET("/:id", h.GetProduct)
-		products.PUT("/:id", h.UpdateProduct)
-		products.DELETE("/:id", h.DeleteProduct)
-		products.PATCH("/:id/status", h.UpdateProductStatus)
+
+		// Protected write routes — require auth + admin or moderator role
+		write := products.Group("")
+		if len(authMiddleware) > 0 {
+			write.Use(authMiddleware...)
+			write.Use(sharedmiddleware.RequireRole("admin", "moderator"))
+		}
+		write.POST("", h.CreateProduct)
+		write.PUT("/:id", h.UpdateProduct)
+		write.DELETE("/:id", h.DeleteProduct)
+		write.PATCH("/:id/status", h.UpdateProductStatus)
 	}
 }

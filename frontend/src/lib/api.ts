@@ -119,6 +119,14 @@ export const authApi = {
     request<LoginResponse>('user', '/api/v1/auth/login', { method: 'POST', body: data, tenantId }),
   profile: (tenantId: string, token: string) =>
     request<User>('user', '/api/v1/auth/profile', { tenantId, token }),
+  forgotPassword: (tenantId: string, email: string) =>
+    request<{ message: string }>('user', '/api/v1/auth/forgot-password', { method: 'POST', body: { tenant_id: tenantId, email } }),
+  resetPassword: (token: string, newPassword: string) =>
+    request<{ message: string }>('user', '/api/v1/auth/reset-password', { method: 'POST', body: { token, new_password: newPassword } }),
+  changePassword: (oldPassword: string, newPassword: string, tenantId: string, authToken: string) =>
+    request<{ message: string }>('user', '/api/v1/auth/change-password', { method: 'POST', body: { old_password: oldPassword, new_password: newPassword }, tenantId, token: authToken }),
+  updateProfile: (userId: string, data: { first_name?: string; last_name?: string; phone?: string }, tenantId: string, authToken: string) =>
+    request<User>('user', `/api/v1/users/${userId}`, { method: 'PUT', body: data, tenantId, token: authToken }),
 };
 
 export const userApi = {
@@ -169,7 +177,9 @@ export const categoryApi = {
 // Order Service
 export const orderApi = {
   create: (data: CreateOrderRequest, tenantId: string) =>
-    request<Order>('order', '/api/v1/orders', { method: 'POST', body: data, tenantId }),
+    request<CreateOrderResponse>('order', '/api/v1/orders', { method: 'POST', body: data, tenantId }),
+  addItem: (orderId: string, data: AddOrderItemRequest, tenantId: string, token?: string) =>
+    request<void>('order', `/api/v1/orders/${orderId}/items`, { method: 'POST', body: data, tenantId, token }),
   get: (id: string, tenantId: string) =>
     request<Order>('order', `/api/v1/orders/${id}`, { tenantId }),
   listByTenant: (tenantId: string, page = 1, pageSize = 20) =>
@@ -182,6 +192,95 @@ export const orderApi = {
     request<Order>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId }),
   ship: (id: string, data: { tracking_number: string; carrier: string; shipped_by: string }, tenantId: string) =>
     request<Order>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId }),
+};
+
+// Promotion Service
+export const promotionApi = {
+  validate: (code: string, data: { tenant_id: string; user_id: string; order_total: number }) =>
+    request<CouponValidateResponse>('promotion', `/api/v1/coupons/validate/${encodeURIComponent(code)}`, { method: 'POST', body: data }),
+  apply: (data: { tenant_id: string; user_id: string; order_id: string; order_total: number; code: string }) =>
+    request<CouponValidateResponse>('promotion', '/api/v1/coupons/apply', { method: 'POST', body: data }),
+};
+
+// Cart Service
+export const cartApi = {
+  get: (userId: string, tenantId: string, token: string) =>
+    request<CartResponse>('cart', `/api/v1/cart?tenant_id=${tenantId}&user_id=${userId}`, { tenantId, token }),
+  addItem: (data: CartAddItemRequest, tenantId: string, token: string) =>
+    request<CartResponse>('cart', '/api/v1/cart/items', { method: 'POST', body: data, tenantId, token }),
+  updateItem: (itemId: string, quantity: number, tenantId: string, token: string) =>
+    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}`, { method: 'PUT', body: { quantity }, tenantId, token }),
+  removeItem: (itemId: string, tenantId: string, token: string) =>
+    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}`, { method: 'DELETE', tenantId, token }),
+  clear: (userId: string, tenantId: string, token: string) =>
+    request<void>('cart', `/api/v1/cart?tenant_id=${tenantId}&user_id=${userId}`, { method: 'DELETE', tenantId, token }),
+};
+
+// Vendor Service
+export const vendorApi = {
+  list: (tenantId: string, token: string, status?: string, page = 1, pageSize = 20) => {
+    const p = new URLSearchParams({ tenant_id: tenantId, page: String(page), page_size: String(pageSize) });
+    if (status) p.set('status', status);
+    return request<{ vendors: Vendor[]; total: number; page: number; page_size: number }>('vendor', `/api/v1/vendors?${p}`, { tenantId, token });
+  },
+  get: (id: string, tenantId: string, token: string) =>
+    request<Vendor>('vendor', `/api/v1/vendors/${id}`, { tenantId, token }),
+  register: (data: RegisterVendorRequest, tenantId: string, token: string) =>
+    request<Vendor>('vendor', '/api/v1/vendors/register', { method: 'POST', body: data, tenantId, token }),
+  updateStatus: (id: string, status: string, reason: string, tenantId: string, token: string) =>
+    request<Vendor>('vendor', `/api/v1/vendors/${id}/status`, { method: 'PUT', body: { status, reason }, tenantId, token }),
+};
+
+// Wishlist Service (via user-service)
+export const wishlistApi = {
+  get: (tenantId: string, token: string) =>
+    request<WishlistResponse>('user', `/api/v1/wishlist?tenant_id=${tenantId}`, { tenantId, token }),
+  addItem: (data: AddWishlistItemRequest, tenantId: string, token: string) =>
+    request<WishlistResponse>('user', '/api/v1/wishlist/items', { method: 'POST', body: data, tenantId, token }),
+  removeItem: (productId: string, tenantId: string, token: string) =>
+    request<void>('user', `/api/v1/wishlist/items/${encodeURIComponent(productId)}`, { method: 'DELETE', tenantId, token }),
+  clear: (tenantId: string, token: string) =>
+    request<void>('user', '/api/v1/wishlist', { method: 'DELETE', tenantId, token }),
+};
+
+// Search Service
+export const searchApi = {
+  search: (params: {
+    q?: string;
+    tenant_id: string;
+    category_id?: string;
+    brand?: string;
+    min_price?: number;
+    max_price?: number;
+    tags?: string;
+    in_stock?: boolean;
+    sort_by?: string;
+    sort_order?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const p = new URLSearchParams({ tenant_id: params.tenant_id });
+    if (params.q) p.set('q', params.q);
+    if (params.category_id) p.set('category_id', params.category_id);
+    if (params.brand) p.set('brand', params.brand);
+    if (params.min_price !== undefined) p.set('min_price', String(params.min_price));
+    if (params.max_price !== undefined) p.set('max_price', String(params.max_price));
+    if (params.tags) p.set('tags', params.tags);
+    if (params.in_stock !== undefined) p.set('in_stock', String(params.in_stock));
+    if (params.sort_by) p.set('sort_by', params.sort_by);
+    if (params.sort_order) p.set('sort_order', params.sort_order);
+    if (params.page) p.set('page', String(params.page));
+    if (params.page_size) p.set('page_size', String(params.page_size));
+    return request<SearchResponse>('search', `/api/v1/search/products?${p}`);
+  },
+  autocomplete: (q: string, tenantId: string, limit = 8) =>
+    request<AutocompleteResponse>('search', `/api/v1/search/autocomplete?q=${encodeURIComponent(q)}&tenant_id=${tenantId}&limit=${limit}`),
+};
+
+// Shipping Service
+export const shippingApi = {
+  getRates: (data: ShippingRateRequest, token?: string) =>
+    request<ShippingRatesResponse>('shipping', '/api/v1/rates', { method: 'POST', body: data, token }),
 };
 
 // Inventory Service
@@ -214,6 +313,26 @@ export const analyticsApi = {
     request<CustomerInsights>('analytics', `/api/v1/analytics/customers?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId }),
   products: (tenantId: string, startDate: string, endDate: string) =>
     request<ProductPerformance>('analytics', `/api/v1/analytics/products?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId }),
+};
+
+// Review Service
+export const reviewApi = {
+  listByProduct: (productId: string, tenantId: string, page = 1, pageSize = 20) =>
+    request<ReviewListResponse>('review', `/api/v1/reviews/product/${productId}?tenant_id=${tenantId}&page=${page}&page_size=${pageSize}`, { tenantId }),
+  summary: (productId: string, tenantId: string) =>
+    request<ReviewSummary>('review', `/api/v1/reviews/product/${productId}/summary?tenant_id=${tenantId}`, { tenantId }),
+  create: (data: CreateReviewRequest, tenantId: string, token: string) =>
+    request<ReviewResponse>('review', '/api/v1/reviews', { method: 'POST', body: data, tenantId, token }),
+  helpful: (reviewId: string, userId: string, helpful: boolean, tenantId: string, token: string) =>
+    request<void>('review', `/api/v1/reviews/${reviewId}/helpful`, { method: 'POST', body: { user_id: userId, helpful }, tenantId, token }),
+};
+
+// Recommendation Service
+export const recommendationApi = {
+  forProduct: (productId: string, tenantId: string, limit = 10) =>
+    request<RecommendationResponse>('recommendation', `/api/v1/recommendations/product/${productId}?tenant_id=${tenantId}&limit=${limit}`, { tenantId }),
+  forUser: (userId: string, tenantId: string, limit = 10) =>
+    request<RecommendationResponse>('recommendation', `/api/v1/recommendations/user/${userId}?tenant_id=${tenantId}&limit=${limit}`, { tenantId }),
 };
 
 // Types
@@ -459,9 +578,27 @@ export interface Address {
 
 export interface CreateOrderRequest {
   tenant_id: string;
-  customer_id: string;
+  customer_id?: string;
+  guest_email?: string;
+  guest_name?: string;
+  guest_phone?: string;
   shipping_address: Address;
   billing_address: Address;
+}
+
+export interface CreateOrderResponse {
+  order_id: string;
+  id?: string;
+  message?: string;
+}
+
+export interface AddOrderItemRequest {
+  product_id: string;
+  variant_id?: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
 }
 
 export interface InventoryItem {
@@ -554,4 +691,237 @@ export interface SetConfigRequest {
   tenant_id?: string;
   is_secret?: boolean;
   updated_by?: string;
+}
+
+export interface ReviewResponse {
+  id: string;
+  tenant_id: string;
+  product_id: string;
+  user_id: string;
+  user_name: string;
+  order_id?: string;
+  rating: number;
+  title: string;
+  comment: string;
+  images?: string[];
+  status: string;
+  helpful_count: number;
+  seller_response?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewListResponse {
+  data: ReviewResponse[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export interface ReviewSummary {
+  product_id: string;
+  average_rating: number;
+  total_reviews: number;
+  distribution: Record<string, number>;
+}
+
+export interface CreateReviewRequest {
+  tenant_id: string;
+  product_id: string;
+  user_id: string;
+  order_id?: string;
+  rating: number;
+  title: string;
+  comment: string;
+  images?: string[];
+}
+
+export interface ProductRecommendation {
+  product_id: string;
+  score: number;
+  reason: string;
+}
+
+export interface RecommendationResponse {
+  user_id?: string;
+  product_id?: string;
+  recommendations: ProductRecommendation[];
+  strategy: string;
+  generated_at: string;
+}
+
+export interface CouponValidateResponse {
+  valid: boolean;
+  code: string;
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
+  discount_amount?: number;
+  message?: string;
+}
+
+export interface CartAddItemRequest {
+  tenant_id: string;
+  user_id: string;
+  product_id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image_url?: string;
+}
+
+export interface CartItemResponse {
+  id: string;
+  product_id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  subtotal: number;
+  image_url?: string;
+  added_at: string;
+}
+
+export interface CartResponse {
+  tenant_id: string;
+  user_id: string;
+  items: CartItemResponse[];
+  total_items: number;
+  total_amount: number;
+  updated_at: string;
+}
+
+export interface ShippingAddress {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+}
+
+export interface ShippingRateRequest {
+  tenant_id: string;
+  from_address: ShippingAddress;
+  to_address: ShippingAddress;
+  weight_oz: number;
+  length_in?: number;
+  width_in?: number;
+  height_in?: number;
+}
+
+export interface ShippingRate {
+  carrier: string;
+  service_type: string;
+  rate: number;
+  currency: string;
+  estimated_days: number;
+}
+
+export interface ShippingRatesResponse {
+  rates: ShippingRate[];
+}
+
+export interface SearchProduct {
+  id: string;
+  tenant_id: string;
+  sku: string;
+  name: string;
+  description: string;
+  brand: string;
+  category_id: string;
+  price: number;
+  images: string[] | null;
+  tags: string[] | null;
+  status: string;
+  in_stock: boolean;
+  stock_quantity: number;
+  _score?: number;
+}
+
+export interface SearchFacets {
+  categories: { key: string; count: number }[];
+  brands: { key: string; count: number }[];
+  tags: { key: string; count: number }[];
+  price_range: { min: number; max: number; avg: number };
+}
+
+export interface SearchResponse {
+  products: SearchProduct[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  facets: SearchFacets;
+}
+
+export interface AutocompleteResult {
+  text: string;
+  type: string;
+  id: string;
+  _score?: number;
+}
+
+export interface AutocompleteResponse {
+  suggestions: AutocompleteResult[];
+}
+
+export interface Vendor {
+  id: string;
+  tenant_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  description: string;
+  logo_url: string;
+  address: string;
+  city: string;
+  country: string;
+  status: 'pending' | 'active' | 'suspended' | 'rejected';
+  commission_rate: number;
+  total_revenue: number;
+  total_orders: number;
+  total_products: number;
+  rating: number;
+  suspend_reason?: string;
+  approved_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegisterVendorRequest {
+  tenant_id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  description?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+}
+
+export interface WishlistItemResponse {
+  id: string;
+  user_id: string;
+  tenant_id: string;
+  product_id: string;
+  name: string;
+  slug: string;
+  price: number;
+  image?: string;
+  added_at: string;
+}
+
+export interface WishlistResponse {
+  items: WishlistItemResponse[];
+  count: number;
+}
+
+export interface AddWishlistItemRequest {
+  product_id: string;
+  name: string;
+  slug?: string;
+  price?: number;
+  image?: string;
 }

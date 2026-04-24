@@ -57,11 +57,43 @@ func main() {
 	// Initialize repository
 	notifRepo := repository.NewNotificationRepository(db)
 
-	// Initialize notification providers
-	providers := map[models.Channel]service.NotificationProvider{
-		models.ChannelEmail: service.NewSimulatedEmailProvider(log),
-		models.ChannelSMS:   service.NewSimulatedSMSProvider(log),
-		models.ChannelPush:  service.NewSimulatedPushProvider(log),
+	// Initialize notification providers — use real providers when API keys are
+	// configured, falling back to simulated providers for development.
+	providers := make(map[models.Channel]service.NotificationProvider)
+
+	if sgKey := os.Getenv("SENDGRID_API_KEY"); sgKey != "" {
+		providers[models.ChannelEmail] = service.NewSendGridEmailProvider(service.SendGridConfig{
+			APIKey:    sgKey,
+			FromEmail: getEnv("SENDGRID_FROM_EMAIL", "noreply@saajan.com"),
+			FromName:  getEnv("SENDGRID_FROM_NAME", "Saajan Store"),
+		}, log)
+		log.Info("Email provider: SendGrid")
+	} else {
+		providers[models.ChannelEmail] = service.NewSimulatedEmailProvider(log)
+		log.Info("Email provider: Simulated (set SENDGRID_API_KEY to enable SendGrid)")
+	}
+
+	if twilioSID := os.Getenv("TWILIO_ACCOUNT_SID"); twilioSID != "" {
+		providers[models.ChannelSMS] = service.NewTwilioSMSProvider(service.TwilioConfig{
+			AccountSID: twilioSID,
+			AuthToken:  os.Getenv("TWILIO_AUTH_TOKEN"),
+			FromNumber: getEnv("TWILIO_FROM_NUMBER", "+15005550006"),
+		}, log)
+		log.Info("SMS provider: Twilio")
+	} else {
+		providers[models.ChannelSMS] = service.NewSimulatedSMSProvider(log)
+		log.Info("SMS provider: Simulated (set TWILIO_ACCOUNT_SID to enable Twilio)")
+	}
+
+	if fcmKey := os.Getenv("FCM_SERVER_KEY"); fcmKey != "" {
+		providers[models.ChannelPush] = service.NewFCMPushProvider(service.FCMConfig{
+			ServerKey: fcmKey,
+			ProjectID: os.Getenv("FCM_PROJECT_ID"),
+		}, log)
+		log.Info("Push provider: Firebase Cloud Messaging")
+	} else {
+		providers[models.ChannelPush] = service.NewSimulatedPushProvider(log)
+		log.Info("Push provider: Simulated (set FCM_SERVER_KEY to enable FCM)")
 	}
 
 	// Initialize service
@@ -142,4 +174,11 @@ func main() {
 	}
 
 	log.Info("Server exited")
+}
+
+func getEnv(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
 }

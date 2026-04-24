@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/product-service/internal/models"
 	"github.com/ecommerce/product-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -301,17 +302,25 @@ func (h *CategoryHandler) UpdateCategoryStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Category status updated successfully"})
 }
 
-// RegisterRoutes registers all category routes
-func (h *CategoryHandler) RegisterRoutes(router *gin.RouterGroup) {
+// RegisterRoutes registers all category routes with auth middleware for write operations.
+func (h *CategoryHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...gin.HandlerFunc) {
 	categories := router.Group("/categories")
 	{
-		categories.POST("", h.CreateCategory)
+		// Public read routes
 		categories.GET("", h.ListCategories)
 		categories.GET("/by-parent", h.ListCategoriesByParent)
 		categories.GET("/slug/:slug", h.GetCategoryBySlug)
 		categories.GET("/:id", h.GetCategory)
-		categories.PUT("/:id", h.UpdateCategory)
-		categories.DELETE("/:id", h.DeleteCategory)
-		categories.PATCH("/:id/status", h.UpdateCategoryStatus)
+
+		// Protected write routes — require auth + admin or moderator role
+		write := categories.Group("")
+		if len(authMiddleware) > 0 {
+			write.Use(authMiddleware...)
+			write.Use(sharedmiddleware.RequireRole("admin", "moderator"))
+		}
+		write.POST("", h.CreateCategory)
+		write.PUT("/:id", h.UpdateCategory)
+		write.DELETE("/:id", h.DeleteCategory)
+		write.PATCH("/:id/status", h.UpdateCategoryStatus)
 	}
 }

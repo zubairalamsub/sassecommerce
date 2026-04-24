@@ -60,6 +60,42 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// WishlistItem represents a product saved to a user's wishlist
+type WishlistItem struct {
+	ID        string    `gorm:"primaryKey" json:"id"`
+	UserID    string    `gorm:"index;not null" json:"user_id"`
+	TenantID  string    `gorm:"index;not null" json:"tenant_id"`
+	ProductID string    `gorm:"not null" json:"product_id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	Price     float64   `json:"price"`
+	Image     string    `json:"image,omitempty"`
+	AddedAt   time.Time `json:"added_at"`
+}
+
+// TableName specifies the table name for WishlistItem
+func (WishlistItem) TableName() string { return "wishlist_items" }
+
+// BeforeCreate generates a UUID and sets AddedAt if not set
+func (w *WishlistItem) BeforeCreate(tx *gorm.DB) error {
+	if w.ID == "" {
+		w.ID = uuid.New().String()
+	}
+	if w.AddedAt.IsZero() {
+		w.AddedAt = time.Now().UTC()
+	}
+	return nil
+}
+
+// AddWishlistItemRequest is the request body for adding a wishlist item
+type AddWishlistItemRequest struct {
+	ProductID string  `json:"product_id" binding:"required"`
+	Name      string  `json:"name" binding:"required"`
+	Slug      string  `json:"slug"`
+	Price     float64 `json:"price"`
+	Image     string  `json:"image,omitempty"`
+}
+
 // RegisterRequest represents a user registration request
 type RegisterRequest struct {
 	TenantID  string `json:"tenant_id" binding:"required,uuid"`
@@ -90,6 +126,29 @@ type UpdateUserRequest struct {
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+// ForgotPasswordRequest represents a forgot password request
+type ForgotPasswordRequest struct {
+	TenantID string `json:"tenant_id" binding:"required,uuid"`
+	Email    string `json:"email" binding:"required,email"`
+}
+
+// ResetPasswordRequest represents a password reset request
+type ResetPasswordRequest struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+// VerifyEmailRequest represents an email verification request
+type VerifyEmailRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
+// ResendVerificationRequest represents a request to resend verification email
+type ResendVerificationRequest struct {
+	TenantID string `json:"tenant_id" binding:"required,uuid"`
+	Email    string `json:"email" binding:"required,email"`
 }
 
 // UserResponse represents a user response

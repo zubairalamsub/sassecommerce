@@ -55,11 +55,27 @@ func (h *CommandHandler) CreateOrder(c *gin.Context) {
 	// Generate order ID
 	orderID := uuid.New().String()
 
+	// For guest checkout: generate a guest customer ID if none provided
+	customerID := req.CustomerID
+	if customerID == "" {
+		if req.GuestEmail == "" {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_request",
+				Message: "Either customer_id or guest_email is required",
+			})
+			return
+		}
+		customerID = "guest-" + uuid.New().String()
+	}
+
 	// Create command
 	cmd := commands.CreateOrderCommand{
 		OrderID:    orderID,
 		TenantID:   req.TenantID,
-		CustomerID: req.CustomerID,
+		CustomerID: customerID,
+		GuestEmail: req.GuestEmail,
+		GuestName:  req.GuestName,
+		GuestPhone: req.GuestPhone,
 		ShippingAddress: events.Address{
 			Street:     req.ShippingAddress.Street,
 			City:       req.ShippingAddress.City,

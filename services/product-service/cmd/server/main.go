@@ -54,6 +54,15 @@ func main() {
 	productRepo := repository.NewProductRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 
+	// Initialize Kafka consumer for inventory events
+	kafkaConsumer := messaging.NewEventConsumer(kafkaBrokers, "product-service", productRepo, logger)
+	ctx, cancelConsumer := context.WithCancel(context.Background())
+	kafkaConsumer.Start(ctx)
+	defer func() {
+		cancelConsumer()
+		kafkaConsumer.Stop()
+	}()
+
 	// Initialize services
 	productService := service.NewProductService(productRepo, categoryRepo, kafkaProducer, logger)
 	categoryService := service.NewCategoryService(categoryRepo, logger)
@@ -150,6 +159,10 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 	router.Use(gin.Recovery())
 	router.Use(corsMiddleware())
 	router.Use(requestLogger(logger))
+	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+		Rate:   100,
+		Window: time.Minute,
+	}))
 
 	// Health check endpoint (no authentication required)
 	router.GET("/health", healthCheck)
@@ -164,9 +177,14 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 			AllowHeader: true,
 		}))
 
-		// Register route handlers
-		productHandler.RegisterRoutes(v1)
-		categoryHandler.RegisterRoutes(v1)
+		// Auth middleware for protected write routes
+		authMw := sharedmiddleware.Auth(sharedmiddleware.AuthConfig{
+			SecretKey: config.JWTSecret,
+		})
+
+		// Register route handlers (auth middleware applied to write routes)
+		productHandler.RegisterRoutes(v1, authMw)
+		categoryHandler.RegisterRoutes(v1, authMw)
 	}
 
 	return router

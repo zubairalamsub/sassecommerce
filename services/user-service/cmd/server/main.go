@@ -17,6 +17,7 @@ import (
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
 	"github.com/ecommerce/user-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -51,6 +52,8 @@ func main() {
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
+	tokenRepo := repository.NewTokenRepository(db)
+	wishlistRepo := repository.NewWishlistRepository(db)
 
 	// Initialize services
 	tokenConfig := models.TokenConfig{
@@ -58,15 +61,16 @@ func main() {
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "user-service",
 	}
-	authService := service.NewAuthService(userRepo, tokenConfig, kafkaProducer, log)
+	authService := service.NewAuthService(userRepo, tokenConfig, kafkaProducer, log, tokenRepo)
 	userService := service.NewUserService(userRepo, kafkaProducer, log)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService, log)
 	userHandler := api.NewUserHandler(userService, log)
+	wishlistHandler := api.NewWishlistHandler(wishlistRepo, log)
 
 	// Setup router
-	router := setupRouter(authHandler, userHandler, authService, log)
+	router := setupRouter(authHandler, userHandler, wishlistHandler, authService, log)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -175,6 +179,9 @@ func runMigrations(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.User{},
 		&models.RefreshToken{},
+		&models.VerificationToken{},
+		&models.PasswordResetToken{},
+		&models.WishlistItem{},
 	)
 }
 
@@ -182,6 +189,7 @@ func runMigrations(db *gorm.DB) error {
 func setupRouter(
 	authHandler *api.AuthHandler,
 	userHandler *api.UserHandler,
+	wishlistHandler *api.WishlistHandler,
 	authService service.AuthService,
 	logger *logrus.Logger,
 ) *gin.Engine {
@@ -194,6 +202,10 @@ func setupRouter(
 	router.Use(gin.Recovery())
 	router.Use(corsMiddleware())
 	router.Use(requestLoggerMiddleware(logger))
+	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+		Rate:   100,
+		Window: time.Minute,
+	}))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -212,6 +224,10 @@ func setupRouter(
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/verify-email", authHandler.VerifyEmail)
+			auth.POST("/forgot-password", authHandler.ForgotPassword)
+			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.POST("/resend-verification", authHandler.ResendVerification)
 		}
 
 		// Protected authentication routes
@@ -234,6 +250,16 @@ func setupRouter(
 			// Admin-only routes
 			users.PATCH("/:id/role", middleware.RequireRole(models.UserRoleAdmin), userHandler.UpdateUserRole)
 			users.PATCH("/:id/status", middleware.RequireRole(models.UserRoleAdmin), userHandler.UpdateUserStatus)
+		}
+
+		// Wishlist routes (require auth)
+		wishlist := v1.Group("/wishlist")
+		wishlist.Use(middleware.AuthMiddleware(authService))
+		{
+			wishlist.GET("", wishlistHandler.GetWishlist)
+			wishlist.POST("/items", wishlistHandler.AddWishlistItem)
+			wishlist.DELETE("/items/:productId", wishlistHandler.RemoveWishlistItem)
+			wishlist.DELETE("", wishlistHandler.ClearWishlist)
 		}
 	}
 

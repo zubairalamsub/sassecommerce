@@ -1,9 +1,13 @@
 package api
 
-// CreateOrderRequest represents a request to create an order
+// CreateOrderRequest represents a request to create an order.
+// For guest checkout, customer_id may be omitted and guest contact fields used instead.
 type CreateOrderRequest struct {
 	TenantID        string  `json:"tenant_id" binding:"required"`
-	CustomerID      string  `json:"customer_id" binding:"required"`
+	CustomerID      string  `json:"customer_id"`
+	GuestEmail      string  `json:"guest_email"`
+	GuestName       string  `json:"guest_name"`
+	GuestPhone      string  `json:"guest_phone"`
 	ShippingAddress Address `json:"shipping_address" binding:"required"`
 	BillingAddress  Address `json:"billing_address" binding:"required"`
 }

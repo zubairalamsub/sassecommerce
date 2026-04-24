@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"context"
+
 	"github.com/ecommerce/user-service/internal/api"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
@@ -36,7 +38,7 @@ func (suite *E2ETestSuite) SetupSuite() {
 	assert.NoError(suite.T(), err)
 
 	// Run migrations
-	err = db.AutoMigrate(&models.User{}, &models.RefreshToken{})
+	err = db.AutoMigrate(&models.User{}, &models.RefreshToken{}, &models.VerificationToken{}, &models.PasswordResetToken{})
 	assert.NoError(suite.T(), err)
 
 	suite.db = db
@@ -46,14 +48,16 @@ func (suite *E2ETestSuite) SetupSuite() {
 	logger.SetOutput(io.Discard)
 
 	userRepo := repository.NewUserRepository(db)
+	tokenRepo := repository.NewTokenRepository(db)
 	tokenConfig := models.TokenConfig{
 		SecretKey:      "test-secret-key",
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "test-service",
 	}
 
-	suite.authService = service.NewAuthService(userRepo, tokenConfig, logger)
-	userService := service.NewUserService(userRepo, logger)
+	noopKafka := &noopKafkaPublisher{}
+	suite.authService = service.NewAuthService(userRepo, tokenConfig, noopKafka, logger, tokenRepo)
+	userService := service.NewUserService(userRepo, noopKafka, logger)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(suite.authService, logger)
@@ -69,6 +73,10 @@ func (suite *E2ETestSuite) SetupSuite() {
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/verify-email", authHandler.VerifyEmail)
+			auth.POST("/forgot-password", authHandler.ForgotPassword)
+			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.POST("/resend-verification", authHandler.ResendVerification)
 		}
 
 		authProtected := v1.Group("/auth")
@@ -332,6 +340,13 @@ func (suite *E2ETestSuite) registerAndLogin(tenantID, email, username, password 
 	json.Unmarshal(w.Body.Bytes(), &response)
 	data := response["data"].(map[string]interface{})
 	return data["token"].(string)
+}
+
+// noopKafkaPublisher is a no-op Kafka publisher for e2e tests
+type noopKafkaPublisher struct{}
+
+func (n *noopKafkaPublisher) Publish(ctx context.Context, topic, key string, value []byte) error {
+	return nil
 }
 
 func TestE2ETestSuite(t *testing.T) {

@@ -18,6 +18,8 @@ import { useProductStore } from '@/stores/products';
 import { useReviewStore } from '@/stores/reviews';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, cn } from '@/lib/utils';
+import { recommendationApi, productApi, type ProductRecommendation } from '@/lib/api';
+import type { StoreProduct } from '@/stores/products';
 
 const TENANT_ID = 'tenant_saajan';
 
@@ -42,8 +44,8 @@ export default function ProductDetailPage({
   const { slug } = use(params);
   const { products, loading, fetchProducts } = useProductStore();
   const addItem = useCartStore((s) => s.addItem);
-  const { addReview, getProductReviews, getAverageRating } = useReviewStore();
-  const { user, isAuthenticated } = useAuthStore();
+  const { addReview, fetchProductReviews, fetchSummary, getProductReviews, getAverageRating } = useReviewStore();
+  const { user, token, isAuthenticated } = useAuthStore();
   const [quantity, setQuantity] = useState(1);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [added, setAdded] = useState(false);
@@ -53,6 +55,9 @@ export default function ProductDetailPage({
   const [reviewComment, setReviewComment] = useState('');
   const [hoverRating, setHoverRating] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [recommendations, setRecommendations] = useState<ProductRecommendation[]>([]);
+  const [directProduct, setDirectProduct] = useState<StoreProduct | null>(null);
+  const [directLoading, setDirectLoading] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -62,9 +67,32 @@ export default function ProductDetailPage({
     }
   }, [products.length, fetchProducts]);
 
-  const product = products.find((p) => p.slug === slug);
+  const storeProduct = products.find((p) => p.slug === slug || p.id === slug);
+  const product = storeProduct ?? directProduct;
 
-  if (loading && products.length === 0) {
+  // If product not in store (e.g. navigated by ID from search), fetch directly
+  useEffect(() => {
+    if (!storeProduct && !loading && slug) {
+      setDirectLoading(true);
+      productApi.get(slug, TENANT_ID)
+        .then((p) => setDirectProduct(p as unknown as StoreProduct))
+        .catch(() => {})
+        .finally(() => setDirectLoading(false));
+    }
+  }, [storeProduct, loading, slug]);
+
+  // Fetch reviews and recommendations from backend when product is available
+  useEffect(() => {
+    if (!product) return;
+    fetchProductReviews(product.id, TENANT_ID);
+    fetchSummary(product.id, TENANT_ID);
+    recommendationApi
+      .forProduct(product.id, TENANT_ID, 6)
+      .then((res) => setRecommendations(res.recommendations || []))
+      .catch(() => {});
+  }, [product?.id, fetchProductReviews, fetchSummary]);
+
+  if ((loading && products.length === 0) || directLoading) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
@@ -97,18 +125,24 @@ export default function ProductDetailPage({
   const activePrice = selectedVariant ? selectedVariant.price : product.price;
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
+
   function handleAddToCart() {
     if (!product) return;
-    addItem({
-      productId: product.id,
-      variantId: selectedVariant?.id,
-      name: selectedVariant
-        ? `${product.name} - ${selectedVariant.value}`
-        : product.name,
-      sku: selectedVariant?.sku ?? product.sku,
-      price: activePrice,
-      quantity,
-    });
+    addItem(
+      {
+        productId: product.id,
+        variantId: selectedVariant?.id,
+        name: selectedVariant
+          ? `${product.name} - ${selectedVariant.value}`
+          : product.name,
+        sku: selectedVariant?.sku ?? product.sku,
+        price: activePrice,
+        quantity,
+        image: product.images?.[0],
+      },
+      auth,
+    );
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   }
@@ -280,14 +314,18 @@ export default function ProductDetailPage({
 
         function handleSubmitReview() {
           if (!user || !product || !reviewComment.trim()) return;
-          addReview({
-            productId: product.id,
-            userId: user.id,
-            userName: `${user.first_name} ${user.last_name}`,
-            rating: reviewRating,
-            title: reviewTitle.trim(),
-            comment: reviewComment.trim(),
-          });
+          addReview(
+            {
+              productId: product.id,
+              userId: user.id,
+              userName: `${user.first_name} ${user.last_name}`,
+              rating: reviewRating,
+              title: reviewTitle.trim(),
+              comment: reviewComment.trim(),
+            },
+            TENANT_ID,
+            token || undefined,
+          );
           setShowReviewForm(false);
           setReviewRating(5);
           setReviewTitle('');
@@ -401,6 +439,50 @@ export default function ProductDetailPage({
                 ))}
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* Recommendations section */}
+      {mounted && recommendations.length > 0 && (() => {
+        const recProducts = recommendations
+          .map((rec) => {
+            const p = products.find((pr) => pr.id === rec.product_id);
+            return p ? { ...p, score: rec.score, reason: rec.reason } : null;
+          })
+          .filter(Boolean) as (typeof products[number] & { score: number; reason: string })[];
+
+        if (recProducts.length === 0) return null;
+
+        return (
+          <div className="mt-16 border-t border-border pt-10">
+            <h2 className="text-2xl font-bold text-text">You May Also Like</h2>
+            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {recProducts.slice(0, 4).map((rec) => {
+                const recIndex = products.indexOf(products.find((p) => p.id === rec.id)!);
+                const recGradient = gradients[Math.abs(recIndex) % gradients.length];
+                const recHasImages = rec.images && rec.images.length > 0;
+                return (
+                  <Link key={rec.id} href={`/products/${rec.slug}`}
+                    className="group rounded-xl border border-border bg-surface overflow-hidden transition-shadow hover:shadow-md">
+                    <div className={cn('flex aspect-square items-center justify-center overflow-hidden', recHasImages ? 'bg-surface-secondary' : `bg-gradient-to-br ${recGradient}`)}>
+                      {recHasImages ? (
+                        <img src={rec.images![0]} alt={rec.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                      ) : (
+                        <span className="text-5xl font-bold text-white/40">{rec.name.charAt(0)}</span>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm font-medium text-text line-clamp-1">{rec.name}</p>
+                      <p className="mt-1 text-sm font-bold text-text">{formatCurrency(rec.price)}</p>
+                      {rec.reason && (
+                        <p className="mt-1 text-xs text-text-muted line-clamp-1">{rec.reason}</p>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         );
       })()}

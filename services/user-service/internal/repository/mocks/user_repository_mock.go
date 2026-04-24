@@ -70,3 +70,13 @@ func (m *MockUserRepository) UsernameExists(ctx context.Context, tenantID, usern
 	args := m.Called(ctx, tenantID, username)
 	return args.Bool(0), args.Error(1)
 }
+
+func (m *MockUserRepository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	args := m.Called(ctx, userID, passwordHash)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) SetEmailVerified(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}

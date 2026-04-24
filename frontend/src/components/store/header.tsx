@@ -102,7 +102,7 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
                 onBlur={() => setSearchFocused(false)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchQuery.trim()) {
-                    router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+                    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
                     setSearchQuery('');
                   }
                 }}
@@ -207,7 +207,7 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchQuery.trim()) {
-                    router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+                    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
                     setSearchQuery('');
                     setMobileMenuOpen(false);
                   }

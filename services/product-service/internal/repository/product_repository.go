@@ -24,6 +24,7 @@ type ProductRepository interface {
 	Delete(ctx context.Context, id string) error
 	SKUExists(ctx context.Context, tenantID, sku string) (bool, error)
 	UpdateStatus(ctx context.Context, id string, status models.ProductStatus) error
+	UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error
 }
 
 type productRepository struct {
@@ -304,4 +305,30 @@ func (r *productRepository) UpdateStatus(ctx context.Context, id string, status 
 	}
 
 	return nil
+}
+
+// UpdateStock updates the stock quantity and in_stock status for a product
+func (r *productRepository) UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error {
+	filter := bson.M{
+		"tenant_id":  tenantID,
+		"deleted_at": bson.M{"$exists": false},
+	}
+
+	objectID, err := primitive.ObjectIDFromHex(productID)
+	if err == nil {
+		filter["_id"] = objectID
+	} else {
+		filter["sku"] = productID
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"stock_quantity": quantity,
+			"in_stock":       inStock,
+			"updated_at":     time.Now(),
+		},
+	}
+
+	_, err = r.collection.UpdateOne(ctx, filter, update)
+	return err
 }

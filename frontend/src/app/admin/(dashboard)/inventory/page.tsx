@@ -1,16 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Package, AlertTriangle, Warehouse, Loader2, Search, Plus, Minus } from 'lucide-react';
+import { Package, AlertTriangle, Warehouse as WarehouseIcon, Loader2, Search, Plus, Minus, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { inventoryApi, type InventoryItem, type Warehouse as WarehouseType } from '@/lib/api';
+import {
+  inventoryApi, productApi,
+  type InventoryItem, type Warehouse as WarehouseType,
+  type CreateWarehouseRequest, type CreateInventoryItemRequest,
+} from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 
 type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 function getStatus(item: InventoryItem): StockStatus {
-  if (item.quantity_on_hand <= 0) return 'out_of_stock';
-  if (item.quantity_on_hand <= item.reorder_point) return 'low_stock';
+  if (item.quantityOnHand <= 0) return 'out_of_stock';
+  if (item.quantityOnHand <= item.reorderPoint) return 'low_stock';
   return 'in_stock';
 }
 
@@ -25,32 +29,54 @@ function stockStatusLabel(status: StockStatus) {
   }
 }
 
+interface SimpleProduct { id: string; name: string; sku: string; }
+
 export default function InventoryPage() {
-  const { tenantId } = useAuthStore();
+  const { tenantId, token, user } = useAuthStore();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseType[]>([]);
+  const [products, setProducts] = useState<SimpleProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Adjust stock dialog
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
   const [adjustQty, setAdjustQty] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustLoading, setAdjustLoading] = useState(false);
 
+  // Add warehouse dialog
+  const [showAddWarehouse, setShowAddWarehouse] = useState(false);
+  const [whForm, setWhForm] = useState({ code: '', name: '', address: '', city: '', state: '', country: 'BD', postalCode: '', phone: '', email: '' });
+  const [whLoading, setWhLoading] = useState(false);
+  const [whError, setWhError] = useState('');
+
+  // Add inventory item dialog
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [itemForm, setItemForm] = useState({ productId: '', sku: '', warehouseId: '', initialQuantity: 0, reorderPoint: 10, reorderQuantity: 25 });
+  const [itemLoading, setItemLoading] = useState(false);
+  const [itemError, setItemError] = useState('');
+
   useEffect(() => {
     loadInventory();
-  }, [tenantId]);
+  }, [tenantId, token]);
 
   async function loadInventory() {
-    if (!tenantId) return;
+    if (!tenantId || !token) return;
     setLoading(true);
     try {
-      const [itemsRes, warehousesRes] = await Promise.allSettled([
-        inventoryApi.listItems(tenantId, 1, 200),
-        inventoryApi.listWarehouses(tenantId),
+      const [itemsRes, warehousesRes, productsRes] = await Promise.allSettled([
+        inventoryApi.listItems(tenantId, token, 0, 200),
+        inventoryApi.listWarehouses(tenantId, token),
+        productApi.list(tenantId, 1, 200),
       ]);
       if (itemsRes.status === 'fulfilled') setItems(itemsRes.value.data ?? []);
-      if (warehousesRes.status === 'fulfilled') setWarehouses(warehousesRes.value);
+      if (warehousesRes.status === 'fulfilled') setWarehouses(warehousesRes.value.data ?? []);
+      if (productsRes.status === 'fulfilled') {
+        const pList = productsRes.value.data ?? [];
+        setProducts(pList.map((p) => ({ id: p.id, name: p.name, sku: p.sku })));
+      }
     } catch {
       setItems([]);
     } finally {
@@ -59,14 +85,14 @@ export default function InventoryPage() {
   }
 
   async function handleAdjust(type: 'add' | 'remove') {
-    if (!adjustItem || !tenantId || adjustQty <= 0) return;
+    if (!adjustItem || !tenantId || !token || adjustQty <= 0) return;
     setAdjustLoading(true);
     try {
       const updated = await inventoryApi.adjustStock(adjustItem.id, {
         quantity: type === 'add' ? adjustQty : -adjustQty,
         reason: adjustReason || (type === 'add' ? 'Stock received' : 'Stock adjustment'),
         type,
-      }, tenantId);
+      }, tenantId, token);
       setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
       setAdjustItem(null);
       setAdjustQty(0);
@@ -78,6 +104,68 @@ export default function InventoryPage() {
     }
   }
 
+  async function handleAddWarehouse() {
+    if (!tenantId || !token || !user) return;
+    if (!whForm.code || !whForm.name || !whForm.address || !whForm.city || !whForm.state || !whForm.country || !whForm.postalCode) {
+      setWhError('Please fill all required fields.');
+      return;
+    }
+    setWhLoading(true);
+    setWhError('');
+    try {
+      const created = await inventoryApi.createWarehouse({
+        tenantId,
+        code: whForm.code,
+        name: whForm.name,
+        address: whForm.address,
+        city: whForm.city,
+        state: whForm.state,
+        country: whForm.country,
+        postalCode: whForm.postalCode,
+        phone: whForm.phone || undefined,
+        email: whForm.email || undefined,
+        isActive: true,
+        createdBy: user.id,
+      }, token);
+      setWarehouses((prev) => [...prev, created]);
+      setShowAddWarehouse(false);
+      setWhForm({ code: '', name: '', address: '', city: '', state: '', country: 'BD', postalCode: '', phone: '', email: '' });
+    } catch (err: unknown) {
+      setWhError(err instanceof Error ? err.message : 'Failed to create warehouse');
+    } finally {
+      setWhLoading(false);
+    }
+  }
+
+  async function handleAddItem() {
+    if (!tenantId || !token || !user) return;
+    if (!itemForm.productId || !itemForm.sku || !itemForm.warehouseId) {
+      setItemError('Please select a product, enter SKU, and select a warehouse.');
+      return;
+    }
+    setItemLoading(true);
+    setItemError('');
+    try {
+      const created = await inventoryApi.createItem({
+        tenantId,
+        warehouseId: itemForm.warehouseId,
+        productId: itemForm.productId,
+        sku: itemForm.sku,
+        initialQuantity: itemForm.initialQuantity,
+        reorderPoint: itemForm.reorderPoint,
+        reorderQuantity: itemForm.reorderQuantity,
+        createdBy: user.id,
+      }, token);
+      setItems((prev) => [...prev, created]);
+      setShowAddItem(false);
+      setItemForm({ productId: '', sku: '', warehouseId: '', initialQuantity: 0, reorderPoint: 10, reorderQuantity: 25 });
+    } catch (err: unknown) {
+      setItemError(err instanceof Error ? err.message : 'Failed to create inventory item');
+    } finally {
+      setItemLoading(false);
+    }
+  }
+
   const warehouseMap = new Map(warehouses.map((w) => [w.id, w.name]));
 
   const filtered = items.filter((item) => {
@@ -85,7 +173,7 @@ export default function InventoryPage() {
     if (statusFilter && status !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
-      return item.sku.toLowerCase().includes(q) || item.product_id.toLowerCase().includes(q);
+      return item.sku.toLowerCase().includes(q) || item.productId.toLowerCase().includes(q);
     }
     return true;
   });
@@ -99,8 +187,14 @@ export default function InventoryPage() {
     { title: 'Total SKUs', value: totalItems, icon: Package, color: 'text-gray-900' },
     { title: 'Low Stock', value: lowStockCount, icon: AlertTriangle, color: 'text-yellow-600' },
     { title: 'Out of Stock', value: outOfStockCount, icon: Package, color: 'text-red-600' },
-    { title: 'Warehouses', value: warehouseCount, icon: Warehouse, color: 'text-primary' },
+    { title: 'Warehouses', value: warehouseCount, icon: WarehouseIcon, color: 'text-primary' },
   ];
+
+  // Auto-fill SKU when product is selected in add-item form
+  function onProductSelect(productId: string) {
+    const product = products.find((p) => p.id === productId);
+    setItemForm((f) => ({ ...f, productId, sku: product?.sku || f.sku }));
+  }
 
   return (
     <div className="space-y-6">
@@ -109,6 +203,20 @@ export default function InventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
           <p className="mt-1 text-sm text-gray-500">Track stock levels across all warehouses.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAddWarehouse(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <MapPin className="h-4 w-4" /> Add Warehouse
+          </button>
+          <button
+            onClick={() => { if (warehouses.length === 0) { alert('Please create a warehouse first.'); return; } setShowAddItem(true); }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
+          >
+            <Plus className="h-4 w-4" /> Add Item
+          </button>
         </div>
       </div>
 
@@ -166,7 +274,7 @@ export default function InventoryPage() {
             <Package className="h-10 w-10 text-gray-300" />
             <p className="mt-3 text-sm font-medium text-gray-700">No inventory items found</p>
             <p className="mt-1 text-xs text-gray-400">
-              {search || statusFilter ? 'Try adjusting your filters' : 'Inventory items will appear here'}
+              {search || statusFilter ? 'Try adjusting your filters' : 'Add inventory items using the button above'}
             </p>
           </div>
         ) : (
@@ -196,19 +304,19 @@ export default function InventoryPage() {
                       )}
                     >
                       <td className="px-6 py-4 text-sm font-mono text-gray-500">{item.sku}</td>
-                      <td className="px-6 py-4 text-sm font-mono text-gray-500 max-w-[140px] truncate">{item.product_id}</td>
+                      <td className="px-6 py-4 text-sm font-mono text-gray-500 max-w-[140px] truncate">{item.productId}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {warehouseMap.get(item.warehouse_id) || item.warehouse_id || '—'}
+                        {warehouseMap.get(item.warehouseId) || item.warehouseName || item.warehouseId || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span className={cn(
                           'font-medium',
                           status === 'out_of_stock' ? 'text-red-600' : status === 'low_stock' ? 'text-yellow-600' : 'text-gray-900',
                         )}>
-                          {item.quantity_on_hand}
+                          {item.quantityOnHand}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{item.reorder_point}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{item.reorderPoint}</td>
                       <td className="px-6 py-4">
                         <span className={cn(
                           'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
@@ -236,10 +344,15 @@ export default function InventoryPage() {
 
       {/* Adjust Stock Dialog */}
       {adjustItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-gray-900 mb-1">Adjust Stock</h3>
-            <p className="text-xs text-gray-500 mb-4">SKU: {adjustItem.sku}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAdjustItem(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Adjust Stock</h3>
+                <p className="text-xs text-gray-500">SKU: {adjustItem.sku}</p>
+              </div>
+              <button onClick={() => setAdjustItem(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Quantity</label>
@@ -276,11 +389,147 @@ export default function InventoryPage() {
               >
                 <Minus className="h-3.5 w-3.5" /> Remove
               </button>
-              <button
-                onClick={() => setAdjustItem(null)}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Warehouse Dialog */}
+      {showAddWarehouse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowAddWarehouse(false)}>
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold text-gray-900">Add Warehouse</h3>
+              <button onClick={() => setShowAddWarehouse(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+            </div>
+            {whError && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{whError}</p>}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Code *</label>
+                <input value={whForm.code} onChange={(e) => setWhForm((f) => ({ ...f, code: e.target.value }))}
+                  placeholder="e.g. WH-CTG-002" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Name *</label>
+                <input value={whForm.name} onChange={(e) => setWhForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Chittagong Warehouse" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div className="col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-700">Address *</label>
+                <input value={whForm.address} onChange={(e) => setWhForm((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Street address" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">City *</label>
+                <input value={whForm.city} onChange={(e) => setWhForm((f) => ({ ...f, city: e.target.value }))}
+                  placeholder="e.g. Chittagong" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">State / Division *</label>
+                <input value={whForm.state} onChange={(e) => setWhForm((f) => ({ ...f, state: e.target.value }))}
+                  placeholder="e.g. Chittagong Division" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Country *</label>
+                <input value={whForm.country} onChange={(e) => setWhForm((f) => ({ ...f, country: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Postal Code *</label>
+                <input value={whForm.postalCode} onChange={(e) => setWhForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  placeholder="e.g. 4000" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Phone</label>
+                <input value={whForm.phone} onChange={(e) => setWhForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="+880..." className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Email</label>
+                <input value={whForm.email} onChange={(e) => setWhForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="warehouse@..." className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => setShowAddWarehouse(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 Cancel
+              </button>
+              <button onClick={handleAddWarehouse} disabled={whLoading}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+                {whLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                Create Warehouse
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Inventory Item Dialog */}
+      {showAddItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowAddItem(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold text-gray-900">Add Inventory Item</h3>
+              <button onClick={() => setShowAddItem(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"><X className="h-4 w-4" /></button>
+            </div>
+            {itemError && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{itemError}</p>}
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Product *</label>
+                <select value={itemForm.productId} onChange={(e) => onProductSelect(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                  <option value="">Select a product...</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">SKU *</label>
+                <input value={itemForm.sku} onChange={(e) => setItemForm((f) => ({ ...f, sku: e.target.value }))}
+                  placeholder="Auto-filled from product" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-700">Warehouse *</label>
+                <select value={itemForm.warehouseId} onChange={(e) => setItemForm((f) => ({ ...f, warehouseId: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                  <option value="">Select a warehouse...</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Initial Qty</label>
+                  <input type="number" min={0} value={itemForm.initialQuantity || ''}
+                    onChange={(e) => setItemForm((f) => ({ ...f, initialQuantity: parseInt(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Reorder Pt</label>
+                  <input type="number" min={0} value={itemForm.reorderPoint || ''}
+                    onChange={(e) => setItemForm((f) => ({ ...f, reorderPoint: parseInt(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Reorder Qty</label>
+                  <input type="number" min={0} value={itemForm.reorderQuantity || ''}
+                    onChange={(e) => setItemForm((f) => ({ ...f, reorderQuantity: parseInt(e.target.value) || 0 }))}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => setShowAddItem(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleAddItem} disabled={itemLoading}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+                {itemLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Add Item
               </button>
             </div>
           </div>

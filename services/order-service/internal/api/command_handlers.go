@@ -203,6 +203,12 @@ func (h *CommandHandler) ConfirmOrder(c *gin.Context) {
 		return
 	}
 
+	// Extract auth token from incoming request to forward to downstream services
+	authToken := ""
+	if authHeader := c.GetHeader("Authorization"); len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		authToken = authHeader[7:]
+	}
+
 	// Execute saga for order confirmation
 	orderSaga := saga.NewOrderSaga(
 		orderID,
@@ -211,6 +217,7 @@ func (h *CommandHandler) ConfirmOrder(c *gin.Context) {
 		h.logger,
 		h.inventoryURL,
 		h.paymentURL,
+		authToken,
 	)
 
 	if err := orderSaga.Execute(); err != nil {

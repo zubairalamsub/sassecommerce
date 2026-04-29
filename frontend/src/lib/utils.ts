@@ -32,6 +32,29 @@ export function formatDateTime(date: string): string {
   });
 }
 
+/**
+ * Build a full media URL from a relative path stored in the database.
+ *
+ * DB stores:   "products/abc123.jpg"
+ * Docker:      "/api/media/products/abc123.jpg"  (NEXT_PUBLIC_MEDIA_URL unset or "/api/media")
+ * Cloud (S3):  "https://cdn.yourstore.com/products/abc123.jpg"  (set NEXT_PUBLIC_MEDIA_URL)
+ *
+ * Pass-through for absolute URLs (http/https/data:) so existing external URLs still work.
+ */
+const MEDIA_BASE = process.env.NEXT_PUBLIC_MEDIA_URL || '/api/media';
+
+export function mediaUrl(relativePath: string | undefined | null): string {
+  if (!relativePath) return '';
+  // Already an absolute URL or data URI — return as-is
+  if (relativePath.startsWith('http://') || relativePath.startsWith('https://') || relativePath.startsWith('data:')) {
+    return relativePath;
+  }
+  // Strip leading slash if present
+  const clean = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+  const base = MEDIA_BASE.endsWith('/') ? MEDIA_BASE.slice(0, -1) : MEDIA_BASE;
+  return `${base}/${clean}`;
+}
+
 export function statusColor(status: string): string {
   const colors: Record<string, string> = {
     active: 'bg-green-100 text-green-800',

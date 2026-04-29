@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { searchApi, type SearchProduct, type SearchFacets } from '@/lib/api';
 import { useCartStore } from '@/stores/cart';
+import { useAuthStore } from '@/stores/auth';
 import { useWishlistStore } from '@/stores/wishlist';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, mediaUrl } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
 const PAGE_SIZE = 20;
@@ -76,7 +77,11 @@ function SearchContent() {
   const [addedId, setAddedId] = useState<string | null>(null);
 
   const addItem = useCartStore((s) => s.addItem);
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const { toggleItem, isInWishlist } = useWishlistStore();
+
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
   const pushUrl = useCallback(
     (overrides: Record<string, string | number | boolean | undefined>) => {
@@ -184,7 +189,7 @@ function SearchContent() {
       price: product.price,
       quantity: 1,
       image: product.images?.[0],
-    });
+    }, auth);
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -426,7 +431,7 @@ function SearchContent() {
                         <div className={`flex h-44 items-center justify-center bg-gradient-to-br ${gradient}`}>
                           {product.images?.[0] ? (
                             <img
-                              src={product.images[0]}
+                              src={mediaUrl(product.images[0])}
                               alt={product.name}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
@@ -478,7 +483,7 @@ function SearchContent() {
                             )}
                           </button>
                           <button
-                            onClick={() => toggleItem({ productId: product.id, name: product.name, price: product.price, image: product.images?.[0], slug: product.id })}
+                            onClick={() => toggleItem({ productId: product.id, name: product.name, price: product.price, image: mediaUrl(product.images?.[0]), slug: product.id })}
                             className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
                               inWishlist
                                 ? 'border-rose-200 bg-rose-50 text-rose-500'

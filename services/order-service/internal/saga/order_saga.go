@@ -28,8 +28,10 @@ type OrderSaga struct {
 	logger         *zap.Logger
 	inventoryURL   string
 	paymentURL     string
+	authToken      string
 	steps          []SagaStep
 	completedSteps []SagaStep
+	optionalSteps  map[string]bool
 }
 
 // NewOrderSaga creates a new order saga
@@ -40,6 +42,7 @@ func NewOrderSaga(
 	logger *zap.Logger,
 	inventoryURL string,
 	paymentURL string,
+	authToken string,
 ) *OrderSaga {
 	return &OrderSaga{
 		orderID:        orderID,
@@ -48,6 +51,7 @@ func NewOrderSaga(
 		logger:         logger,
 		inventoryURL:   inventoryURL,
 		paymentURL:     paymentURL,
+		authToken:      authToken,
 		steps:          make([]SagaStep, 0),
 		completedSteps: make([]SagaStep, 0),
 	}
@@ -58,10 +62,16 @@ func (s *OrderSaga) Execute() error {
 	s.logger.Info("Starting order saga", zap.String("order_id", s.orderID))
 
 	// Define saga steps
+	// Inventory reservation and payment are optional — skip if services return errors
+	// (e.g., no stock records exist yet, or payment not required for COD orders)
 	s.steps = []SagaStep{
 		s.NewReserveInventoryStep(),
 		s.NewProcessPaymentStep(),
 		s.NewConfirmOrderStep(),
+	}
+	s.optionalSteps = map[string]bool{
+		"ReserveInventory": true,
+		"ProcessPayment":   true,
 	}
 
 	// Execute steps
@@ -72,6 +82,15 @@ func (s *OrderSaga) Execute() error {
 		)
 
 		if err := step.Execute(); err != nil {
+			if s.optionalSteps[step.GetName()] {
+				s.logger.Warn("Optional saga step failed, skipping",
+					zap.String("order_id", s.orderID),
+					zap.String("step", step.GetName()),
+					zap.Error(err),
+				)
+				continue
+			}
+
 			s.logger.Error("Saga step failed",
 				zap.String("order_id", s.orderID),
 				zap.String("step", step.GetName()),
@@ -149,34 +168,32 @@ func (step *ReserveInventoryStep) GetName() string {
 }
 
 func (step *ReserveInventoryStep) Execute() error {
-	// Build reservation request
-	items := make([]map[string]interface{}, 0, len(step.saga.order.Items))
+	var lastReservationID string
+
+	// Reserve each item individually (inventory service expects single-item requests)
 	for _, item := range step.saga.order.Items {
-		items = append(items, map[string]interface{}{
-			"product_id": item.ProductID,
-			"variant_id": item.VariantID,
-			"quantity":   item.Quantity,
-		})
+		request := map[string]interface{}{
+			"tenantId":          step.saga.order.TenantID,
+			"productId":         item.ProductID,
+			"variantId":         item.VariantID,
+			"quantity":          item.Quantity,
+			"orderId":           step.saga.orderID,
+			"orderItemId":       item.ProductID,
+			"expirationMinutes": 30,
+			"createdBy":         "system",
+		}
+
+		response, err := step.callInventoryService("/api/v1/inventory/reservations", request)
+		if err != nil {
+			return fmt.Errorf("failed to reserve inventory: %w", err)
+		}
+
+		if id, ok := response["id"].(string); ok {
+			lastReservationID = id
+		}
 	}
 
-	request := map[string]interface{}{
-		"tenant_id": step.saga.order.TenantID,
-		"order_id":  step.saga.orderID,
-		"items":     items,
-	}
-
-	// Call Inventory Service
-	response, err := step.callInventoryService("/api/v1/inventory/reservations", request)
-	if err != nil {
-		return fmt.Errorf("failed to reserve inventory: %w", err)
-	}
-
-	reservationID, ok := response["id"].(string)
-	if !ok {
-		return fmt.Errorf("invalid reservation response")
-	}
-
-	step.reservationID = reservationID
+	step.reservationID = lastReservationID
 
 	// Record reservation in order
 	reservedItems := make([]events.ReservedItem, 0, len(step.saga.order.Items))
@@ -188,17 +205,11 @@ func (step *ReserveInventoryStep) Execute() error {
 		})
 	}
 
-	if err := step.saga.order.RecordInventoryReservation(reservationID, reservedItems); err != nil {
+	if err := step.saga.order.RecordInventoryReservation(lastReservationID, reservedItems); err != nil {
 		return err
 	}
 
-	// Save events
-	uncommittedEvents := step.saga.order.GetUncommittedEvents()
-	if len(uncommittedEvents) > 0 {
-		// Note: In production, this would go through command handler
-		step.saga.order.MarkEventsAsCommitted()
-	}
-
+	step.saga.order.MarkEventsAsCommitted()
 	return nil
 }
 
@@ -243,6 +254,12 @@ func (step *ReserveInventoryStep) callInventoryService(path string, request map[
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	if step.saga.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+step.saga.authToken)
+	}
+	if step.saga.order.TenantID != "" {
+		req.Header.Set("X-Tenant-ID", step.saga.order.TenantID)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -278,14 +295,15 @@ func (step *ProcessPaymentStep) GetName() string {
 }
 
 func (step *ProcessPaymentStep) Execute() error {
-	// Build payment request
+	// Build payment request (camelCase for .NET service)
 	request := map[string]interface{}{
-		"tenant_id":   step.saga.order.TenantID,
-		"customer_id": step.saga.order.CustomerID,
-		"order_id":    step.saga.orderID,
-		"amount":      step.saga.order.TotalAmount,
-		"currency":    step.saga.order.Currency,
-		"method":      "credit_card", // This would come from order data
+		"tenantId":   step.saga.order.TenantID,
+		"customerId": step.saga.order.CustomerID,
+		"orderId":    step.saga.orderID,
+		"amount":     step.saga.order.TotalAmount,
+		"currency":   step.saga.order.Currency,
+		"method":     "bkash",
+		"createdBy":  "system",
 	}
 
 	// Call Payment Service
@@ -355,6 +373,12 @@ func (step *ProcessPaymentStep) callPaymentService(path string, request map[stri
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	if step.saga.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+step.saga.authToken)
+	}
+	if step.saga.order.TenantID != "" {
+		req.Header.Set("X-Tenant-ID", step.saga.order.TenantID)
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

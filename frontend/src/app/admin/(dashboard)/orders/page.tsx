@@ -19,11 +19,11 @@ const tabs: { label: string; value: OrderStatus | 'all' }[] = [
 export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState<OrderStatus | 'all'>('all');
   const { orders, loading, fetchOrders } = useOrderStore();
-  const { tenantId } = useAuthStore();
+  const { tenantId, token } = useAuthStore();
 
   useEffect(() => {
-    if (tenantId) fetchOrders(tenantId);
-  }, [tenantId, fetchOrders]);
+    if (tenantId) fetchOrders(tenantId, token || undefined);
+  }, [tenantId, token, fetchOrders]);
 
   const filtered =
     activeTab === 'all' ? orders : orders.filter((o) => o.status === activeTab);

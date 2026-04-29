@@ -261,8 +261,8 @@ services:
   # Shipping Service (Go)
   shipping-service:
     build:
-      context: ./services/shipping-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/shipping-service/Dockerfile
     container_name: shipping-service
     ports:
       - "8086:8086"
@@ -289,15 +289,15 @@ services:
   # Notification Service (Go)
   notification-service:
     build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     container_name: notification-service
     ports:
       - "8087:8087"
     environment:
       PORT: 8087
       ENVIRONMENT: development
-      MONGO_URI: mongodb://admin:admin123@mongodb:27017
+      MONGO_URI: mongodb://mongodb:27017
       MONGO_DB_NAME: notification_db
       JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
@@ -314,15 +314,15 @@ services:
   # Review & Rating Service (Go)
   review-service:
     build:
-      context: ./services/review-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/review-service/Dockerfile
     container_name: review-service
     ports:
       - "8088:8088"
     environment:
       PORT: 8088
       ENVIRONMENT: development
-      MONGO_URI: mongodb://admin:admin123@mongodb:27017
+      MONGO_URI: mongodb://mongodb:27017
       MONGO_DB_NAME: review_db
       JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKER: kafka:29092
@@ -339,8 +339,8 @@ services:
   # Cart Service (Go)
   cart-service:
     build:
-      context: ./services/cart-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/cart-service/Dockerfile
     container_name: cart-service
     ports:
       - "8089:8089"
@@ -365,8 +365,8 @@ services:
   # Search Service (Go)
   search-service:
     build:
-      context: ./services/search-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/search-service/Dockerfile
     container_name: search-service
     ports:
       - "8090:8090"
@@ -390,8 +390,8 @@ services:
   # Promotion & Discount Service (Go)
   promotion-service:
     build:
-      context: ./services/promotion-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/promotion-service/Dockerfile
     container_name: promotion-service
     ports:
       - "8091:8091"
@@ -419,8 +419,8 @@ services:
   # Configuration Service (Go) - Must start before other services
   config-service:
     build:
-      context: ./services/config-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/config-service/Dockerfile
     container_name: config-service
     ports:
       - "8095:8095"
@@ -444,8 +444,8 @@ services:
   # Order Service (Go - CQRS/Event Sourcing)
   order-service:
     build:
-      context: ./services/order-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/order-service/Dockerfile
     container_name: order-service
     ports:
       - "8080:8080"
@@ -475,8 +475,8 @@ services:
   # Analytics Service (Go)
   analytics-service:
     build:
-      context: ./services/analytics-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
     container_name: analytics-service
     ports:
       - "8093:8093"
@@ -504,8 +504,8 @@ services:
   # Recommendation Service (Go)
   recommendation-service:
     build:
-      context: ./services/recommendation-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/recommendation-service/Dockerfile
     container_name: recommendation-service
     ports:
       - "8094:8094"
@@ -533,8 +533,8 @@ services:
   # Vendor Management Service (Go)
   vendor-service:
     build:
-      context: ./services/vendor-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/vendor-service/Dockerfile
     container_name: vendor-service
     ports:
       - "8092:8092"
@@ -729,16 +729,35 @@ services:
       - ecommerce-network
     restart: unless-stopped
 
-  # Node Exporter - Host metrics
-  node-exporter:
-    image: prom/node-exporter:v1.7.0
-    container_name: ecommerce-node-exporter
-    command:
-      - "--path.rootfs=/host"
+  # Node Exporter - Host metrics (disabled on macOS — requires Linux shared mount)
+  # node-exporter:
+  #   image: prom/node-exporter:v1.7.0
+  #   container_name: ecommerce-node-exporter
+  #   command:
+  #     - "--path.rootfs=/host"
+  #   ports:
+  #     - "9100:9100"
+  #   volumes:
+  #     - /:/host:ro,rslave
+  #   networks:
+  #     - ecommerce-network
+  #   restart: unless-stopped
+
+  # Frontend - Next.js storefront & admin
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecommerce-frontend
     ports:
-      - "9100:9100"
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost
+      MEDIA_STORAGE_PATH: /app/media
+      NEXT_PUBLIC_MEDIA_URL: /api/media
+      JWT_SECRET: your-secret-key-change-in-production-12345
     volumes:
-      - /:/host:ro,rslave
+      - media_data:/app/media
     networks:
       - ecommerce-network
     restart: unless-stopped
@@ -753,6 +772,7 @@ volumes:
   mongodb_data_noauth:
   redis_data:
   elasticsearch_data:
+  media_data:
   prometheus_data:
   grafana_data:
   alertmanager_data:

@@ -39,13 +39,18 @@ function fromBackendItem(item: CartItemResponse): CartItem {
   return {
     productId: item.product_id,
     name: item.name,
-    sku: item.product_id, // cart-service doesn't store SKU separately
+    sku: item.product_id,
     price: item.price,
     quantity: item.quantity,
     image: item.image_url,
     backendId: item.id,
   };
 }
+
+// Tracks local mutations so an in-flight fetchFromBackend does not overwrite
+// optimistic updates (e.g. user removes an item while the initial fetch is
+// still pending).
+let _mutationVersion = 0;
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -55,18 +60,23 @@ export const useCartStore = create<CartState>()(
 
       fetchFromBackend: async ({ userId, tenantId, token }) => {
         set({ syncing: true });
+        const versionBefore = _mutationVersion;
         try {
           const cart = await cartApi.get(userId, tenantId, token);
-          set({
-            items: cart.items.map(fromBackendItem),
-            syncing: false,
-          });
+          // Only apply backend state if no local mutations happened during the fetch
+          if (_mutationVersion === versionBefore) {
+            set({ items: cart.items.map(fromBackendItem), syncing: false });
+          } else {
+            set({ syncing: false });
+          }
         } catch {
+          // Backend unreachable — keep local items as fallback
           set({ syncing: false });
         }
       },
 
       addItem: async (item, auth) => {
+        _mutationVersion++;
         // Optimistic local update
         set((state) => {
           const existing = state.items.find(
@@ -99,7 +109,7 @@ export const useCartStore = create<CartState>()(
               auth.tenantId,
               auth.token,
             );
-            // Reconcile with server response
+            // Backend responded — use its state as truth
             set({ items: cart.items.map(fromBackendItem) });
           } catch {
             // Keep optimistic state on failure
@@ -112,6 +122,7 @@ export const useCartStore = create<CartState>()(
           (i) => i.productId === productId && i.variantId === variantId,
         );
 
+        _mutationVersion++;
         // Optimistic local removal
         set((state) => ({
           items: state.items.filter(
@@ -121,7 +132,9 @@ export const useCartStore = create<CartState>()(
 
         if (auth && item?.backendId) {
           try {
-            await cartApi.removeItem(item.backendId, auth.tenantId, auth.token);
+            const cart = await cartApi.removeItem(item.backendId, auth.userId, auth.tenantId, auth.token);
+            // Backend responded — use its state as truth
+            set({ items: cart.items.map(fromBackendItem) });
           } catch {
             // Keep local removal
           }
@@ -133,6 +146,7 @@ export const useCartStore = create<CartState>()(
           (i) => i.productId === productId && i.variantId === variantId,
         );
 
+        _mutationVersion++;
         // Optimistic local update
         set((state) => ({
           items:
@@ -150,14 +164,17 @@ export const useCartStore = create<CartState>()(
         if (auth && item?.backendId) {
           try {
             if (quantity <= 0) {
-              await cartApi.removeItem(item.backendId, auth.tenantId, auth.token);
+              const cart = await cartApi.removeItem(item.backendId, auth.userId, auth.tenantId, auth.token);
+              set({ items: cart.items.map(fromBackendItem) });
             } else {
               const cart = await cartApi.updateItem(
                 item.backendId,
                 quantity,
+                auth.userId,
                 auth.tenantId,
                 auth.token,
               );
+              // Backend responded — use its state as truth
               set({ items: cart.items.map(fromBackendItem) });
             }
           } catch {
@@ -167,6 +184,7 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async (auth) => {
+        _mutationVersion++;
         set({ items: [] });
         if (auth) {
           try {

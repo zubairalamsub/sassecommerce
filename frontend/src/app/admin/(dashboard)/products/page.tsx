@@ -19,6 +19,7 @@ const tabs: { label: string; value: ProductStatus | 'all' }[] = [
 export default function ProductsPage() {
   const { products, loading, error, fetchProducts, deleteProduct } = useProductStore();
   const tenantId = useAuthStore((s) => s.tenantId);
+  const token = useAuthStore((s) => s.token);
   const [activeTab, setActiveTab] = useState<ProductStatus | 'all'>('all');
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export default function ProductsPage() {
     if (confirm(`Delete "${name}"? This cannot be undone.`)) {
       setDeleting(id);
       try {
-        await deleteProduct(id, tenantId);
+        await deleteProduct(id, tenantId, token || undefined);
       } catch {
         alert('Failed to delete product');
       }

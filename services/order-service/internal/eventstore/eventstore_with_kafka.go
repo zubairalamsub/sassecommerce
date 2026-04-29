@@ -36,18 +36,16 @@ func (es *EventStoreWithKafka) Save(aggregateID string, eventsToSave []events.Ev
 		return err
 	}
 
-	// Then publish to Kafka for event-driven architecture
+	// Then publish to Kafka for cross-service event distribution.
+	// Projection is updated synchronously by the command handler, so Kafka
+	// failure should not block the request — events are safe in PostgreSQL.
 	ctx := context.Background()
 	if err := es.publisher.PublishBatch(ctx, eventsToSave); err != nil {
-		// Log error but don't fail - events are persisted in event store
-		// Consumers can replay from event store if needed
-		es.logger.Error("Failed to publish events to Kafka",
+		es.logger.Error("Failed to publish events to Kafka (events persisted in event store)",
 			zap.String("aggregate_id", aggregateID),
 			zap.Int("event_count", len(eventsToSave)),
 			zap.Error(err),
 		)
-		// Return error to signal publishing failure
-		return fmt.Errorf("failed to publish events to Kafka: %w", err)
 	}
 
 	es.logger.Debug("Events saved and published",

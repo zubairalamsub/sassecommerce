@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { orderApi, type Order } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, formatDate, statusColor } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
@@ -56,15 +57,16 @@ export default function OrderConfirmationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const token = useAuthStore((s) => s.token);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    orderApi.get(id, TENANT_ID)
+    orderApi.get(id, TENANT_ID, token || undefined)
       .then(setOrder)
       .catch(() => setOrder(null))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, token]);
 
   if (loading) {
     return (
@@ -206,6 +208,7 @@ export default function OrderConfirmationPage({
         {/* Shipping & Payment info */}
         {order && (
           <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2">
+            {order.shipping_address && (
             <div className="bg-white px-6 py-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                 <MapPin className="h-4 w-4" />
@@ -219,6 +222,7 @@ export default function OrderConfirmationPage({
                 <p>{order.shipping_address.country}</p>
               </div>
             </div>
+            )}
             <div className="bg-white px-6 py-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                 <CreditCard className="h-4 w-4" />

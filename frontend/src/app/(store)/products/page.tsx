@@ -7,8 +7,9 @@ import { motion } from 'framer-motion';
 import { ShoppingCart, Tag, Loader2, Check, Heart, Search, X } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
 import { useProductStore, type StoreProduct } from '@/stores/products';
+import { useAuthStore } from '@/stores/auth';
 import { useWishlistStore } from '@/stores/wishlist';
-import { formatCurrency, cn } from '@/lib/utils';
+import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
 
@@ -46,8 +47,12 @@ function ProductsContent() {
   const { products, categories, loading, fetchProducts, fetchCategories } = useProductStore();
   const addItem = useCartStore((s) => s.addItem);
   const { toggleItem, isInWishlist } = useWishlistStore();
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+
+  const auth = user && token ? { userId: user.id, tenantId: 'tenant_saajan', token } : undefined;
 
   const searchParam = searchParams.get('search') || '';
   const categoryParam = searchParams.get('category') || '';
@@ -84,7 +89,8 @@ function ProductsContent() {
       sku: product.sku,
       price: product.price,
       quantity: 1,
-    });
+      image: product.images?.[0],
+    }, auth);
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -169,7 +175,7 @@ function ProductsContent() {
                 <Link href={`/products/${product.slug}`}>
                   <div className={cn('relative h-52 bg-gradient-to-br flex items-center justify-center overflow-hidden', gradients[index % gradients.length])}>
                     {product.images && product.images.length > 0 ? (
-                      <img src={product.images[0]} alt={product.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <img src={mediaUrl(product.images[0])} alt={product.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     ) : (
                       <span className="text-5xl font-bold text-white/30 group-hover:scale-110 transition-transform duration-500">{product.name[0]}</span>
                     )}
@@ -181,7 +187,7 @@ function ProductsContent() {
                     )}
                     <div className={cn('absolute top-3 right-3 transition-all duration-300', mounted && isInWishlist(product.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
                       <button
-                        onClick={(e) => { e.preventDefault(); toggleItem({ productId: product.id, name: product.name, slug: product.slug, price: product.price, image: product.images?.[0] }); }}
+                        onClick={(e) => { e.preventDefault(); toggleItem({ productId: product.id, name: product.name, slug: product.slug, price: product.price, image: mediaUrl(product.images?.[0]) }); }}
                         className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 dark:bg-gray-800/90 text-text-secondary hover:text-accent transition-colors shadow-md">
                         <Heart className={cn('h-4 w-4', mounted && isInWishlist(product.id) && 'fill-accent text-accent')} />
                       </button>

@@ -113,8 +113,9 @@ func main() {
 		logger.Warn("Kafka is disabled - events will not be published")
 	}
 
-	// Initialize command handler
+	// Initialize command handler with synchronous projection for read-after-write consistency
 	commandHandler := commands.NewCommandHandler(finalEventStore, logger)
+	commandHandler.SetProjector(orderProjection)
 
 	// Start external event consumer (payment-events, inventory-events, shipping-events)
 	if cfg.Kafka.Enabled {
@@ -141,7 +142,7 @@ func main() {
 		cfg.Services.PaymentURL,
 	)
 
-	queryHandler := api.NewQueryHandler(orderProjection, logger)
+	queryHandler := api.NewQueryHandler(orderProjection, finalEventStore, logger)
 
 	// Setup router
 	router := api.NewRouter(apiCommandHandler, queryHandler, logger)

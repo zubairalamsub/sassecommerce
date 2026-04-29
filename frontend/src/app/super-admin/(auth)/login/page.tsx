@@ -21,7 +21,7 @@ export default function SuperAdminLoginPage() {
 
     try {
       // Try demo login first for super_admin (platform admins aren't in tenant user-service)
-      const demo = demoLogin(email, password);
+      const demo = await demoLogin(email, password);
       if (demo && demo.user.role === 'super_admin') {
         setAuth(demo.user, demo.token, null);
         router.push('/super-admin/dashboard');

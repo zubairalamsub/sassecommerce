@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Loader2 } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, mediaUrl } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
 const SHIPPING_COST = 100;
@@ -15,12 +15,18 @@ export default function CartPage() {
   const removeItem = useCartStore((s) => s.removeItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const fetchFromBackend = useCartStore((s) => s.fetchFromBackend);
-  const total = useCartStore((s) => s.total);
-  const itemCount = useCartStore((s) => s.itemCount);
+  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Wait for Zustand to hydrate from localStorage before rendering
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   // Sync cart from backend on mount when authenticated
   useEffect(() => {
@@ -31,9 +37,17 @@ export default function CartPage() {
 
   const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
-  const subtotal = total();
+  const subtotal = total;
   const shipping = items.length > 0 ? SHIPPING_COST : 0;
   const grandTotal = subtotal + shipping;
+
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -60,7 +74,7 @@ export default function CartPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
       <p className="mt-1 text-gray-500">
-        {itemCount()} {itemCount() === 1 ? 'item' : 'items'} in your cart
+        {itemCount} {itemCount === 1 ? 'item' : 'items'} in your cart
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -75,7 +89,7 @@ export default function CartPage() {
                 {/* Image placeholder */}
                 <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5">
                   {item.image ? (
-                    <img src={item.image} alt={item.name} className="h-full w-full rounded-lg object-cover" />
+                    <img src={mediaUrl(item.image)} alt={item.name} className="h-full w-full rounded-lg object-cover" />
                   ) : (
                     <span className="text-2xl font-bold text-primary/40">
                       {item.name.charAt(0)}

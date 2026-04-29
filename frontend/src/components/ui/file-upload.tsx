@@ -15,6 +15,8 @@ export interface UploadedFile {
   type: string;
   /** URL for preview (images) — either a data URL or server URL */
   url?: string;
+  /** Relative path for storage in DB (e.g. "products/abc123.jpg"). Falls back to url if unset. */
+  path?: string;
   /** Upload progress 0–100, undefined if not yet started */
   progress?: number;
   /** Error message if upload failed */

@@ -7,7 +7,8 @@ import { ChevronLeft, ChevronRight, ShoppingBag, Sparkles, Tag, Clock, ShoppingC
 import { useProductStore } from '@/stores/products';
 import { useStoreConfigStore, type StoreSection } from '@/stores/store-config';
 import { useCartStore } from '@/stores/cart';
-import { formatCurrency, cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
+import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
 
@@ -41,10 +42,14 @@ export default function HomePage() {
   const { products, categories, fetchProducts, fetchCategories } = useProductStore();
   const { config, fetchConfig } = useStoreConfigStore();
   const addItem = useCartStore((s) => s.addItem);
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
 
   const [mounted, setMounted] = useState(false);
   const [currentBanner, setCurrentBanner] = useState(0);
   const [addedId, setAddedId] = useState<string | null>(null);
+
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
   useEffect(() => {
     setMounted(true);
@@ -73,7 +78,7 @@ export default function HomePage() {
       quantity: 1,
       sku: product.sku,
       image: product.images?.[0] || undefined,
-    });
+    }, auth);
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
   }

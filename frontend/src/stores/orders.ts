@@ -20,7 +20,7 @@ interface OrderStore {
   orders: DisplayOrder[];
   loading: boolean;
   error: string | null;
-  fetchOrders: (tenantId: string) => Promise<void>;
+  fetchOrders: (tenantId: string, token?: string) => Promise<void>;
 }
 
 export const useOrderStore = create<OrderStore>()(
@@ -30,10 +30,10 @@ export const useOrderStore = create<OrderStore>()(
       loading: false,
       error: null,
 
-      fetchOrders: async (tenantId: string) => {
+      fetchOrders: async (tenantId: string, token?: string) => {
         set({ loading: true, error: null });
         try {
-          const res = await orderApi.listByTenant(tenantId);
+          const res = await orderApi.listByTenant(tenantId, token);
           const mapped: DisplayOrder[] = (res.data || []).map((o: Order) => ({
             id: o.id,
             order_number: o.order_number,

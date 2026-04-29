@@ -23,6 +23,7 @@ COPY services/user-service/ .
 RUN sed -i 's|../../shared/go|/shared/go|' go.mod
 
 # Build the application
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o user-service ./cmd/server
 
 # Final stage

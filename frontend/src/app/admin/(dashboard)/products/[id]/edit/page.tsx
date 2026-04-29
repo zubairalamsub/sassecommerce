@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, X, Save, Loader2, Link2 } from 'lucide-react';
 import { useProductStore } from '@/stores/products';
 import { useAuthStore } from '@/stores/auth';
+import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
+import { uploadImages } from '@/lib/api';
+import { mediaUrl } from '@/lib/utils';
 import FileUpload, { type UploadedFile } from '@/components/ui/file-upload';
 
 interface Variant {
@@ -28,7 +31,10 @@ export default function EditProductPage() {
   const fetchCategories = useProductStore((s) => s.fetchCategories);
   const fetchProducts = useProductStore((s) => s.fetchProducts);
   const tenantId = useAuthStore((s) => s.tenantId);
+  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const deliveryProfiles = useDeliveryProfileStore((s) => s.profiles);
+  const getDefaultProfile = useDeliveryProfileStore((s) => s.getDefaultProfile);
 
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,6 +56,9 @@ export default function EditProductPage() {
 
   // Variants
   const [variants, setVariants] = useState<Variant[]>([]);
+
+  // Delivery
+  const [deliveryProfileId, setDeliveryProfileId] = useState('');
 
   // Images
   const [imageFiles, setImageFiles] = useState<UploadedFile[]>([]);
@@ -83,15 +92,17 @@ export default function EditProductPage() {
     setTags(product.tags?.join(', ') || '');
     setPrice(String(product.price));
     setCompareAtPrice(product.compare_at_price ? String(product.compare_at_price) : '');
+    setDeliveryProfileId(product.delivery_profile_id || '');
 
     if (product.images && product.images.length > 0) {
       setImageFiles(
-        product.images.map((url, i) => ({
+        product.images.map((imgPath, i) => ({
           id: `img-${i}`,
-          name: url.split('/').pop() || `image-${i + 1}`,
+          name: imgPath.split('/').pop() || `image-${i + 1}`,
           size: 0,
           type: 'image/*',
-          url,
+          url: mediaUrl(imgPath),
+          path: imgPath,
         })),
       );
     }
@@ -143,24 +154,39 @@ export default function EditProductPage() {
     setVariants(variants.filter((v) => v.id !== id));
   }
 
-  function handleFilesAdded(files: File[]) {
-    const newEntries: UploadedFile[] = files.map((file) => ({
+  async function handleFilesAdded(files: File[]) {
+    // Add placeholders with progress
+    const placeholders = files.map((file) => ({
       id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: file.name,
       size: file.size,
       type: file.type,
-      url: URL.createObjectURL(file),
-      progress: 100,
+      url: '',
+      path: '',
+      progress: 30,
     }));
-    setImageFiles((prev) => [...prev, ...newEntries]);
+    setImageFiles((prev) => [...prev, ...placeholders]);
+
+    try {
+      const paths = await uploadImages(files);
+      setImageFiles((prev) =>
+        prev.map((f) => {
+          const idx = placeholders.findIndex((p) => p.id === f.id);
+          if (idx >= 0 && paths[idx]) {
+            return { ...f, url: mediaUrl(paths[idx]), path: paths[idx], progress: 100 };
+          }
+          return f;
+        }),
+      );
+    } catch {
+      const ids = new Set(placeholders.map((p) => p.id));
+      setImageFiles((prev) => prev.filter((f) => !ids.has(f.id) || f.url));
+      setFormError('Image upload failed. Please try again.');
+    }
   }
 
   function handleFileRemoved(id: string) {
-    setImageFiles((prev) => {
-      const file = prev.find((f) => f.id === id);
-      if (file?.url?.startsWith('blob:')) URL.revokeObjectURL(file.url);
-      return prev.filter((f) => f.id !== id);
-    });
+    setImageFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   function addImageByUrl() {
@@ -193,9 +219,10 @@ export default function EditProductPage() {
           price: Number(price) || 0,
           compare_at_price: compareAtPrice ? Number(compareAtPrice) : undefined,
           category_id: category,
+          delivery_profile_id: deliveryProfileId || undefined,
           status,
           tags: parsedTags,
-          images: imageFiles.filter((f) => f.url).map((f) => f.url!),
+          images: imageFiles.filter((f) => f.path || f.url).map((f) => f.path || f.url!),
           variants: variants.map((v) => ({
             name: v.name,
             value: v.value,
@@ -206,6 +233,7 @@ export default function EditProductPage() {
           updated_by: user?.username || 'admin',
         },
         tenantId,
+        token || undefined,
       );
 
       setSaving(false);
@@ -215,7 +243,7 @@ export default function EditProductPage() {
       }, 1500);
     } catch (err) {
       setSaving(false);
-      setFormError((err as Error).message || 'Failed to update product');
+      setFormError((err as Error).message || 'Failed to update product. Make sure the backend is running.');
     }
   }
 
@@ -438,6 +466,30 @@ export default function EditProductPage() {
                 </p>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Delivery Profile */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Delivery</h2>
+          <div>
+            <label htmlFor="deliveryProfile" className="mb-1.5 block text-sm font-medium text-gray-700">
+              Delivery Charge Profile
+            </label>
+            <select
+              id="deliveryProfile"
+              value={deliveryProfileId}
+              onChange={(e) => setDeliveryProfileId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Default ({getDefaultProfile().name})</option>
+              {deliveryProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — Dhaka: ৳{p.inside_dhaka_rate} / Outside: ৳{p.outside_dhaka_rate}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">Select a delivery charge profile for this product</p>
           </div>
         </div>
 

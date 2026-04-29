@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, X, Save, Link2 } from 'lucide-react';
 import { useProductStore } from '@/stores/products';
 import { useAuthStore } from '@/stores/auth';
+import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
+import { uploadImages } from '@/lib/api';
+import { mediaUrl } from '@/lib/utils';
 import FileUpload, { type UploadedFile } from '@/components/ui/file-upload';
 
 interface Variant {
@@ -24,7 +27,10 @@ export default function NewProductPage() {
   const categories = useProductStore((s) => s.categories);
   const fetchCategories = useProductStore((s) => s.fetchCategories);
   const tenantId = useAuthStore((s) => s.tenantId);
+  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const deliveryProfiles = useDeliveryProfileStore((s) => s.profiles);
+  const getDefaultProfile = useDeliveryProfileStore((s) => s.getDefaultProfile);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [formError, setFormError] = useState('');
@@ -49,6 +55,9 @@ export default function NewProductPage() {
 
   // Variants
   const [variants, setVariants] = useState<Variant[]>([]);
+
+  // Delivery
+  const [deliveryProfileId, setDeliveryProfileId] = useState('');
 
   // Images
   const [imageFiles, setImageFiles] = useState<UploadedFile[]>([]);
@@ -85,24 +94,39 @@ export default function NewProductPage() {
     setVariants(variants.filter((v) => v.id !== id));
   }
 
-  function handleFilesAdded(files: File[]) {
-    const newEntries: UploadedFile[] = files.map((file) => ({
+  async function handleFilesAdded(files: File[]) {
+    // Add placeholders with progress
+    const placeholders = files.map((file) => ({
       id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: file.name,
       size: file.size,
       type: file.type,
-      url: URL.createObjectURL(file),
-      progress: 100,
+      url: '',
+      path: '',
+      progress: 30,
     }));
-    setImageFiles((prev) => [...prev, ...newEntries]);
+    setImageFiles((prev) => [...prev, ...placeholders]);
+
+    try {
+      const paths = await uploadImages(files);
+      setImageFiles((prev) =>
+        prev.map((f) => {
+          const idx = placeholders.findIndex((p) => p.id === f.id);
+          if (idx >= 0 && paths[idx]) {
+            return { ...f, url: mediaUrl(paths[idx]), path: paths[idx], progress: 100 };
+          }
+          return f;
+        }),
+      );
+    } catch {
+      const ids = new Set(placeholders.map((p) => p.id));
+      setImageFiles((prev) => prev.filter((f) => !ids.has(f.id) || f.url));
+      setFormError('Image upload failed. Please try again.');
+    }
   }
 
   function handleFileRemoved(id: string) {
-    setImageFiles((prev) => {
-      const file = prev.find((f) => f.id === id);
-      if (file?.url?.startsWith('blob:')) URL.revokeObjectURL(file.url);
-      return prev.filter((f) => f.id !== id);
-    });
+    setImageFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   function addImageByUrl() {
@@ -137,9 +161,10 @@ export default function NewProductPage() {
           price: Number(price) || 0,
           compare_at_price: compareAtPrice ? Number(compareAtPrice) : undefined,
           category_id: category,
+          delivery_profile_id: deliveryProfileId || undefined,
           status,
           tags: parsedTags,
-          images: imageFiles.filter((f) => f.url).map((f) => f.url!),
+          images: imageFiles.filter((f) => f.path || f.url).map((f) => f.path || f.url!),
           variants: variants.map((v) => ({
             name: v.name,
             value: v.value,
@@ -150,6 +175,7 @@ export default function NewProductPage() {
           created_by: user?.username || 'admin',
         },
         tenantId,
+        token || undefined,
       );
 
       setSaving(false);
@@ -159,7 +185,7 @@ export default function NewProductPage() {
       }, 1500);
     } catch (err) {
       setSaving(false);
-      setFormError((err as Error).message || 'Failed to create product');
+      setFormError((err as Error).message || 'Failed to save product. Make sure the backend is running.');
     }
   }
 
@@ -389,6 +415,30 @@ export default function NewProductPage() {
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Delivery Profile */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Delivery</h2>
+          <div>
+            <label htmlFor="deliveryProfile" className="mb-1.5 block text-sm font-medium text-gray-700">
+              Delivery Charge Profile
+            </label>
+            <select
+              id="deliveryProfile"
+              value={deliveryProfileId}
+              onChange={(e) => setDeliveryProfileId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Default ({getDefaultProfile().name})</option>
+              {deliveryProfiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — Dhaka: ৳{p.inside_dhaka_rate} / Outside: ৳{p.outside_dhaka_rate}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">Select a delivery charge profile for this product</p>
           </div>
         </div>
 

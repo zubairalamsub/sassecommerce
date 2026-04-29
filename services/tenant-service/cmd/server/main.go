@@ -57,6 +57,7 @@ func main() {
 
 	// Initialize handlers
 	tenantHandler := api.NewTenantHandler(tenantService, log)
+	auditHandler := api.NewAuditHandler(auditService, log)
 
 	// Setup Gin router
 	if cfg.Server.Env == "production" {
@@ -100,6 +101,9 @@ func main() {
 			tenants.PATCH("/:id/config", tenantHandler.UpdateTenantConfig)
 			tenants.DELETE("/:id", tenantHandler.DeleteTenant)
 		}
+
+		// Audit logs
+		v1.GET("/audit-logs", auditHandler.ListAuditLogs)
 	}
 
 	// Create HTTP server

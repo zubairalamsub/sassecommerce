@@ -1,27 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost';
-
-const SERVICE_PORTS: Record<string, number> = {
-  tenant: 8081,
-  user: 8082,
-  order: 8080,
-  product: 8083,
-  inventory: 8084,
-  payment: 8085,
-  shipping: 8086,
-  notification: 8087,
-  review: 8088,
-  cart: 8089,
-  search: 8090,
-  promotion: 8091,
-  vendor: 8092,
-  analytics: 8093,
-  recommendation: 8094,
-  config: 8095,
-};
-
+// API calls are proxied through Next.js rewrites (see next.config.ts)
+// to avoid CORS issues. Browser calls /proxy/{service}/... which Next.js
+// forwards to the actual backend service.
 function serviceUrl(service: string): string {
-  const port = SERVICE_PORTS[service] || 8080;
-  return `${API_BASE}:${port}`;
+  return `/proxy/${service}`;
 }
 
 export class ApiError extends Error {
@@ -70,6 +51,21 @@ async function request<T>(
 
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+// Image Upload (Next.js API route)
+// Returns relative paths like "products/abc123.jpg" — use mediaUrl() to build display URLs
+export async function uploadImages(files: File[], folder = 'products'): Promise<string[]> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append('files', file));
+  formData.append('folder', folder);
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || 'Upload failed');
+  }
+  const data = await res.json();
+  return data.paths as string[];
 }
 
 // Tenant Service
@@ -151,12 +147,12 @@ export const productApi = {
     if (maxPrice !== undefined) params.set('max_price', String(maxPrice));
     return request<ProductListResponse>('product', `/api/v1/products/search?${params}`, { tenantId });
   },
-  create: (data: CreateProductRequest, tenantId: string) =>
-    request<ProductResponse>('product', '/api/v1/products', { method: 'POST', body: data, tenantId }),
-  update: (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string) =>
-    request<ProductResponse>('product', `/api/v1/products/${id}`, { method: 'PUT', body: data, tenantId }),
-  delete: (id: string, tenantId: string) =>
-    request<void>('product', `/api/v1/products/${id}`, { method: 'DELETE', tenantId }),
+  create: (data: CreateProductRequest, tenantId: string, token?: string) =>
+    request<ProductResponse>('product', '/api/v1/products', { method: 'POST', body: data, tenantId, token }),
+  update: (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string, token?: string) =>
+    request<ProductResponse>('product', `/api/v1/products/${id}`, { method: 'PUT', body: data, tenantId, token }),
+  delete: (id: string, tenantId: string, token?: string) =>
+    request<void>('product', `/api/v1/products/${id}`, { method: 'DELETE', tenantId, token }),
 };
 
 export const categoryApi = {
@@ -175,23 +171,72 @@ export const categoryApi = {
 };
 
 // Order Service
+// Backend response shapes differ from frontend types — map them here.
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function mapOrder(raw: any): Order {
+  // Single-order endpoint wraps as { order: {...}, items: [...] }
+  const o = raw.order ?? raw;
+  const items: OrderItem[] = (raw.items ?? o.items ?? []).map((i: any) => ({
+    id: i.id,
+    product_id: i.product_id,
+    variant_id: i.variant_id ?? '',
+    sku: i.sku ?? '',
+    name: i.name ?? '',
+    quantity: i.quantity,
+    unit_price: i.unit_price,
+    total_price: i.total_price ?? i.unit_price * i.quantity,
+  }));
+  return {
+    id: o.id,
+    tenant_id: o.tenant_id ?? '',
+    customer_id: o.customer_id ?? '',
+    order_number: o.order_number ?? o.id?.slice(0, 8).toUpperCase() ?? '',
+    status: o.status ?? 'pending',
+    currency: o.currency ?? 'BDT',
+    items,
+    subtotal: o.subtotal ?? o.total_amount ?? 0,
+    shipping_cost: o.shipping_cost ?? 0,
+    tax: o.tax ?? 0,
+    total: o.total ?? o.total_amount ?? 0,
+    shipping_address: o.shipping_address ?? { street: '', city: '', state: '', postal_code: '', country: '' },
+    billing_address: o.billing_address ?? { street: '', city: '', state: '', postal_code: '', country: '' },
+    tracking_number: o.tracking_number ?? null,
+    carrier: o.carrier ?? null,
+    created_at: o.created_at ?? '',
+    updated_at: o.updated_at ?? '',
+  };
+}
+
+function mapOrderList(raw: any): PaginatedResponse<Order> {
+  const orders = (raw.orders ?? raw.data ?? []).map(mapOrder);
+  const p = raw.pagination ?? {};
+  return {
+    data: orders,
+    total: p.count ?? orders.length,
+    page: p.offset != null && p.limit ? Math.floor(p.offset / p.limit) + 1 : 1,
+    page_size: p.limit ?? 20,
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export const orderApi = {
-  create: (data: CreateOrderRequest, tenantId: string) =>
-    request<CreateOrderResponse>('order', '/api/v1/orders', { method: 'POST', body: data, tenantId }),
+  create: (data: CreateOrderRequest, tenantId: string, token?: string) =>
+    request<CreateOrderResponse>('order', '/api/v1/orders', { method: 'POST', body: data, tenantId, token }),
   addItem: (orderId: string, data: AddOrderItemRequest, tenantId: string, token?: string) =>
     request<void>('order', `/api/v1/orders/${orderId}/items`, { method: 'POST', body: data, tenantId, token }),
-  get: (id: string, tenantId: string) =>
-    request<Order>('order', `/api/v1/orders/${id}`, { tenantId }),
-  listByTenant: (tenantId: string, page = 1, pageSize = 20) =>
-    request<PaginatedResponse<Order>>('order', `/api/v1/tenants/${tenantId}/orders?page=${page}&page_size=${pageSize}`, { tenantId }),
-  listByCustomer: (customerId: string, tenantId: string) =>
-    request<PaginatedResponse<Order>>('order', `/api/v1/customers/${customerId}/orders`, { tenantId }),
-  confirm: (id: string, confirmedBy: string, tenantId: string) =>
-    request<Order>('order', `/api/v1/orders/${id}/confirm`, { method: 'POST', body: { confirmed_by: confirmedBy }, tenantId }),
-  cancel: (id: string, reason: string, cancelledBy: string, tenantId: string) =>
-    request<Order>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId }),
-  ship: (id: string, data: { tracking_number: string; carrier: string; shipped_by: string }, tenantId: string) =>
-    request<Order>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId }),
+  get: (id: string, tenantId: string, token?: string) =>
+    request<any>('order', `/api/v1/orders/${id}`, { tenantId, token }).then(mapOrder),
+  listByTenant: (tenantId: string, token?: string, page = 1, pageSize = 20) =>
+    request<any>('order', `/api/v1/tenants/${tenantId}/orders?page=${page}&page_size=${pageSize}`, { tenantId, token }).then(mapOrderList),
+  listByCustomer: (customerId: string, tenantId: string, token?: string) =>
+    request<any>('order', `/api/v1/customers/${customerId}/orders`, { tenantId, token }).then(mapOrderList),
+  confirm: (id: string, confirmedBy: string, tenantId: string, token?: string) =>
+    request<any>('order', `/api/v1/orders/${id}/confirm`, { method: 'POST', body: { confirmed_by: confirmedBy }, tenantId, token }).then(mapOrder),
+  cancel: (id: string, reason: string, cancelledBy: string, tenantId: string, token?: string) =>
+    request<any>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId, token }).then(mapOrder),
+  ship: (id: string, data: { tracking_number: string; carrier: string; shipped_by: string }, tenantId: string, token?: string) =>
+    request<any>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId, token }).then(mapOrder),
 };
 
 // Promotion Service
@@ -208,10 +253,10 @@ export const cartApi = {
     request<CartResponse>('cart', `/api/v1/cart?tenant_id=${tenantId}&user_id=${userId}`, { tenantId, token }),
   addItem: (data: CartAddItemRequest, tenantId: string, token: string) =>
     request<CartResponse>('cart', '/api/v1/cart/items', { method: 'POST', body: data, tenantId, token }),
-  updateItem: (itemId: string, quantity: number, tenantId: string, token: string) =>
-    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}`, { method: 'PUT', body: { quantity }, tenantId, token }),
-  removeItem: (itemId: string, tenantId: string, token: string) =>
-    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}`, { method: 'DELETE', tenantId, token }),
+  updateItem: (itemId: string, quantity: number, userId: string, tenantId: string, token: string) =>
+    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}?tenant_id=${tenantId}&user_id=${userId}`, { method: 'PUT', body: { quantity }, tenantId, token }),
+  removeItem: (itemId: string, userId: string, tenantId: string, token: string) =>
+    request<CartResponse>('cart', `/api/v1/cart/items/${itemId}?tenant_id=${tenantId}&user_id=${userId}`, { method: 'DELETE', tenantId, token }),
   clear: (userId: string, tenantId: string, token: string) =>
     request<void>('cart', `/api/v1/cart?tenant_id=${tenantId}&user_id=${userId}`, { method: 'DELETE', tenantId, token }),
 };
@@ -285,24 +330,82 @@ export const shippingApi = {
 
 // Inventory Service
 export const inventoryApi = {
-  listItems: (tenantId: string, page = 1, pageSize = 20) =>
-    request<PaginatedResponse<InventoryItem>>('inventory', `/api/v1/inventory/items?tenant_id=${tenantId}&page=${page}&page_size=${pageSize}`, { tenantId }),
-  lowStock: (tenantId: string) =>
-    request<InventoryItem[]>('inventory', `/api/v1/inventory/items/low-stock?tenant_id=${tenantId}`, { tenantId }),
-  listWarehouses: (tenantId: string) =>
-    request<Warehouse[]>('inventory', `/api/v1/inventory/warehouses?tenant_id=${tenantId}`, { tenantId }),
-  adjustStock: (itemId: string, data: { quantity: number; reason: string; type: string }, tenantId: string) =>
-    request<InventoryItem>('inventory', `/api/v1/inventory/items/${itemId}/adjust`, { method: 'POST', body: data, tenantId }),
+  listItems: (tenantId: string, token: string, offset = 0, limit = 20) =>
+    request<PaginatedResponse<InventoryItem>>('inventory', `/api/v1/inventory/items?tenantId=${tenantId}&offset=${offset}&limit=${limit}`, { tenantId, token }),
+  lowStock: (tenantId: string, token: string) =>
+    request<InventoryItem[]>('inventory', `/api/v1/inventory/items/low-stock?tenantId=${tenantId}`, { tenantId, token }),
+  listWarehouses: (tenantId: string, token: string) =>
+    request<PaginatedResponse<Warehouse>>('inventory', `/api/v1/inventory/warehouses?tenantId=${tenantId}`, { tenantId, token }),
+  createWarehouse: (data: CreateWarehouseRequest, token: string) =>
+    request<Warehouse>('inventory', '/api/v1/inventory/warehouses', { method: 'POST', body: data, tenantId: data.tenantId, token }),
+  createItem: (data: CreateInventoryItemRequest, token: string) =>
+    request<InventoryItem>('inventory', '/api/v1/inventory/items', { method: 'POST', body: data, tenantId: data.tenantId, token }),
+  adjustStock: (itemId: string, data: { quantity: number; reason: string; type: string }, tenantId: string, token: string) =>
+    request<InventoryItem>('inventory', `/api/v1/inventory/items/${itemId}/adjust`, { method: 'POST', body: data, tenantId, token }),
+};
+
+// Audit Logs (via Tenant Service)
+export interface AuditLog {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  action: string;
+  resource: string;
+  resource_id: string;
+  method: string;
+  path: string;
+  ip_address: string;
+  user_agent: string;
+  request_body?: string;
+  response_code: number;
+  old_value?: string;
+  new_value?: string;
+  metadata?: string;
+  error_message?: string;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface AuditLogResponse {
+  data: AuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export const auditApi = {
+  list: (tenantId: string, token: string, filters?: {
+    user_id?: string;
+    action?: string;
+    resource?: string;
+    resource_id?: string;
+    start_date?: string;
+    end_date?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const params = new URLSearchParams({ tenant_id: tenantId });
+    if (filters?.user_id) params.set('user_id', filters.user_id);
+    if (filters?.action) params.set('action', filters.action);
+    if (filters?.resource) params.set('resource', filters.resource);
+    if (filters?.resource_id) params.set('resource_id', filters.resource_id);
+    if (filters?.start_date) params.set('start_date', filters.start_date);
+    if (filters?.end_date) params.set('end_date', filters.end_date);
+    params.set('page', String(filters?.page ?? 1));
+    params.set('page_size', String(filters?.page_size ?? 25));
+    return request<AuditLogResponse>('tenant', `/api/v1/audit-logs?${params}`, { tenantId, token });
+  },
 };
 
 // Payment Service
 export const paymentApi = {
-  list: (tenantId: string, page = 1, pageSize = 20) =>
-    request<PaginatedResponse<Payment>>('payment', `/api/v1/payments?tenant_id=${tenantId}&page=${page}&page_size=${pageSize}`, { tenantId }),
-  get: (id: string, tenantId: string) =>
-    request<Payment>('payment', `/api/v1/payments/${id}`, { tenantId }),
-  process: (data: ProcessPaymentRequest, tenantId: string) =>
-    request<Payment>('payment', '/api/v1/payments', { method: 'POST', body: data, tenantId }),
+  list: (tenantId: string, token?: string, page = 1, pageSize = 20) =>
+    request<PaginatedResponse<Payment>>('payment', `/api/v1/payments?tenant_id=${tenantId}&page=${page}&page_size=${pageSize}`, { tenantId, token }),
+  get: (id: string, tenantId: string, token?: string) =>
+    request<Payment>('payment', `/api/v1/payments/${id}`, { tenantId, token }),
+  process: (data: ProcessPaymentRequest, tenantId: string, token?: string) =>
+    request<Payment>('payment', '/api/v1/payments', { method: 'POST', body: data, tenantId, token }),
 };
 
 // Analytics Service
@@ -435,6 +538,18 @@ export interface LoginResponse {
   expires_at: string;
 }
 
+export interface DeliveryProfile {
+  id: string;
+  name: string;
+  inside_dhaka_rate: number;
+  outside_dhaka_rate: number;
+  inside_dhaka_express_rate: number;
+  outside_dhaka_express_rate: number;
+  estimated_delivery_dhaka: string;
+  estimated_delivery_outside: string;
+  is_default: boolean;
+}
+
 export interface Product {
   id: string;
   tenant_id: string;
@@ -447,6 +562,7 @@ export interface Product {
   price: number;
   compare_at_price?: number | null;
   cost_per_item?: number;
+  delivery_profile_id?: string;
   images: string[] | null;
   tags: string[] | null;
   status: 'active' | 'draft' | 'archived' | 'inactive';
@@ -475,6 +591,7 @@ export interface CreateProductRequest {
   price: number;
   compare_at_price?: number;
   category_id: string;
+  delivery_profile_id?: string;
   status?: string;
   images?: string[];
   variants?: ProductVariant[];
@@ -603,24 +720,74 @@ export interface AddOrderItemRequest {
 
 export interface InventoryItem {
   id: string;
-  tenant_id: string;
-  warehouse_id: string;
-  product_id: string;
+  tenantId: string;
+  warehouseId: string;
+  warehouseName: string;
+  productId: string;
+  variantId: string | null;
   sku: string;
-  quantity_on_hand: number;
-  reorder_point: number;
-  reorder_quantity: number;
-  created_at: string;
-  updated_at: string;
+  quantityOnHand: number;
+  quantityReserved: number;
+  quantityAvailable: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  maxStock: number | null;
+  binLocation: string | null;
+  needsReorder: boolean;
+  lastStockCheckAt: string | null;
+  lastReceivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Warehouse {
   id: string;
-  tenant_id: string;
+  tenantId: string;
   code: string;
   name: string;
+  description: string | null;
+  address: string;
   city: string;
-  is_active: boolean;
+  state: string;
+  country: string;
+  postalCode: string;
+  phone: string | null;
+  email: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateWarehouseRequest {
+  tenantId: string;
+  code: string;
+  name: string;
+  description?: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+  phone?: string;
+  email?: string;
+  isActive?: boolean;
+  isDefault?: boolean;
+  createdBy: string;
+}
+
+export interface CreateInventoryItemRequest {
+  tenantId: string;
+  warehouseId: string;
+  productId: string;
+  variantId?: string;
+  sku: string;
+  initialQuantity?: number;
+  reorderPoint?: number;
+  reorderQuantity?: number;
+  maxStock?: number;
+  binLocation?: string;
+  createdBy: string;
 }
 
 export interface Payment {

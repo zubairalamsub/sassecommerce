@@ -28,12 +28,14 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // Configure Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? $"Host={builder.Configuration["DB_HOST"] ?? "localhost"};" +
-       $"Port={builder.Configuration["DB_PORT"] ?? "5432"};" +
-       $"Database={builder.Configuration["DB_NAME"] ?? "inventory_db"};" +
-       $"Username={builder.Configuration["DB_USER"] ?? "postgres"};" +
-       $"Password={builder.Configuration["DB_PASSWORD"] ?? "postgres"}";
+var configuredConn = builder.Configuration.GetConnectionString("DefaultConnection");
+var connectionString = !string.IsNullOrEmpty(configuredConn)
+    ? configuredConn
+    : $"Host={builder.Configuration["DB_HOST"] ?? "localhost"};" +
+      $"Port={builder.Configuration["DB_PORT"] ?? "5432"};" +
+      $"Database={builder.Configuration["DB_NAME"] ?? "inventory_db"};" +
+      $"Username={builder.Configuration["DB_USER"] ?? "postgres"};" +
+      $"Password={builder.Configuration["DB_PASSWORD"] ?? "postgres"}";
 
 builder.Services.AddDbContext<InventoryDbContext>(options =>
     options.UseNpgsql(connectionString));
@@ -133,8 +135,8 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
     try
     {
-        await dbContext.Database.MigrateAsync();
-        Log.Information("Database migration completed successfully");
+        await dbContext.Database.EnsureCreatedAsync();
+        Log.Information("Database schema ensured successfully");
     }
     catch (Exception ex)
     {

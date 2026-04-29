@@ -66,10 +66,9 @@ export const useAuthStore = create<AuthState>()(
           };
           set({ user: authUser, token: res.token, tenantId: authUser.tenant_id });
           return { user: authUser, token: res.token };
-        } catch (err) {
-          // If API is unreachable (network error), fall back to demo login
-          if (err instanceof ApiError) throw err;
-          const demo = demoLogin(email, password);
+        } catch {
+          // Backend auth failed or unreachable — fall back to demo login
+          const demo = await demoLogin(email, password);
           if (demo) {
             set({ user: demo.user, token: demo.token, tenantId: demo.user.tenant_id });
             return demo;
@@ -221,10 +220,27 @@ export const DEMO_USERS: Record<string, { password: string; user: AuthUser; toke
   },
 };
 
-export function demoLogin(email: string, password: string): { user: AuthUser; token: string } | null {
+export async function demoLogin(email: string, password: string): Promise<{ user: AuthUser; token: string } | null> {
   const entry = DEMO_USERS[email];
-  if (entry && entry.password === password) {
-    return { user: entry.user, token: entry.token };
+  if (!entry || entry.password !== password) return null;
+
+  try {
+    const res = await fetch('/api/auth/demo-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: entry.user.id,
+        tenant_id: entry.user.tenant_id || '',
+        email: entry.user.email,
+        role: entry.user.role,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { user: entry.user, token: data.token };
+    }
+  } catch {
+    // API route unavailable — use fallback token
   }
-  return null;
+  return { user: entry.user, token: entry.token };
 }

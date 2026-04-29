@@ -55,13 +55,13 @@ func (p *OrderProjection) createTables() error {
 		carrier VARCHAR(100),
 		created_at TIMESTAMP NOT NULL,
 		updated_at TIMESTAMP NOT NULL,
-		version INTEGER NOT NULL,
-
-		INDEX idx_order_tenant (tenant_id),
-		INDEX idx_order_customer (customer_id),
-		INDEX idx_order_status (status),
-		INDEX idx_order_created_at (created_at)
+		version INTEGER NOT NULL
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_order_tenant ON order_read_model (tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_order_customer ON order_read_model (customer_id);
+	CREATE INDEX IF NOT EXISTS idx_order_status ON order_read_model (status);
+	CREATE INDEX IF NOT EXISTS idx_order_created_at ON order_read_model (created_at);
 
 	CREATE TABLE IF NOT EXISTS order_item_read_model (
 		id VARCHAR(100) PRIMARY KEY,
@@ -73,11 +73,11 @@ func (p *OrderProjection) createTables() error {
 		quantity INTEGER NOT NULL,
 		unit_price DECIMAL(15, 2) NOT NULL,
 		total_price DECIMAL(15, 2) NOT NULL,
-
-		INDEX idx_order_item_order (order_id),
-		INDEX idx_order_item_product (product_id),
 		FOREIGN KEY (order_id) REFERENCES order_read_model(id) ON DELETE CASCADE
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_order_item_order ON order_item_read_model (order_id);
+	CREATE INDEX IF NOT EXISTS idx_order_item_product ON order_item_read_model (product_id);
 	`
 
 	_, err := p.db.Exec(query)
@@ -123,6 +123,7 @@ func (p *OrderProjection) projectOrderCreated(e events.OrderCreated) error {
 			billing_street, billing_city, billing_state, billing_postal_code, billing_country,
 			created_at, updated_at, version
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		ON CONFLICT (id) DO NOTHING
 	`,
 		e.AggregateID, e.TenantID, e.CustomerID, "pending", e.TotalAmount, e.Currency,
 		e.ShippingAddr.Street, e.ShippingAddr.City, e.ShippingAddr.State, e.ShippingAddr.PostalCode, e.ShippingAddr.Country,
@@ -139,10 +140,14 @@ func (p *OrderProjection) projectOrderItemAdded(e events.OrderItemAdded) error {
 	}
 	defer tx.Rollback()
 
-	// Insert order item
+	// Upsert order item (idempotent for duplicate event processing)
 	_, err = tx.Exec(`
 		INSERT INTO order_item_read_model (id, order_id, product_id, variant_id, sku, name, quantity, unit_price, total_price)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (id) DO UPDATE SET
+			quantity = EXCLUDED.quantity,
+			unit_price = EXCLUDED.unit_price,
+			total_price = EXCLUDED.total_price
 	`, e.ItemID, e.AggregateID, e.ProductID, e.VariantID, e.SKU, e.Name, e.Quantity, e.UnitPrice, e.TotalPrice)
 	if err != nil {
 		return err

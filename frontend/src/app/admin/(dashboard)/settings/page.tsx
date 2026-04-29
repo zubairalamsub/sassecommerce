@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Save, Loader2, Store, Palette, Globe, ToggleLeft, Layout,
   Plus, X, GripVertical, Image, ChevronUp, ChevronDown, Megaphone,
@@ -9,6 +9,8 @@ import {
 import { useAuthStore } from '@/stores/auth';
 import { tenantApi, type TenantConfig } from '@/lib/api';
 import { useStoreConfigStore, type BannerSlide, type StoreSection, type StorefrontConfig } from '@/stores/store-config';
+import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
+import type { DeliveryProfile } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type SettingsTab = 'general' | 'branding' | 'storefront' | 'features' | 'payment' | 'shipping' | 'email' | 'security';
@@ -137,6 +139,16 @@ export default function StoreSettingsPage() {
   const saveStoreConfig = useStoreConfigStore((s) => s.saveConfig);
   const updateStoreConfig = useStoreConfigStore((s) => s.updateConfig);
 
+  // Delivery profiles
+  const deliveryProfiles = useDeliveryProfileStore((s) => s.profiles);
+  const fetchDeliveryProfiles = useDeliveryProfileStore((s) => s.fetchProfiles);
+  const saveDeliveryProfiles = useDeliveryProfileStore((s) => s.saveProfiles);
+  const addDeliveryProfile = useDeliveryProfileStore((s) => s.addProfile);
+  const updateDeliveryProfile = useDeliveryProfileStore((s) => s.updateProfile);
+  const removeDeliveryProfile = useDeliveryProfileStore((s) => s.removeProfile);
+  const lastProfileRef = useRef<HTMLDivElement>(null);
+  const [focusProfileId, setFocusProfileId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!tenantId) return;
     async function load() {
@@ -157,10 +169,27 @@ export default function StoreSettingsPage() {
       } catch {
         // defaults loaded
       }
+      try {
+        await fetchDeliveryProfiles(tenantId!);
+      } catch {
+        // defaults loaded
+      }
       setLoading(false);
     }
     load();
   }, [tenantId, fetchStoreConfig]);
+
+  useEffect(() => {
+    if (focusProfileId && lastProfileRef.current) {
+      lastProfileRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const nameInput = lastProfileRef.current.querySelector<HTMLInputElement>('input[type="text"]');
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.select();
+      }
+      setFocusProfileId(null);
+    }
+  }, [focusProfileId, deliveryProfiles]);
 
   function updateGeneral<K extends keyof TenantConfig['general']>(key: K, value: TenantConfig['general'][K]) {
     setTenantConfig((prev) => ({ ...prev, general: { ...prev.general, [key]: value } }));
@@ -188,6 +217,7 @@ export default function StoreSettingsPage() {
       await tenantApi.update(tenantId, { name: storeName, email: storeEmail });
       await tenantApi.updateConfig(tenantId, tenantConfig);
       await saveStoreConfig(tenantId, storeConfig);
+      await saveDeliveryProfiles(tenantId);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -733,12 +763,128 @@ export default function StoreSettingsPage() {
       {/* ==================== SHIPPING TAB ==================== */}
       {activeTab === 'shipping' && (
         <div className="space-y-6">
+          {/* Delivery Charge Profiles */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Delivery Charge Profiles</h2>
+                <p className="text-sm text-gray-500">Create delivery profiles and assign them to products</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newId = `dp-${Date.now()}`;
+                  addDeliveryProfile({
+                    id: newId,
+                    name: 'New Profile',
+                    inside_dhaka_rate: 60,
+                    outside_dhaka_rate: 120,
+                    inside_dhaka_express_rate: 100,
+                    outside_dhaka_express_rate: 180,
+                    estimated_delivery_dhaka: '1-2 days',
+                    estimated_delivery_outside: '3-5 days',
+                    is_default: false,
+                  });
+                  setFocusProfileId(newId);
+                  setSaved(false);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add Profile
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {deliveryProfiles.map((profile) => (
+                <div key={profile.id} ref={profile.id === focusProfileId ? lastProfileRef : undefined} className={cn('rounded-lg border p-4', profile.is_default ? 'border-primary bg-primary/5' : 'border-gray-200')}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={profile.name}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { name: e.target.value }); setSaved(false); }}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="defaultProfile"
+                          checked={profile.is_default}
+                          onChange={() => {
+                            deliveryProfiles.forEach((p) => updateDeliveryProfile(p.id, { is_default: p.id === profile.id }));
+                            setSaved(false);
+                          }}
+                          className="h-3.5 w-3.5 text-primary focus:ring-primary"
+                        />
+                        Default
+                      </label>
+                    </div>
+                    {!profile.is_default && (
+                      <button
+                        type="button"
+                        onClick={() => { removeDeliveryProfile(profile.id); setSaved(false); }}
+                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Dhaka Standard (৳)</label>
+                      <input type="number" min={0} value={profile.inside_dhaka_rate}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { inside_dhaka_rate: Number(e.target.value) }); setSaved(false); }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Dhaka Express (৳)</label>
+                      <input type="number" min={0} value={profile.inside_dhaka_express_rate}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { inside_dhaka_express_rate: Number(e.target.value) }); setSaved(false); }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Outside Standard (৳)</label>
+                      <input type="number" min={0} value={profile.outside_dhaka_rate}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { outside_dhaka_rate: Number(e.target.value) }); setSaved(false); }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Outside Express (৳)</label>
+                      <input type="number" min={0} value={profile.outside_dhaka_express_rate}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { outside_dhaka_express_rate: Number(e.target.value) }); setSaved(false); }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Dhaka Delivery Estimate</label>
+                      <input type="text" value={profile.estimated_delivery_dhaka}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { estimated_delivery_dhaka: e.target.value }); setSaved(false); }}
+                        placeholder="1-2 days"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-500">Outside Delivery Estimate</label>
+                      <input type="text" value={profile.estimated_delivery_outside}
+                        onChange={(e) => { updateDeliveryProfile(profile.id, { estimated_delivery_outside: e.target.value }); setSaved(false); }}
+                        placeholder="3-5 days"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Free Shipping */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Truck className="h-5 w-5 text-gray-400" />
-                <h2 className="text-lg font-semibold text-gray-900">Free Shipping</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Free Shipping Threshold</h2>
               </div>
               <ToggleButton
                 enabled={shippingSettings.free_shipping_enabled}
@@ -754,54 +900,6 @@ export default function StoreSettingsPage() {
                 <p className="mt-1 text-xs text-gray-500">Orders above this amount qualify for free shipping</p>
               </div>
             )}
-          </div>
-
-          {/* Shipping Rates */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Shipping Rates</h2>
-              <ToggleButton
-                enabled={shippingSettings.flat_rate_enabled}
-                onToggle={() => { setShippingSettings((p) => ({ ...p, flat_rate_enabled: !p.flat_rate_enabled })); setSaved(false); }}
-              />
-            </div>
-            {shippingSettings.flat_rate_enabled && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Default Flat Rate (BDT)</label>
-                    <input type="number" min={0} value={shippingSettings.flat_rate_amount}
-                      onChange={(e) => { setShippingSettings((p) => ({ ...p, flat_rate_amount: Number(e.target.value) })); setSaved(false); }}
-                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Inside Dhaka (BDT)</label>
-                    <input type="number" min={0} value={shippingSettings.inside_dhaka_rate}
-                      onChange={(e) => { setShippingSettings((p) => ({ ...p, inside_dhaka_rate: Number(e.target.value) })); setSaved(false); }}
-                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Outside Dhaka (BDT)</label>
-                    <input type="number" min={0} value={shippingSettings.outside_dhaka_rate}
-                      onChange={(e) => { setShippingSettings((p) => ({ ...p, outside_dhaka_rate: Number(e.target.value) })); setSaved(false); }}
-                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Delivery Estimates */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Delivery Estimates</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Inside Dhaka" value={shippingSettings.estimated_delivery_dhaka}
-                onChange={(v) => { setShippingSettings((p) => ({ ...p, estimated_delivery_dhaka: v })); setSaved(false); }}
-                placeholder="1-2 days" />
-              <Field label="Outside Dhaka" value={shippingSettings.estimated_delivery_outside}
-                onChange={(v) => { setShippingSettings((p) => ({ ...p, estimated_delivery_outside: v })); setSaved(false); }}
-                placeholder="3-5 days" />
-            </div>
           </div>
 
           {/* Shipping Policy */}

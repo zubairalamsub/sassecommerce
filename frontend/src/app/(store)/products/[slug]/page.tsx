@@ -17,7 +17,8 @@ import { useCartStore } from '@/stores/cart';
 import { useProductStore } from '@/stores/products';
 import { useReviewStore } from '@/stores/reviews';
 import { useAuthStore } from '@/stores/auth';
-import { formatCurrency, cn } from '@/lib/utils';
+import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
+import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
 import { recommendationApi, productApi, type ProductRecommendation } from '@/lib/api';
 import type { StoreProduct } from '@/stores/products';
 
@@ -58,6 +59,7 @@ export default function ProductDetailPage({
   const [recommendations, setRecommendations] = useState<ProductRecommendation[]>([]);
   const [directProduct, setDirectProduct] = useState<StoreProduct | null>(null);
   const [directLoading, setDirectLoading] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -123,7 +125,11 @@ export default function ProductDetailPage({
   const selectedVariant =
     product.variants && product.variants.length > 0 ? product.variants[selectedVariantIndex] : null;
   const activePrice = selectedVariant ? selectedVariant.price : product.price;
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const dpProfiles = useDeliveryProfileStore((s) => s.profiles);
+  const dpDefault = useDeliveryProfileStore((s) => s.getDefaultProfile);
+  const deliveryProfile = product.delivery_profile_id
+    ? dpProfiles.find((p) => p.id === product.delivery_profile_id) || dpDefault()
+    : dpDefault();
 
   const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
@@ -163,7 +169,7 @@ export default function ProductDetailPage({
         <div className="space-y-3">
           <div className={cn('flex aspect-square items-center justify-center rounded-2xl overflow-hidden', hasImages ? 'bg-surface-secondary' : `bg-gradient-to-br ${gradient}`)}>
             {hasImages ? (
-              <img src={product.images![selectedImageIndex]} alt={product.name} className="h-full w-full object-cover" />
+              <img src={mediaUrl(product.images![selectedImageIndex])} alt={product.name} className="h-full w-full object-cover" />
             ) : (
               <span className="text-[10rem] font-bold text-white/40">{product.name.charAt(0)}</span>
             )}
@@ -173,7 +179,7 @@ export default function ProductDetailPage({
               {product.images!.map((img, i) => (
                 <button key={i} onClick={() => setSelectedImageIndex(i)}
                   className={cn('h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-colors', selectedImageIndex === i ? 'border-primary' : 'border-border hover:border-primary/50')}>
-                  <img src={img} alt={`${product.name} ${i + 1}`} className="h-full w-full object-cover" />
+                  <img src={mediaUrl(img)} alt={`${product.name} ${i + 1}`} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -283,19 +289,36 @@ export default function ProductDetailPage({
             </div>
           )}
 
-          {/* Trust badges */}
-          <div className="mt-8 grid grid-cols-3 gap-4 border-t border-gray-100 pt-8">
-            <div className="flex flex-col items-center text-center">
-              <Truck className="mb-2 h-5 w-5 text-primary" />
-              <span className="text-xs text-gray-600">Fast Delivery</span>
+          {/* Delivery, Return & Warranty */}
+          <div className="mt-8 space-y-0 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50">
+            {/* Delivery */}
+            <div className="flex gap-3 p-4">
+              <Truck className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Delivery</p>
+                <p className="mt-0.5 text-xs text-gray-600">
+                  Inside Dhaka: {deliveryProfile.estimated_delivery_dhaka} ({deliveryProfile.inside_dhaka_rate === 0 ? 'Free' : `৳${deliveryProfile.inside_dhaka_rate}`})
+                </p>
+                <p className="text-xs text-gray-600">
+                  Outside Dhaka: {deliveryProfile.estimated_delivery_outside} ({deliveryProfile.outside_dhaka_rate === 0 ? 'Free' : `৳${deliveryProfile.outside_dhaka_rate}`})
+                </p>
+              </div>
             </div>
-            <div className="flex flex-col items-center text-center">
-              <Shield className="mb-2 h-5 w-5 text-primary" />
-              <span className="text-xs text-gray-600">Secure Payment</span>
+            {/* Return Policy */}
+            <div className="flex gap-3 p-4">
+              <RotateCcw className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">7-Day Easy Return</p>
+                <p className="mt-0.5 text-xs text-gray-600">Return or exchange within 7 days of delivery. Item must be unused and in original packaging.</p>
+              </div>
             </div>
-            <div className="flex flex-col items-center text-center">
-              <RotateCcw className="mb-2 h-5 w-5 text-primary" />
-              <span className="text-xs text-gray-600">Easy Returns</span>
+            {/* Warranty */}
+            <div className="flex gap-3 p-4">
+              <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Warranty & Authenticity</p>
+                <p className="mt-0.5 text-xs text-gray-600">100% authentic products. Manufacturer warranty applicable where mentioned.</p>
+              </div>
             </div>
           </div>
 

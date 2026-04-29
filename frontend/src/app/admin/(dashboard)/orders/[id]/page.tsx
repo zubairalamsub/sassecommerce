@@ -31,7 +31,7 @@ const demoOrder = {
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { user, tenantId } = useAuthStore();
+  const { user, tenantId, token } = useAuthStore();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -50,7 +50,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         return;
       }
       try {
-        const data = await orderApi.get(id, tenantId);
+        const data = await orderApi.get(id, tenantId, token || undefined);
         setOrder(data);
       } catch {
         setOrder({ ...demoOrder, id, order_number: id });
@@ -59,14 +59,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       }
     }
     loadOrder();
-  }, [id, tenantId]);
+  }, [id, tenantId, token]);
 
   async function handleConfirm() {
     if (!order || !tenantId || !user) return;
     setActionLoading(true);
     setError('');
     try {
-      const updated = await orderApi.confirm(order.id, user.id, tenantId);
+      const updated = await orderApi.confirm(order.id, user.id, tenantId, token || undefined);
       setOrder(updated);
     } catch (err) {
       setError((err as Error).message || 'Failed to confirm order');
@@ -84,7 +84,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         tracking_number: trackingNumber.trim(),
         carrier: carrier.trim(),
         shipped_by: user.id,
-      }, tenantId);
+      }, tenantId, token || undefined);
       setOrder(updated);
       setShowShipDialog(false);
       setTrackingNumber('');
@@ -101,7 +101,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     setActionLoading(true);
     setError('');
     try {
-      const updated = await orderApi.cancel(order.id, cancelReason.trim(), user.id, tenantId);
+      const updated = await orderApi.cancel(order.id, cancelReason.trim(), user.id, tenantId, token || undefined);
       setOrder(updated);
       setShowCancelDialog(false);
       setCancelReason('');

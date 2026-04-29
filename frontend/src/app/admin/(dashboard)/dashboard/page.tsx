@@ -235,7 +235,7 @@ function ChartTooltip({
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const { tenantId } = useAuthStore();
+  const { tenantId, token } = useAuthStore();
   const [liveStats, setLiveStats] = useState(stats);
   const [liveRevenue, setLiveRevenue] = useState(revenueData);
   const [liveOrders, setLiveOrders] = useState(recentOrders);
@@ -262,7 +262,7 @@ export default function DashboardPage() {
       }
     }).catch(() => {});
 
-    orderApi.listByTenant(tenantId, 1, 5).then((res) => {
+    orderApi.listByTenant(tenantId, token || undefined, 1, 5).then((res) => {
       if (res.data && res.data.length > 0) {
         setLiveOrders(res.data.map((o) => ({
           id: o.order_number,

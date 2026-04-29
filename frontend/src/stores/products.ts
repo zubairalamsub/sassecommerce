@@ -21,9 +21,9 @@ interface ProductStore {
   error: string | null;
   fetchProducts: (tenantId: string) => Promise<void>;
   fetchCategories: (tenantId: string) => Promise<void>;
-  addProduct: (data: CreateProductRequest, tenantId: string) => Promise<StoreProduct>;
-  deleteProduct: (id: string, tenantId: string) => Promise<void>;
-  updateProduct: (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string) => Promise<void>;
+  addProduct: (data: CreateProductRequest, tenantId: string, token?: string) => Promise<StoreProduct>;
+  deleteProduct: (id: string, tenantId: string, token?: string) => Promise<void>;
+  updateProduct: (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string, token?: string) => Promise<void>;
   addCategory: (data: CreateCategoryRequest, tenantId: string) => Promise<void>;
   updateCategory: (id: string, data: UpdateCategoryRequest, tenantId: string) => Promise<void>;
   updateCategoryStatus: (id: string, status: 'active' | 'inactive', tenantId: string) => Promise<void>;
@@ -42,8 +42,18 @@ export const useProductStore = create<ProductStore>()(
         set({ loading: true, error: null });
         try {
           const res = await productApi.list(tenantId, 1, 100);
-          set({ products: res.data || [], loading: false });
+          const apiProducts = res.data || [];
+          if (apiProducts.length > 0) {
+            // Merge: keep local-only products that don't exist on the backend
+            const apiIds = new Set(apiProducts.map((p: StoreProduct) => p.id));
+            const localOnly = get().products.filter((p) => !apiIds.has(p.id));
+            set({ products: [...apiProducts, ...localOnly], loading: false });
+          } else {
+            // API returned empty — keep locally persisted data
+            set({ loading: false });
+          }
         } catch {
+          // Backend unavailable — keep localStorage data
           set({ loading: false });
         }
       },
@@ -51,74 +61,36 @@ export const useProductStore = create<ProductStore>()(
       fetchCategories: async (tenantId: string) => {
         try {
           const res = await categoryApi.list(tenantId);
-          set({ categories: res.data || [] });
+          const apiCategories = res.data || [];
+          if (apiCategories.length > 0) {
+            const apiIds = new Set(apiCategories.map((c: Category) => c.id));
+            const localOnly = get().categories.filter((c) => !apiIds.has(c.id));
+            set({ categories: [...apiCategories, ...localOnly] });
+          }
+          // If empty, keep locally persisted data
         } catch {
           // Backend unavailable — keep previously persisted data
         }
       },
 
-      addProduct: async (data: CreateProductRequest, tenantId: string) => {
-        try {
-          const product = await productApi.create(data, tenantId);
-          set((state) => ({ products: [product, ...state.products] }));
-          return product;
-        } catch {
-          // Backend unavailable — save locally
-          const now = new Date().toISOString();
-          const product: StoreProduct = {
-            id: `prod-${Date.now()}`,
-            tenant_id: tenantId,
-            name: data.name,
-            slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
-            description: data.description || '',
-            sku: data.sku,
-            price: data.price,
-            compare_at_price: data.compare_at_price,
-            category_id: data.category_id || '',
-            images: data.images || [],
-            tags: data.tags || [],
-            status: (data.status as StoreProduct['status']) || 'draft',
-            created_by: data.created_by,
-            created_at: now,
-            updated_at: now,
-          };
-          set((state) => ({ products: [product, ...state.products] }));
-          return product;
-        }
+      addProduct: async (data: CreateProductRequest, tenantId: string, token?: string) => {
+        const product = await productApi.create(data, tenantId, token);
+        set((state) => ({ products: [product, ...state.products] }));
+        return product;
       },
 
-      deleteProduct: async (id: string, tenantId: string) => {
-        try {
-          await productApi.delete(id, tenantId);
-        } catch {
-          // Backend unavailable — delete locally
-        }
+      deleteProduct: async (id: string, tenantId: string, token?: string) => {
+        await productApi.delete(id, tenantId, token);
         set((state) => ({
           products: state.products.filter((p) => p.id !== id),
         }));
       },
 
-      updateProduct: async (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string) => {
-        try {
-          const updated = await productApi.update(id, data, tenantId);
-          set((state) => ({
-            products: state.products.map((p) => (p.id === id ? updated : p)),
-          }));
-        } catch {
-          // Backend unavailable — update locally
-          set((state) => ({
-            products: state.products.map((p) =>
-              p.id === id
-                ? {
-                    ...p,
-                    ...data,
-                    status: (data.status as StoreProduct['status']) || p.status,
-                    updated_at: new Date().toISOString(),
-                  }
-                : p,
-            ),
-          }));
-        }
+      updateProduct: async (id: string, data: Partial<CreateProductRequest> & { updated_by: string }, tenantId: string, token?: string) => {
+        const updated = await productApi.update(id, data, tenantId, token);
+        set((state) => ({
+          products: state.products.map((p) => (p.id === id ? updated : p)),
+        }));
       },
 
       addCategory: async (data: CreateCategoryRequest, tenantId: string) => {

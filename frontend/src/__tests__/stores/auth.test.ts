@@ -121,21 +121,21 @@ describe("Auth Store", () => {
 });
 
 describe("demoLogin", () => {
-  test("returns user and token for valid demo credentials", () => {
-    const result = demoLogin("admin@fashion.com.bd", "admin123");
+  test("returns user and token for valid demo credentials", async () => {
+    const result = await demoLogin("admin@fashion.com.bd", "admin123");
     expect(result).not.toBeNull();
     expect(result!.user.email).toBe("admin@fashion.com.bd");
     expect(result!.user.role).toBe("admin");
-    expect(result!.token).toBe("demo-admin-token-t1");
+    expect(result!.token).toBeTruthy();
   });
 
-  test("returns null for wrong password", () => {
-    const result = demoLogin("admin@fashion.com.bd", "wrongpass");
+  test("returns null for wrong password", async () => {
+    const result = await demoLogin("admin@fashion.com.bd", "wrongpass");
     expect(result).toBeNull();
   });
 
-  test("returns null for unknown email", () => {
-    const result = demoLogin("unknown@test.com", "password");
+  test("returns null for unknown email", async () => {
+    const result = await demoLogin("unknown@test.com", "password");
     expect(result).toBeNull();
   });
 });

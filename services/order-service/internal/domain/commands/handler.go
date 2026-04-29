@@ -5,13 +5,20 @@ import (
 	"fmt"
 
 	"github.com/yourusername/ecommerce/order-service/internal/domain/aggregates"
+	"github.com/yourusername/ecommerce/order-service/internal/domain/events"
 	"github.com/yourusername/ecommerce/order-service/internal/eventstore"
 	"go.uber.org/zap"
 )
 
+// EventProjector projects events to the read model synchronously
+type EventProjector interface {
+	Project(event events.Event) error
+}
+
 // CommandHandler handles commands and coordinates with event store
 type CommandHandler struct {
 	eventStore eventstore.EventStore
+	projector  EventProjector
 	logger     *zap.Logger
 }
 
@@ -21,6 +28,11 @@ func NewCommandHandler(eventStore eventstore.EventStore, logger *zap.Logger) *Co
 		eventStore: eventStore,
 		logger:     logger,
 	}
+}
+
+// SetProjector sets the synchronous projector for read-after-write consistency
+func (h *CommandHandler) SetProjector(p EventProjector) {
+	h.projector = p
 }
 
 // Handle dispatches commands to appropriate handlers
@@ -67,6 +79,7 @@ func (h *CommandHandler) handleCreateOrder(cmd CreateOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -102,6 +115,7 @@ func (h *CommandHandler) handleAddOrderItem(cmd AddOrderItemCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -127,6 +141,7 @@ func (h *CommandHandler) handleRemoveOrderItem(cmd RemoveOrderItemCommand) error
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -151,6 +166,7 @@ func (h *CommandHandler) handleConfirmOrder(cmd ConfirmOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -176,6 +192,7 @@ func (h *CommandHandler) handleCancelOrder(cmd CancelOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -225,6 +242,7 @@ func (h *CommandHandler) handleDeliverOrder(cmd DeliverOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -247,4 +265,21 @@ func (h *CommandHandler) loadOrder(orderID string) (*aggregates.Order, error) {
 	order.LoadFromHistory(events)
 
 	return order, nil
+}
+
+// projectEvents synchronously updates the read model for read-after-write consistency.
+// Errors are logged but not returned — the event store is the source of truth.
+func (h *CommandHandler) projectEvents(savedEvents []events.Event) {
+	if h.projector == nil {
+		return
+	}
+	for _, event := range savedEvents {
+		if err := h.projector.Project(event); err != nil {
+			h.logger.Error("Failed to project event synchronously",
+				zap.String("event_type", string(event.GetEventType())),
+				zap.String("aggregate_id", event.GetAggregateID()),
+				zap.Error(err),
+			)
+		}
+	}
 }

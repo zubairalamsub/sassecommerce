@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,12 +13,20 @@ import {
 } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
+import { useProductStore } from '@/stores/products';
+import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
 import { formatCurrency } from '@/lib/utils';
-import { orderApi, promotionApi, shippingApi, paymentApi, type CouponValidateResponse, type ShippingRate } from '@/lib/api';
+import { orderApi, promotionApi, paymentApi, type CouponValidateResponse, type ShippingRate } from '@/lib/api';
 import { Tag, X, Truck } from 'lucide-react';
+
+const DHAKA_ZONE = ['Dhaka', 'Gazipur', 'Narayanganj', 'Tongi', 'Savar'];
 
 const BD_CITIES = [
   'Dhaka',
+  'Gazipur',
+  'Narayanganj',
+  'Tongi',
+  'Savar',
   'Chittagong',
   'Sylhet',
   'Rajshahi',
@@ -27,8 +35,13 @@ const BD_CITIES = [
   'Rangpur',
   'Mymensingh',
   'Comilla',
-  'Gazipur',
-  'Narayanganj',
+  'Bogra',
+  'Jessore',
+  'Cox\'s Bazar',
+  'Dinajpur',
+  'Tangail',
+  'Brahmanbaria',
+  'Narsingdi',
 ];
 
 const PAYMENT_METHODS = [
@@ -38,32 +51,42 @@ const PAYMENT_METHODS = [
   { id: 'cod', label: 'Cash on Delivery', description: 'Pay when you receive the product' },
 ];
 
-const WAREHOUSE_ADDRESS = {
-  name: 'Saajan Warehouse',
-  street: 'Tejgaon Industrial Area',
-  city: 'Dhaka',
-  state: 'Dhaka',
-  postal_code: '1208',
-  country: 'Bangladesh',
-};
-
-// Fallback carrier rates when shipping API is unavailable
-const FALLBACK_RATES: ShippingRate[] = [
-  { carrier: 'paperfly',    service_type: 'standard', rate: 55,  currency: 'BDT', estimated_days: 4 },
-  { carrier: 'pathao',      service_type: 'standard', rate: 60,  currency: 'BDT', estimated_days: 3 },
-  { carrier: 'redx',        service_type: 'standard', rate: 65,  currency: 'BDT', estimated_days: 4 },
-  { carrier: 'steadfast',   service_type: 'standard', rate: 70,  currency: 'BDT', estimated_days: 3 },
-  { carrier: 'sa_paribahan',service_type: 'standard', rate: 70,  currency: 'BDT', estimated_days: 5 },
-  { carrier: 'sundarban',   service_type: 'standard', rate: 80,  currency: 'BDT', estimated_days: 6 },
-];
+function estimatedDaysFromString(est: string, fallback: number): number {
+  const match = est.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : fallback;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
   const items = useCartStore((s) => s.items);
-  const total = useCartStore((s) => s.total);
   const clearCart = useCartStore((s) => s.clearCart);
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
+  const allProducts = useProductStore((s) => s.products);
+  const dpProfiles = useDeliveryProfileStore((s) => s.profiles);
+  const dpGetDefault = useDeliveryProfileStore((s) => s.getDefaultProfile);
+
+  // Wait for Zustand to hydrate from localStorage
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { setHydrated(true); }, []);
+
+  // Resolve the highest-rate delivery profile among all cart items
+  function getCartDeliveryProfile() {
+    const defaultProfile = dpGetDefault();
+    let highest = defaultProfile;
+    for (const item of items) {
+      const product = allProducts.find((p) => p.id === item.productId);
+      const profileId = product?.delivery_profile_id;
+      const profile = profileId
+        ? dpProfiles.find((p) => p.id === profileId) || defaultProfile
+        : defaultProfile;
+      // Use the profile with the highest outside_dhaka_rate as the "most expensive"
+      if (profile.outside_dhaka_rate > highest.outside_dhaka_rate) {
+        highest = profile;
+      }
+    }
+    return highest;
+  }
 
   const [formData, setFormData] = useState({
     name: user ? `${user.first_name} ${user.last_name}` : '',
@@ -76,6 +99,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('bkash');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState<CouponValidateResponse | null>(null);
@@ -83,9 +107,8 @@ export default function CheckoutPage() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [selectedCarrier, setSelectedCarrier] = useState<ShippingRate | null>(null);
-  const [shippingLoading, setShippingLoading] = useState(false);
 
-  const subtotal = total();
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discount = couponApplied?.discount_amount ?? 0;
   const shippingCost = selectedCarrier?.rate ?? (shippingRates.length > 0 ? shippingRates[0].rate : 0);
   const grandTotal = Math.max(0, subtotal + shippingCost - discount);
@@ -109,33 +132,22 @@ export default function CheckoutPage() {
     }
   }
 
-  async function fetchShippingRates(city: string, postalCode: string) {
+  function fetchShippingRates(city: string, _postalCode: string) {
     if (!city) return;
-    setShippingLoading(true);
     setSelectedCarrier(null);
-    const weightOz = items.reduce((sum, i) => sum + i.quantity * 17.6, 0) || 17.6;
-    try {
-      const authToken = token ?? undefined;
-      const res = await shippingApi.getRates({
-        tenant_id: TENANT_ID,
-        from_address: WAREHOUSE_ADDRESS,
-        to_address: {
-          name: formData.name || 'Customer',
-          street: formData.street || city,
-          city,
-          state: city,
-          postal_code: postalCode || '1000',
-          country: 'Bangladesh',
-        },
-        weight_oz: weightOz,
-      }, authToken);
-      const rates = res.rates ?? [];
-      setShippingRates(rates.length > 0 ? rates : FALLBACK_RATES);
-    } catch {
-      setShippingRates(FALLBACK_RATES);
-    } finally {
-      setShippingLoading(false);
-    }
+    const isDhaka = DHAKA_ZONE.includes(city);
+    const profile = getCartDeliveryProfile();
+    const stdRate = isDhaka ? profile.inside_dhaka_rate : profile.outside_dhaka_rate;
+    const expRate = isDhaka ? profile.inside_dhaka_express_rate : profile.outside_dhaka_express_rate;
+    const estDays = isDhaka
+      ? estimatedDaysFromString(profile.estimated_delivery_dhaka, 2)
+      : estimatedDaysFromString(profile.estimated_delivery_outside, 4);
+    const rates: ShippingRate[] = [
+      { carrier: 'standard', service_type: isDhaka ? 'Inside Dhaka' : 'Outside Dhaka', rate: stdRate, currency: 'BDT', estimated_days: estDays },
+      { carrier: 'express', service_type: isDhaka ? 'Inside Dhaka Express' : 'Outside Dhaka Express', rate: expRate, currency: 'BDT', estimated_days: Math.max(1, estDays - 1) },
+    ];
+    setShippingRates(rates);
+    setSelectedCarrier(rates[0]);
   }
 
   function validate(): boolean {
@@ -182,6 +194,7 @@ export default function CheckoutPage() {
     if (!validate()) return;
 
     setIsSubmitting(true);
+    setOrderError('');
     try {
       const address = {
         street: formData.street,
@@ -205,22 +218,21 @@ export default function CheckoutPage() {
         orderReq.guest_phone = formData.phone;
       }
 
-      const order = await orderApi.create(orderReq, TENANT_ID);
-      const orderId = order.order_id || order.id || `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const order = await orderApi.create(orderReq, TENANT_ID, token || undefined);
+      const orderId = order.order_id || order.id || '';
 
-      // Add items to the order
-      await Promise.allSettled(
-        items.map((item) =>
-          orderApi.addItem(orderId, {
-            product_id: item.productId,
-            variant_id: item.variantId || '',
-            sku: item.sku,
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.price,
-          }, TENANT_ID),
-        ),
-      );
+      // Add items sequentially (event-sourced order uses optimistic concurrency,
+      // so parallel adds cause version conflicts)
+      for (const item of items) {
+        await orderApi.addItem(orderId, {
+          product_id: item.productId,
+          variant_id: item.variantId || '',
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+        }, TENANT_ID, token || undefined);
+      }
 
       // Record payment (skip for COD — customer pays on delivery)
       if (paymentMethod !== 'cod' && user) {
@@ -232,7 +244,7 @@ export default function CheckoutPage() {
             amount: grandTotal,
             currency: 'BDT',
             method: paymentMethod,
-          }, TENANT_ID);
+          }, TENANT_ID, token || undefined);
         } catch {
           // Payment recording failed — order still placed
         }
@@ -240,20 +252,25 @@ export default function CheckoutPage() {
 
       setIsSubmitting(false);
       setOrderPlaced(true);
-      clearCart();
+      const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
+      clearCart(auth);
       setTimeout(() => {
         router.push(`/orders/${orderId}`);
       }, 2000);
-    } catch {
-      // Fallback: create a local order ID if API is unavailable
+    } catch (err) {
       setIsSubmitting(false);
-      setOrderPlaced(true);
-      const orderId = `ORD-${Date.now().toString(36).toUpperCase()}`;
-      clearCart();
-      setTimeout(() => {
-        router.push(`/orders/${orderId}`);
-      }, 2000);
+      setOrderError(
+        err instanceof Error ? err.message : 'Failed to place order. Please try again.',
+      );
     }
+  }
+
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   if (items.length === 0 && !orderPlaced) {
@@ -500,60 +517,60 @@ export default function CheckoutPage() {
               ))}
             </div>
 
-            {/* Shipping Method */}
-            {(shippingRates.length > 0 || shippingLoading) && (
+            {/* Delivery Option */}
+            {shippingRates.length > 0 && (
               <div className="mt-4 border-t border-gray-200 pt-4">
                 <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-700">
                   <Truck className="h-4 w-4" />
-                  Shipping Method
+                  Delivery Option
                 </h3>
-                {shippingLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {shippingRates.map((rate) => {
-                      const isSelected = selectedCarrier
-                        ? selectedCarrier.carrier === rate.carrier && selectedCarrier.service_type === rate.service_type
-                        : shippingRates[0].carrier === rate.carrier && shippingRates[0].service_type === rate.service_type;
-                      return (
-                        <label
-                          key={`${rate.carrier}-${rate.service_type}`}
-                          className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
-                            isSelected
-                              ? 'border-primary bg-primary/5'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="shippingCarrier"
-                              checked={isSelected}
-                              onChange={() => setSelectedCarrier(rate)}
-                              className="h-3.5 w-3.5 text-primary focus:ring-primary"
-                            />
-                            <div>
-                              <span className="text-sm font-medium capitalize text-gray-900">
-                                {rate.carrier.replace('_', ' ')}
+                <div className="mb-2 rounded-md bg-blue-50 px-3 py-1.5">
+                  <span className="text-xs font-medium text-blue-700">
+                    {DHAKA_ZONE.includes(formData.city) ? 'Inside Dhaka Zone' : 'Outside Dhaka'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {shippingRates.map((rate) => {
+                    const isSelected = selectedCarrier?.carrier === rate.carrier;
+                    const isExpress = rate.carrier === 'express';
+                    return (
+                      <label
+                        key={rate.carrier}
+                        className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-3 transition-colors ${
+                          isSelected
+                            ? 'border-primary bg-primary/5'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="shippingCarrier"
+                            checked={isSelected}
+                            onChange={() => setSelectedCarrier(rate)}
+                            className="h-3.5 w-3.5 text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-gray-900">
+                                {isExpress ? 'Express Delivery' : 'Standard Delivery'}
                               </span>
-                              <span className="ml-1 text-xs text-gray-500 capitalize">
-                                ({rate.service_type})
-                              </span>
-                              <p className="text-xs text-gray-400">{rate.estimated_days}–{rate.estimated_days + 1} days</p>
+                              {isExpress && (
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">FAST</span>
+                              )}
                             </div>
+                            <p className="text-xs text-gray-500">
+                              {rate.estimated_days === 1 ? 'Next day delivery' : `${rate.estimated_days}-${rate.estimated_days + 1} business days`}
+                            </p>
                           </div>
-                          <span className="text-sm font-semibold text-gray-900">
-                            ৳{rate.rate}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">
+                          ৳{rate.rate}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -619,17 +636,15 @@ export default function CheckoutPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">
-                  Shipping
-                  {(selectedCarrier ?? shippingRates[0]) && (
-                    <span className="ml-1 capitalize text-gray-400">
-                      ({(selectedCarrier ?? shippingRates[0]).carrier.replace('_', ' ')})
+                  Delivery
+                  {selectedCarrier && (
+                    <span className="ml-1 text-gray-400">
+                      ({selectedCarrier.carrier === 'express' ? 'Express' : 'Standard'})
                     </span>
                   )}
                 </span>
                 <span className="font-medium text-gray-900">
-                  {shippingLoading ? (
-                    <span className="inline-block h-4 w-12 animate-pulse rounded bg-gray-200" />
-                  ) : shippingRates.length > 0 ? (
+                  {shippingRates.length > 0 ? (
                     formatCurrency(shippingCost)
                   ) : (
                     <span className="text-gray-400 text-xs">Select city</span>
@@ -653,6 +668,13 @@ export default function CheckoutPage() {
                 </div>
               </div>
             </div>
+
+            {/* Order error */}
+            {orderError && (
+              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {orderError}
+              </div>
+            )}
 
             {/* Place Order button */}
             <button

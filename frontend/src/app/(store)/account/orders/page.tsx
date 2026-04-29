@@ -12,16 +12,21 @@ const TENANT_ID = 'tenant_saajan';
 
 function OrdersContent() {
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!user) return;
-    orderApi.listByCustomer(user.id, TENANT_ID)
+    orderApi.listByCustomer(user.id, TENANT_ID, token || undefined)
       .then((res) => setOrders(res.data ?? []))
-      .catch(() => setOrders([]))
+      .catch((err) => {
+        setOrders([]);
+        setError(err instanceof Error ? err.message : 'Failed to load orders');
+      })
       .finally(() => setLoading(false));
-  }, [user?.id]);
+  }, [user?.id, token]);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
@@ -43,12 +48,19 @@ function OrdersContent() {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* Loading */}
       {loading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      ) : orders.length === 0 ? (
+      ) : orders.length === 0 && !error ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white py-16 text-center shadow-sm">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
             <ShoppingBag className="h-8 w-8 text-gray-400" />

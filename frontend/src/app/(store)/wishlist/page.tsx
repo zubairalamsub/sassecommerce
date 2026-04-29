@@ -6,7 +6,7 @@ import { Heart, ShoppingCart, Trash2, Check } from 'lucide-react';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
-import { formatCurrency, cn } from '@/lib/utils';
+import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
 
 const TENANT_ID = 'tenant_saajan';
 
@@ -103,7 +103,7 @@ export default function WishlistPage() {
                 <Link href={`/products/${item.slug}`}>
                   <div className={cn('relative h-52 bg-gradient-to-br flex items-center justify-center overflow-hidden', gradients[index % gradients.length])}>
                     {item.image ? (
-                      <img src={item.image} alt={item.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <img src={mediaUrl(item.image)} alt={item.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     ) : (
                       <span className="text-5xl font-bold text-white/30">{item.name[0]}</span>
                     )}

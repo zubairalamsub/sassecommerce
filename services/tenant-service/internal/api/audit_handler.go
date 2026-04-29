@@ -22,6 +22,33 @@ func NewAuditHandler(service service.AuditService, logger *logrus.Logger) *Audit
 	}
 }
 
+// GetAuditLog godoc
+// @Summary Get a single audit log
+// @Description Get a single audit log entry by ID
+// @Tags audit
+// @Produce json
+// @Param id path string true "Audit Log ID"
+// @Success 200 {object} models.AuditLog
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /audit-logs/{id} [get]
+func (h *AuditHandler) GetAuditLog(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "id is required"})
+		return
+	}
+
+	log, err := h.service.GetAuditLog(c.Request.Context(), id)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get audit log")
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Audit log not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, log)
+}
+
 // ListAuditLogs godoc
 // @Summary List audit logs
 // @Description List audit logs with filtering and pagination

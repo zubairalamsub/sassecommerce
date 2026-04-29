@@ -104,6 +104,7 @@ func main() {
 
 		// Audit logs
 		v1.GET("/audit-logs", auditHandler.ListAuditLogs)
+		v1.GET("/audit-logs/:id", auditHandler.GetAuditLog)
 	}
 
 	// Create HTTP server

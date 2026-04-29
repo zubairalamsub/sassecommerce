@@ -396,6 +396,8 @@ export const auditApi = {
     params.set('page_size', String(filters?.page_size ?? 25));
     return request<AuditLogResponse>('tenant', `/api/v1/audit-logs?${params}`, { tenantId, token });
   },
+  get: (id: string, tenantId: string, token: string) =>
+    request<AuditLog>('tenant', `/api/v1/audit-logs/${id}`, { tenantId, token }),
 };
 
 // Payment Service

@@ -10,7 +10,7 @@ import (
 
 type AuditRepository interface {
 	Create(ctx context.Context, log *models.AuditLog) error
-	GetByID(ctx context.Context, id string) (*models.AuditLog, error)
+	GetByID(ctx context.Context, id string, tenantID ...string) (*models.AuditLog, error)
 	List(ctx context.Context, filters AuditFilters) ([]models.AuditLog, int64, error)
 }
 
@@ -40,9 +40,13 @@ func (r *auditRepository) Create(ctx context.Context, log *models.AuditLog) erro
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *auditRepository) GetByID(ctx context.Context, id string) (*models.AuditLog, error) {
+func (r *auditRepository) GetByID(ctx context.Context, id string, tenantID ...string) (*models.AuditLog, error) {
 	var log models.AuditLog
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&log).Error
+	q := r.db.WithContext(ctx).Where("id = ?", id)
+	if len(tenantID) > 0 && tenantID[0] != "" {
+		q = q.Where("tenant_id = ?", tenantID[0])
+	}
+	err := q.First(&log).Error
 	if err != nil {
 		return nil, err
 	}

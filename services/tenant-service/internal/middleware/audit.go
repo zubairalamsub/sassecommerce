@@ -97,9 +97,12 @@ func AuditMiddleware(auditService service.AuditService, logger *logrus.Logger) g
 			},
 		}
 
+		// Capture context before goroutine — gin recycles *gin.Context after the handler returns
+		ctx := c.Request.Context()
+
 		// Don't block the response for audit logging
 		go func() {
-			if err := auditService.CreateAuditLog(c.Request.Context(), auditReq); err != nil {
+			if err := auditService.CreateAuditLog(ctx, auditReq); err != nil {
 				logger.WithError(err).Error("Failed to create audit log")
 			}
 		}()

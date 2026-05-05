@@ -11,7 +11,7 @@ import (
 
 type AuditService interface {
 	CreateAuditLog(ctx context.Context, req *models.CreateAuditLogRequest) error
-	GetAuditLog(ctx context.Context, id string) (*models.AuditLog, error)
+	GetAuditLog(ctx context.Context, id string, tenantID ...string) (*models.AuditLog, error)
 	GetAuditLogs(ctx context.Context, filters repository.AuditFilters) ([]models.AuditLog, int64, error)
 }
 
@@ -64,8 +64,8 @@ func (s *auditService) CreateAuditLog(ctx context.Context, req *models.CreateAud
 	return nil
 }
 
-func (s *auditService) GetAuditLog(ctx context.Context, id string) (*models.AuditLog, error) {
-	return s.repo.GetByID(ctx, id)
+func (s *auditService) GetAuditLog(ctx context.Context, id string, tenantID ...string) (*models.AuditLog, error) {
+	return s.repo.GetByID(ctx, id, tenantID...)
 }
 
 func (s *auditService) GetAuditLogs(ctx context.Context, filters repository.AuditFilters) ([]models.AuditLog, int64, error) {

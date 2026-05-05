@@ -39,7 +39,13 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 		return
 	}
 
-	log, err := h.service.GetAuditLog(c.Request.Context(), id)
+	// Enforce tenant isolation — only return logs belonging to the requesting tenant
+	tenantID := c.Query("tenant_id")
+	if tenantID == "" {
+		tenantID = c.GetHeader("X-Tenant-Id")
+	}
+
+	log, err := h.service.GetAuditLog(c.Request.Context(), id, tenantID)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get audit log")
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: "Audit log not found"})

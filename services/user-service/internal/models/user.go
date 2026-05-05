@@ -98,7 +98,7 @@ type AddWishlistItemRequest struct {
 
 // RegisterRequest represents a user registration request
 type RegisterRequest struct {
-	TenantID  string `json:"tenant_id" binding:"required,uuid"`
+	TenantID  string `json:"tenant_id" binding:"required"`
 	Email     string `json:"email" binding:"required,email"`
 	Username  string `json:"username" binding:"required,min=3,max=50"`
 	Password  string `json:"password" binding:"required,min=8"`
@@ -109,7 +109,7 @@ type RegisterRequest struct {
 
 // LoginRequest represents a user login request
 type LoginRequest struct {
-	TenantID string `json:"tenant_id" binding:"required,uuid"`
+	TenantID string `json:"tenant_id" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }

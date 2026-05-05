@@ -61,6 +61,9 @@ const (
 	ResourceUser         AuditResource = "user"
 	ResourceProduct      AuditResource = "product"
 	ResourceOrder        AuditResource = "order"
+	ResourcePayment      AuditResource = "payment"
+	ResourceInventory    AuditResource = "inventory"
+	ResourceShipping     AuditResource = "shipping"
 )
 
 // CreateAuditLogRequest represents audit log creation request

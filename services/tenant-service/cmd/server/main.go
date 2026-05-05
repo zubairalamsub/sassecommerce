@@ -11,6 +11,7 @@ import (
 
 	"github.com/ecommerce/tenant-service/internal/api"
 	"github.com/ecommerce/tenant-service/internal/config"
+	"github.com/ecommerce/tenant-service/internal/messaging"
 	"github.com/ecommerce/tenant-service/internal/middleware"
 	"github.com/ecommerce/tenant-service/internal/models"
 	"github.com/ecommerce/tenant-service/internal/repository"
@@ -19,6 +20,7 @@ import (
 	"github.com/ecommerce/tenant-service/pkg/kafka"
 	"github.com/ecommerce/tenant-service/pkg/logger"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -59,12 +61,24 @@ func main() {
 	tenantHandler := api.NewTenantHandler(tenantService, log)
 	auditHandler := api.NewAuditHandler(auditService, log)
 
+	// Start centralised audit event consumer (listens to all service Kafka topics)
+	auditConsumer := messaging.NewAuditEventConsumer(cfg.Kafka.Brokers, auditService, log)
+	auditConsumer.Start(context.Background())
+	defer auditConsumer.Close()
+
 	// Setup Gin router
 	if cfg.Server.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
+		Logger:          log,
+		LogRequestBody:  true,
+		LogResponseBody: true,
+		SkipPaths:       []string{"/health", "/ready"},
+	}))
 
 	// Configure CORS
 	router.Use(cors.New(cors.Config{

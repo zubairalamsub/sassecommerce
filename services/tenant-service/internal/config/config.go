@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"strings"
+
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 )
@@ -65,7 +67,7 @@ func Load() *Config {
 			DB:       0,
 		},
 		Kafka: KafkaConfig{
-			Brokers: []string{getEnv("KAFKA_BROKER", "localhost:9092")},
+			Brokers: parseBrokers(getEnv("KAFKA_BROKERS", getEnv("KAFKA_BROKER", "localhost:9092"))),
 			Topic:   "tenant-events",
 		},
 	}
@@ -76,4 +78,15 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func parseBrokers(raw string) []string {
+	var brokers []string
+	for _, b := range strings.Split(raw, ",") {
+		b = strings.TrimSpace(b)
+		if b != "" {
+			brokers = append(brokers, b)
+		}
+	}
+	return brokers
 }

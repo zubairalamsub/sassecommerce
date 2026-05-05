@@ -201,7 +201,12 @@ func setupRouter(
 	// Global middleware
 	router.Use(gin.Recovery())
 	router.Use(corsMiddleware())
-	router.Use(requestLoggerMiddleware(logger))
+	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
+		Logger:          logger,
+		LogRequestBody:  true,
+		LogResponseBody: true,
+		SkipPaths:       []string{"/health", "/ready"},
+	}))
 	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
 		Rate:   100,
 		Window: time.Minute,

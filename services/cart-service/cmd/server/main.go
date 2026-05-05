@@ -78,7 +78,14 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
+		Logger:          log,
+		LogRequestBody:  true,
+		LogResponseBody: true,
+		SkipPaths:       []string{"/health", "/ready"},
+	}))
 
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},

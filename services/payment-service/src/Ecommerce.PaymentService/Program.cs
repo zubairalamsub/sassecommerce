@@ -1,6 +1,7 @@
 using System.Text;
 using Ecommerce.PaymentService.Data;
 using Ecommerce.PaymentService.Messaging;
+using Ecommerce.PaymentService.Middleware;
 using Ecommerce.PaymentService.Repositories;
 using Ecommerce.PaymentService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -122,7 +123,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseSerilogRequestLogging();
+app.UseRequestResponseLogging();
 
 app.UseCors();
 

@@ -22,17 +22,14 @@ func NewMenuHandler(service service.MenuService, logger *logrus.Logger) *MenuHan
 	}
 }
 
-func RegisterMenuRoutes(router *gin.Engine, handler *MenuHandler) {
-	v1 := router.Group("/api/v1/menus")
+func RegisterMenuRoutes(router *gin.Engine, handler *MenuHandler, authMiddleware ...gin.HandlerFunc) {
+	// Public read endpoints
+	pub := router.Group("/api/v1/menus")
 	{
-		v1.POST("", handler.CreateMenu)
-		v1.GET("", handler.ListMenus)
-		v1.GET("/:id", handler.GetMenu)
-		v1.PUT("/:id", handler.UpdateMenu)
-		v1.DELETE("/:id", handler.DeleteMenu)
+		pub.GET("", handler.ListMenus)
+		pub.GET("/:id", handler.GetMenu)
 	}
 
-	// Separate groups to avoid Gin wildcard param name conflicts
 	slug := router.Group("/api/v1/menus/slug")
 	{
 		slug.GET("/:slug", handler.GetMenuBySlug)
@@ -43,7 +40,17 @@ func RegisterMenuRoutes(router *gin.Engine, handler *MenuHandler) {
 		location.GET("/:location", handler.ListMenusByLocation)
 	}
 
+	// Protected write endpoints
+	prot := router.Group("/api/v1/menus")
+	prot.Use(authMiddleware...)
+	{
+		prot.POST("", handler.CreateMenu)
+		prot.PUT("/:id", handler.UpdateMenu)
+		prot.DELETE("/:id", handler.DeleteMenu)
+	}
+
 	items := router.Group("/api/v1/menu-items")
+	items.Use(authMiddleware...)
 	{
 		items.POST("/:menuId", handler.CreateMenuItem)
 		items.PUT("/:itemId", handler.UpdateMenuItem)
@@ -51,6 +58,7 @@ func RegisterMenuRoutes(router *gin.Engine, handler *MenuHandler) {
 	}
 
 	reorder := router.Group("/api/v1/menus-reorder")
+	reorder.Use(authMiddleware...)
 	{
 		reorder.PUT("/:menuId", handler.ReorderItems)
 	}

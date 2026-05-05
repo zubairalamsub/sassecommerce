@@ -73,7 +73,14 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
+		Logger:          log,
+		LogRequestBody:  true,
+		LogResponseBody: true,
+		SkipPaths:       []string{"/health", "/ready"},
+	}))
 
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
@@ -91,15 +98,15 @@ func main() {
 		})
 	})
 
-	// JWT Auth middleware
+	// JWT Auth middleware (applied only to write endpoints)
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production-12345"
 	}
-	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
+	authMw := sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret})
 
-	api.RegisterRoutes(router, handler)
-	api.RegisterMenuRoutes(router, menuHandler)
+	api.RegisterRoutes(router, handler, authMw)
+	api.RegisterMenuRoutes(router, menuHandler, authMw)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Server.Port),

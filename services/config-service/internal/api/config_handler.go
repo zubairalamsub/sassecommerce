@@ -23,29 +23,27 @@ func NewConfigHandler(service service.ConfigService, logger *logrus.Logger) *Con
 	}
 }
 
-func RegisterRoutes(router *gin.Engine, handler *ConfigHandler) {
-	v1 := router.Group("/api/v1/config")
+func RegisterRoutes(router *gin.Engine, handler *ConfigHandler, authMiddleware ...gin.HandlerFunc) {
+	// Public read endpoints (storefront needs unauthenticated access)
+	pub := router.Group("/api/v1/config")
 	{
-		// Config CRUD
-		v1.GET("/get", handler.GetConfig)
-		v1.POST("/set", handler.SetConfig)
-		v1.DELETE("/:id", handler.DeleteConfig)
+		pub.GET("/get", handler.GetConfig)
+		pub.GET("/namespace/:namespace", handler.ListByNamespace)
+		pub.GET("/namespaces", handler.ListNamespaces)
+		pub.GET("/search", handler.SearchConfigs)
+		pub.POST("/bulk/get", handler.BulkGet)
+		pub.GET("/export/:namespace", handler.ExportNamespace)
+		pub.GET("/audit", handler.GetAuditLog)
+		pub.GET("/audit/:configId", handler.GetConfigHistory)
+	}
 
-		// Listing & search
-		v1.GET("/namespace/:namespace", handler.ListByNamespace)
-		v1.GET("/namespaces", handler.ListNamespaces)
-		v1.GET("/search", handler.SearchConfigs)
-
-		// Bulk operations
-		v1.POST("/bulk/get", handler.BulkGet)
-		v1.POST("/bulk/set", handler.BulkSet)
-
-		// Export
-		v1.GET("/export/:namespace", handler.ExportNamespace)
-
-		// Audit
-		v1.GET("/audit", handler.GetAuditLog)
-		v1.GET("/audit/:configId", handler.GetConfigHistory)
+	// Protected write endpoints (require auth)
+	prot := router.Group("/api/v1/config")
+	prot.Use(authMiddleware...)
+	{
+		prot.POST("/set", handler.SetConfig)
+		prot.DELETE("/:id", handler.DeleteConfig)
+		prot.POST("/bulk/set", handler.BulkSet)
 	}
 }
 

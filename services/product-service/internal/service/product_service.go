@@ -220,6 +220,15 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 		return nil, errors.New("product not found")
 	}
 
+	// Snapshot old values before mutation
+	oldValues := map[string]interface{}{
+		"name":   product.Name,
+		"sku":    product.SKU,
+		"price":  product.Price,
+		"status": product.Status,
+		"brand":  product.Brand,
+	}
+
 	// Update fields if provided
 	if req.Name != nil {
 		product.Name = *req.Name
@@ -284,7 +293,7 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 
 	s.logger.WithField("product_id", id).Info("Product updated successfully")
 
-	// Publish ProductUpdated event
+	// Publish ProductUpdated event with before/after values
 	s.publishEvent(ctx, "ProductUpdated", map[string]interface{}{
 		"tenant_id":  product.TenantID,
 		"product_id": id,
@@ -292,6 +301,8 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 		"sku":        product.SKU,
 		"price":      product.Price,
 		"status":     product.Status,
+		"brand":      product.Brand,
+		"old_values":  oldValues,
 	})
 
 	return product.ToResponse(), nil
@@ -299,6 +310,9 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 
 // DeleteProduct deletes a product (soft delete)
 func (s *productService) DeleteProduct(ctx context.Context, id string) error {
+	// Fetch product first to get tenant_id for the event
+	product, _ := s.productRepo.GetByID(ctx, id)
+
 	if err := s.productRepo.Delete(ctx, id); err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to delete product")
 		return errors.New("failed to delete product")
@@ -307,9 +321,15 @@ func (s *productService) DeleteProduct(ctx context.Context, id string) error {
 	s.logger.WithField("product_id", id).Info("Product deleted successfully")
 
 	// Publish ProductDeleted event
-	s.publishEvent(ctx, "ProductDeleted", map[string]interface{}{
+	eventPayload := map[string]interface{}{
 		"product_id": id,
-	})
+	}
+	if product != nil {
+		eventPayload["tenant_id"] = product.TenantID
+		eventPayload["name"] = product.Name
+		eventPayload["sku"] = product.SKU
+	}
+	s.publishEvent(ctx, "ProductDeleted", eventPayload)
 
 	return nil
 }

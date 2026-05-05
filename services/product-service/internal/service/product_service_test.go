@@ -15,10 +15,21 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// mockKafkaPublisher is an inline mock for KafkaPublisher
+type mockKafkaPublisher struct {
+	mock.Mock
+}
+
+func (m *mockKafkaPublisher) Publish(ctx context.Context, topic, key string, value []byte) error {
+	args := m.Called(ctx, topic, key, value)
+	return args.Error(0)
+}
+
 type ProductServiceTestSuite struct {
 	suite.Suite
 	mockProductRepo  *mocks.MockProductRepository
 	mockCategoryRepo *mocks.MockCategoryRepository
+	mockKafka        *mockKafkaPublisher
 	service          ProductService
 	logger           *logrus.Logger
 	ctx              context.Context
@@ -27,9 +38,11 @@ type ProductServiceTestSuite struct {
 func (suite *ProductServiceTestSuite) SetupTest() {
 	suite.mockProductRepo = new(mocks.MockProductRepository)
 	suite.mockCategoryRepo = new(mocks.MockCategoryRepository)
+	suite.mockKafka = new(mockKafkaPublisher)
+	suite.mockKafka.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	suite.logger = logrus.New()
 	suite.logger.SetOutput(io.Discard)
-	suite.service = NewProductService(suite.mockProductRepo, suite.mockCategoryRepo, suite.logger)
+	suite.service = NewProductService(suite.mockProductRepo, suite.mockCategoryRepo, suite.mockKafka, suite.logger)
 	suite.ctx = context.Background()
 }
 
@@ -306,6 +319,12 @@ func (suite *ProductServiceTestSuite) TestUpdateProduct_CategoryChange() {
 func (suite *ProductServiceTestSuite) TestDeleteProduct_Success() {
 	productID := primitive.NewObjectID()
 
+	suite.mockProductRepo.On("GetByID", suite.ctx, productID.Hex()).Return(&models.Product{
+		ID:       productID,
+		TenantID: "tenant-1",
+		Name:     "Test Product",
+		SKU:      "PROD-001",
+	}, nil)
 	suite.mockProductRepo.On("Delete", suite.ctx, productID.Hex()).Return(nil)
 
 	err := suite.service.DeleteProduct(suite.ctx, productID.Hex())
@@ -315,6 +334,7 @@ func (suite *ProductServiceTestSuite) TestDeleteProduct_Success() {
 }
 
 func (suite *ProductServiceTestSuite) TestDeleteProduct_NotFound() {
+	suite.mockProductRepo.On("GetByID", suite.ctx, "non-existent").Return(nil, errors.New("not found"))
 	suite.mockProductRepo.On("Delete", suite.ctx, "non-existent").Return(errors.New("product not found"))
 
 	err := suite.service.DeleteProduct(suite.ctx, "non-existent")

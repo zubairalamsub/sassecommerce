@@ -327,7 +327,12 @@ func (p *OrderProjection) GetOrderItems(orderID string) ([]*queries.OrderItemRea
 // GetOrdersByCustomer retrieves orders for a customer
 func (p *OrderProjection) GetOrdersByCustomer(customerID string, limit, offset int) ([]*queries.OrderSummary, error) {
 	rows, err := p.db.Query(`
-		SELECT o.id, o.customer_id, o.status, o.total_amount, o.currency, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.status,
+			CASE WHEN o.total_amount = 0
+				THEN COALESCE((SELECT SUM(total_price) FROM order_item_read_model WHERE order_id = o.id), 0)
+				ELSE o.total_amount
+			END as total_amount,
+			o.currency, o.created_at, o.updated_at,
 			COALESCE((SELECT COUNT(*) FROM order_item_read_model WHERE order_id = o.id), 0) as item_count
 		FROM order_read_model o
 		WHERE o.customer_id = $1
@@ -345,7 +350,12 @@ func (p *OrderProjection) GetOrdersByCustomer(customerID string, limit, offset i
 // GetOrdersByTenant retrieves orders for a tenant
 func (p *OrderProjection) GetOrdersByTenant(tenantID string, limit, offset int) ([]*queries.OrderSummary, error) {
 	rows, err := p.db.Query(`
-		SELECT o.id, o.customer_id, o.status, o.total_amount, o.currency, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.status,
+			CASE WHEN o.total_amount = 0
+				THEN COALESCE((SELECT SUM(total_price) FROM order_item_read_model WHERE order_id = o.id), 0)
+				ELSE o.total_amount
+			END as total_amount,
+			o.currency, o.created_at, o.updated_at,
 			COALESCE((SELECT COUNT(*) FROM order_item_read_model WHERE order_id = o.id), 0) as item_count
 		FROM order_read_model o
 		WHERE o.tenant_id = $1

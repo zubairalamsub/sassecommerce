@@ -1,7 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
@@ -31,7 +34,9 @@ func NewRouter(
 
 // Setup configures all routes
 func (r *Router) Setup() *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(r.requestResponseLogger())
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -91,4 +96,97 @@ func (r *Router) Setup() *gin.Engine {
 	}
 
 	return router
+}
+
+// responseBodyWriter captures response body for logging.
+type responseBodyWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+	max  int
+}
+
+func (w *responseBodyWriter) Write(b []byte) (int, error) {
+	if w.body.Len() < w.max {
+		remaining := w.max - w.body.Len()
+		if len(b) > remaining {
+			w.body.Write(b[:remaining])
+		} else {
+			w.body.Write(b)
+		}
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (r *Router) requestResponseLogger() gin.HandlerFunc {
+	const maxBodySize = 10 * 1024
+
+	sensitiveHeaders := map[string]bool{
+		"authorization": true,
+		"cookie":        true,
+		"x-api-key":     true,
+	}
+
+	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/ready" {
+			c.Next()
+			return
+		}
+
+		startTime := time.Now()
+
+		// Capture request body
+		var reqBody string
+		if c.Request.Body != nil && c.Request.ContentLength > 0 {
+			bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, maxBodySize))
+			if err == nil {
+				reqBody = string(bodyBytes)
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+		}
+
+		// Capture headers
+		headers := make(map[string]string)
+		for key, values := range c.Request.Header {
+			if sensitiveHeaders[strings.ToLower(key)] {
+				headers[key] = "[REDACTED]"
+			} else {
+				headers[key] = strings.Join(values, ", ")
+			}
+		}
+
+		// Capture response body
+		respWriter := &responseBodyWriter{
+			ResponseWriter: c.Writer,
+			body:           &bytes.Buffer{},
+			max:            maxBodySize,
+		}
+		c.Writer = respWriter
+
+		c.Next()
+
+		duration := time.Since(startTime)
+		status := c.Writer.Status()
+
+		fields := []zap.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.String("query", c.Request.URL.RawQuery),
+			zap.Int("status", status),
+			zap.Int64("duration_ms", duration.Milliseconds()),
+			zap.String("client_ip", c.ClientIP()),
+			zap.Any("req_headers", headers),
+			zap.String("req_body", reqBody),
+			zap.String("resp_body", respWriter.body.String()),
+			zap.Int("resp_size", c.Writer.Size()),
+		}
+
+		switch {
+		case status >= 500:
+			r.logger.Error("HTTP request completed with server error", fields...)
+		case status >= 400:
+			r.logger.Warn("HTTP request completed with client error", fields...)
+		default:
+			r.logger.Info("HTTP request completed", fields...)
+		}
+	}
 }

@@ -75,3 +75,8 @@ func (m *MockProductRepository) UpdateStatus(ctx context.Context, id string, sta
 	args := m.Called(ctx, id, status)
 	return args.Error(0)
 }
+
+func (m *MockProductRepository) UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error {
+	args := m.Called(ctx, tenantID, productID, quantity, inStock)
+	return args.Error(0)
+}

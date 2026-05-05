@@ -1,6 +1,7 @@
 using AutoMapper;
 using Ecommerce.PaymentService.DTOs;
 using Ecommerce.PaymentService.Entities;
+using Ecommerce.PaymentService.Messaging;
 using Ecommerce.PaymentService.Repositories;
 using Ecommerce.PaymentService.Services;
 using FluentAssertions;
@@ -16,6 +17,7 @@ public class PaymentMethodServiceTests
     private readonly Mock<IPaymentTransactionRepository> _transactionRepo;
     private readonly Mock<IRefundRepository> _refundRepo;
     private readonly Mock<IPaymentGateway> _gateway;
+    private readonly Mock<IEventPublisher> _eventPublisher;
     private readonly IMapper _mapper;
     private readonly Services.PaymentService _service;
 
@@ -26,6 +28,7 @@ public class PaymentMethodServiceTests
         _transactionRepo = new Mock<IPaymentTransactionRepository>();
         _refundRepo = new Mock<IRefundRepository>();
         _gateway = new Mock<IPaymentGateway>();
+        _eventPublisher = new Mock<IEventPublisher>();
         _mapper = TestHelpers.CreateMapper();
 
         _gateway.Setup(g => g.Name).Returns("TestGateway");
@@ -38,6 +41,7 @@ public class PaymentMethodServiceTests
             _transactionRepo.Object,
             _refundRepo.Object,
             _gateway.Object,
+            _eventPublisher.Object,
             _mapper,
             new Mock<ILogger<Services.PaymentService>>().Object
         );

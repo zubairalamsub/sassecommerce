@@ -42,16 +42,29 @@ func (m *mockCarrierService) GetTrackingInfo(carrier, trackingNumber string) (*T
 	return args.Get(0).(*TrackingResult), args.Error(1)
 }
 
+// mockKafkaPublisher is an inline mock for KafkaPublisher
+type mockKafkaPublisher struct {
+	mock.Mock
+}
+
+func (m *mockKafkaPublisher) Publish(ctx context.Context, topic, key string, value []byte) error {
+	args := m.Called(ctx, topic, key, value)
+	return args.Error(0)
+}
+
 func newTestService() (*shippingService, *repoMocks.MockShipmentRepository, *mockCarrierService) {
 	mockRepo := new(repoMocks.MockShipmentRepository)
 	mockCarrier := new(mockCarrierService)
+	mockKafka := new(mockKafkaPublisher)
+	mockKafka.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	svc := &shippingService{
-		repo:    mockRepo,
-		carrier: mockCarrier,
-		logger:  logger,
+		repo:          mockRepo,
+		carrier:       mockCarrier,
+		kafkaProducer: mockKafka,
+		logger:        logger,
 	}
 
 	return svc, mockRepo, mockCarrier

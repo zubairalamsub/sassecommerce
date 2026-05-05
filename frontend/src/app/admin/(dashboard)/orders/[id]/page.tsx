@@ -2,32 +2,10 @@
 
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Loader2, X, PackageX } from 'lucide-react';
 import { cn, formatCurrency, formatDate, statusColor } from '@/lib/utils';
 import { orderApi, type Order } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
-
-const demoOrder = {
-  id: 'ORD-2026-002',
-  tenant_id: 'tenant_saajan',
-  customer_id: 'cu-002',
-  order_number: 'ORD-2026-002',
-  status: 'shipped' as const,
-  currency: 'BDT',
-  items: [
-    { id: '1', product_id: 'p1', variant_id: 'v1', sku: 'SAR-JAM-001', name: 'Jamdani Saree', quantity: 1, unit_price: 15000, total_price: 15000 },
-  ],
-  subtotal: 15000,
-  shipping_cost: 120,
-  tax: 0,
-  total: 15120,
-  shipping_address: { street: '45 Gulshan Avenue, Road 12', city: 'Dhaka', state: 'Dhaka Division', postal_code: '1212', country: 'Bangladesh' },
-  billing_address: { street: '45 Gulshan Avenue, Road 12', city: 'Dhaka', state: 'Dhaka Division', postal_code: '1212', country: 'Bangladesh' },
-  tracking_number: 'SA-BD-78542136',
-  carrier: 'Sundarban Courier',
-  created_at: '2026-04-17T10:30:00Z',
-  updated_at: '2026-04-17T10:30:00Z',
-};
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -45,7 +23,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     async function loadOrder() {
       if (!tenantId) {
-        setOrder({ ...demoOrder, id, order_number: id });
         setLoading(false);
         return;
       }
@@ -53,7 +30,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         const data = await orderApi.get(id, tenantId, token || undefined);
         setOrder(data);
       } catch {
-        setOrder({ ...demoOrder, id, order_number: id });
+        setOrder(null);
       } finally {
         setLoading(false);
       }
@@ -127,8 +104,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <Link href="/admin/orders" className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-text">
           <ArrowLeft className="h-4 w-4" /> Back to Orders
         </Link>
-        <div className="rounded-xl border border-border bg-surface p-16 text-center">
-          <p className="text-text-secondary">Order not found.</p>
+        <div className="flex flex-col items-center rounded-xl border border-border bg-surface p-16 text-center">
+          <PackageX className="h-10 w-10 text-text-muted" />
+          <p className="mt-3 text-text-secondary">Order not found.</p>
+          <p className="mt-1 text-sm text-text-muted">The order &quot;{id}&quot; could not be loaded.</p>
         </div>
       </div>
     );
@@ -171,15 +150,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <button onClick={() => setShowShipDialog(true)} disabled={actionLoading}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
               Mark as Shipped
-            </button>
-          )}
-          {order.status === 'shipped' && (
-            <button onClick={async () => {
-              // For "delivered" there's no dedicated API, but we can extend later
-              setError('Mark as delivered is handled by the delivery confirmation system.');
-            }} disabled={actionLoading}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
-              Mark as Delivered
             </button>
           )}
         </div>

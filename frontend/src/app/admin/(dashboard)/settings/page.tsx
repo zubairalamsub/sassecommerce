@@ -4,11 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Save, Loader2, Store, Palette, Globe, ToggleLeft, Layout,
   Plus, X, GripVertical, Image, ChevronUp, ChevronDown, Megaphone,
-  CreditCard, Truck, Mail, Shield,
+  CreditCard, Truck, Mail, Shield, Bell,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { tenantApi, type TenantConfig } from '@/lib/api';
-import { useStoreConfigStore, type BannerSlide, type StoreSection, type StorefrontConfig } from '@/stores/store-config';
+import { useStoreConfigStore, type BannerSlide, type StoreSection, type StorefrontConfig, type AnnouncementPopup } from '@/stores/store-config';
 import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
 import type { DeliveryProfile } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -66,6 +66,7 @@ const defaultTenantConfig: TenantConfig = {
 
 export default function StoreSettingsPage() {
   const tenantId = useAuthStore((s) => s.tenantId);
+  const token = useAuthStore((s) => s.token);
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -216,7 +217,7 @@ export default function StoreSettingsPage() {
     try {
       await tenantApi.update(tenantId, { name: storeName, email: storeEmail });
       await tenantApi.updateConfig(tenantId, tenantConfig);
-      await saveStoreConfig(tenantId, storeConfig);
+      await saveStoreConfig(tenantId, storeConfig, token ?? undefined);
       await saveDeliveryProfiles(tenantId);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -293,6 +294,11 @@ export default function StoreSettingsPage() {
 
   function updateAnnouncement<K extends keyof StorefrontConfig['announcement_bar']>(key: K, value: StorefrontConfig['announcement_bar'][K]) {
     updateStoreConfig({ announcement_bar: { ...storeConfig.announcement_bar, [key]: value } });
+    setSaved(false);
+  }
+
+  function updatePopup<K extends keyof AnnouncementPopup>(key: K, value: AnnouncementPopup[K]) {
+    updateStoreConfig({ announcement_popup: { ...storeConfig.announcement_popup, [key]: value } });
     setSaved(false);
   }
 
@@ -481,6 +487,96 @@ export default function StoreSettingsPage() {
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Preview</label>
                   <div className="rounded-lg px-4 py-2 text-center text-sm font-medium" style={{ backgroundColor: storeConfig.announcement_bar.bg_color, color: storeConfig.announcement_bar.text_color }}>
                     {storeConfig.announcement_bar.text || 'Announcement text here'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Announcement Popup */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-gray-400" />
+                <h2 className="text-lg font-semibold text-gray-900">Announcement Popup</h2>
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">Modal</span>
+              </div>
+              <button type="button" onClick={() => updatePopup('enabled', !storeConfig.announcement_popup.enabled)}
+                className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', storeConfig.announcement_popup.enabled ? 'bg-primary' : 'bg-gray-200')}>
+                <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', storeConfig.announcement_popup.enabled ? 'translate-x-6' : 'translate-x-1')} />
+              </button>
+            </div>
+            {storeConfig.announcement_popup.enabled && (
+              <div className="space-y-4">
+                <Field label="Title" value={storeConfig.announcement_popup.title} onChange={(v) => updatePopup('title', v)} placeholder="Special Offer!" />
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Message</label>
+                  <textarea
+                    value={storeConfig.announcement_popup.message}
+                    onChange={(e) => updatePopup('message', e.target.value)}
+                    rows={3}
+                    placeholder="Get 20% off on your first order..."
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <Field label="Image URL" type="url" value={storeConfig.announcement_popup.image_url} onChange={(v) => updatePopup('image_url', v)} placeholder="https://..." />
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Button Text" value={storeConfig.announcement_popup.cta_text} onChange={(v) => updatePopup('cta_text', v)} placeholder="Shop Now" />
+                  <Field label="Button Link" value={storeConfig.announcement_popup.cta_link} onChange={(v) => updatePopup('cta_link', v)} placeholder="/products" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <ColorField label="Background Color" value={storeConfig.announcement_popup.bg_color} onChange={(v) => updatePopup('bg_color', v)} />
+                  <ColorField label="Text Color" value={storeConfig.announcement_popup.text_color} onChange={(v) => updatePopup('text_color', v)} />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Overlay Opacity: {storeConfig.announcement_popup.overlay_opacity}%</label>
+                  <input
+                    type="range"
+                    min="0" max="100" step="5"
+                    value={storeConfig.announcement_popup.overlay_opacity}
+                    onChange={(e) => updatePopup('overlay_opacity', Number(e.target.value))}
+                    className="w-full accent-primary"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Start Date</label>
+                    <input type="date" value={storeConfig.announcement_popup.start_date} onChange={(e) => updatePopup('start_date', e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">End Date</label>
+                    <input type="date" value={storeConfig.announcement_popup.end_date} onChange={(e) => updatePopup('end_date', e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => updatePopup('show_once', !storeConfig.announcement_popup.show_once)}
+                    className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', storeConfig.announcement_popup.show_once ? 'bg-primary' : 'bg-gray-200')}>
+                    <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', storeConfig.announcement_popup.show_once ? 'translate-x-6' : 'translate-x-1')} />
+                  </button>
+                  <span className="text-sm text-gray-700">Show only once per visitor</span>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Preview</label>
+                  <div className="rounded-xl border border-gray-200 overflow-hidden shadow-md max-w-sm mx-auto">
+                    {storeConfig.announcement_popup.image_url && (
+                      <div className="h-32 overflow-hidden">
+                        <img src={storeConfig.announcement_popup.image_url} alt="Preview" className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                    <div className="p-5 text-center" style={{ backgroundColor: storeConfig.announcement_popup.bg_color, color: storeConfig.announcement_popup.text_color }}>
+                      <p className="text-lg font-bold">{storeConfig.announcement_popup.title || 'Popup Title'}</p>
+                      <p className="mt-1 text-xs opacity-80">{storeConfig.announcement_popup.message || 'Popup message here'}</p>
+                      {storeConfig.announcement_popup.cta_text && (
+                        <span className="mt-3 inline-block rounded-full px-5 py-1.5 text-xs font-semibold"
+                          style={{ backgroundColor: storeConfig.announcement_popup.text_color, color: storeConfig.announcement_popup.bg_color }}>
+                          {storeConfig.announcement_popup.cta_text}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import StoreHeader from '@/components/store/header';
 import StoreFooter from '@/components/store/footer';
+import AnnouncementPopup from '@/components/store/announcement-popup';
 import { tenantApi, type TenantConfig } from '@/lib/api';
 import { useStoreConfigStore } from '@/stores/store-config';
 import { useThemeStore } from '@/stores/theme';
@@ -50,6 +51,7 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
       <StoreHeader storeName={storeName} logoUrl={branding?.logo_url} />
       <main className="flex-1">{children}</main>
       <StoreFooter storeName={storeName} />
+      <AnnouncementPopup />
     </div>
   );
 }

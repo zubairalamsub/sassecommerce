@@ -45,12 +45,28 @@ export interface AboutConfig {
   image_url: string;
 }
 
+export interface AnnouncementPopup {
+  enabled: boolean;
+  title: string;
+  message: string;
+  image_url: string;
+  cta_text: string;
+  cta_link: string;
+  bg_color: string;
+  text_color: string;
+  overlay_opacity: number;
+  start_date: string;
+  end_date: string;
+  show_once: boolean;
+}
+
 export interface StorefrontConfig {
   banners: BannerSlide[];
   sections: StoreSection[];
   footer: FooterConfig;
   about: AboutConfig;
   announcement_bar: { enabled: boolean; text: string; bg_color: string; text_color: string };
+  announcement_popup: AnnouncementPopup;
 }
 
 const NAMESPACE = 'storefront';
@@ -106,6 +122,20 @@ const defaultConfig: StorefrontConfig = {
     bg_color: '#3b82f6',
     text_color: '#ffffff',
   },
+  announcement_popup: {
+    enabled: false,
+    title: 'Special Offer!',
+    message: 'Get 20% off on your first order. Use code WELCOME20 at checkout.',
+    image_url: '',
+    cta_text: 'Shop Now',
+    cta_link: '/products',
+    bg_color: '#ffffff',
+    text_color: '#111827',
+    overlay_opacity: 50,
+    start_date: '',
+    end_date: '',
+    show_once: true,
+  },
 };
 
 interface StoreConfigState {
@@ -113,7 +143,7 @@ interface StoreConfigState {
   loading: boolean;
   error: string | null;
   fetchConfig: (tenantId: string) => Promise<void>;
-  saveConfig: (tenantId: string, config: StorefrontConfig) => Promise<void>;
+  saveConfig: (tenantId: string, config: StorefrontConfig, token?: string) => Promise<void>;
   updateConfig: (config: Partial<StorefrontConfig>) => void;
 }
 
@@ -138,6 +168,7 @@ export const useStoreConfigStore = create<StoreConfigState>()(
               footer: configMap.footer ? JSON.parse(configMap.footer) : defaultConfig.footer,
               about: configMap.about ? JSON.parse(configMap.about) : defaultConfig.about,
               announcement_bar: configMap.announcement_bar ? JSON.parse(configMap.announcement_bar) : defaultConfig.announcement_bar,
+              announcement_popup: configMap.announcement_popup ? JSON.parse(configMap.announcement_popup) : defaultConfig.announcement_popup,
             };
             set({ config: parsed, loading: false });
           } else {
@@ -149,15 +180,16 @@ export const useStoreConfigStore = create<StoreConfigState>()(
         }
       },
 
-      saveConfig: async (tenantId: string, config: StorefrontConfig) => {
+      saveConfig: async (tenantId: string, config: StorefrontConfig, token?: string) => {
         const entries: SetConfigRequest[] = [
           { namespace: NAMESPACE, key: 'banners', value: JSON.stringify(config.banners), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
           { namespace: NAMESPACE, key: 'sections', value: JSON.stringify(config.sections), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
           { namespace: NAMESPACE, key: 'footer', value: JSON.stringify(config.footer), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
           { namespace: NAMESPACE, key: 'about', value: JSON.stringify(config.about), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
           { namespace: NAMESPACE, key: 'announcement_bar', value: JSON.stringify(config.announcement_bar), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
+          { namespace: NAMESPACE, key: 'announcement_popup', value: JSON.stringify(config.announcement_popup), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
         ];
-        await configApi.bulkSet(entries);
+        await configApi.bulkSet(entries, token);
         set({ config });
       },
 
@@ -168,6 +200,13 @@ export const useStoreConfigStore = create<StoreConfigState>()(
     {
       name: 'store-config-storage',
       partialize: (state) => ({ config: state.config }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<StoreConfigState> | undefined;
+        return {
+          ...current,
+          config: { ...defaultConfig, ...current.config, ...p?.config },
+        };
+      },
     },
   ),
 );

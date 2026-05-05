@@ -34,7 +34,14 @@ export const useOrderStore = create<OrderStore>()(
         set({ loading: true, error: null });
         try {
           const res = await orderApi.listByTenant(tenantId, token);
-          const mapped: DisplayOrder[] = (res.data || []).map((o: Order) => ({
+          const orders = res.data || [];
+          // List endpoint returns total_amount=0; fetch each order for real totals
+          const detailed = await Promise.all(
+            orders.map((o) =>
+              orderApi.get(o.id, tenantId, token).catch(() => o)
+            )
+          );
+          const mapped: DisplayOrder[] = detailed.map((o: Order) => ({
             id: o.id,
             order_number: o.order_number,
             customer: o.customer_id,

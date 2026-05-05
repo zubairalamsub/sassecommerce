@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ScrollText, Loader2, Search, ChevronLeft, ChevronRight,
   Filter, Clock, User, Shield, AlertCircle, X, Download,
-  RefreshCw, Eye, Globe, Monitor, FileText, ArrowRight,
+  RefreshCw, Eye, Globe, Monitor, FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { auditApi, type AuditLog } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 
 const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'READ', 'LOGIN', 'LOGOUT', 'EXPORT', 'IMPORT'] as const;
-const RESOURCES = ['tenant', 'tenant_config', 'user', 'product', 'order'] as const;
+const RESOURCES = ['tenant', 'tenant_config', 'user', 'product', 'order', 'payment', 'inventory', 'shipping'] as const;
 
 function actionBadge(action: string) {
   switch (action) {
@@ -43,25 +43,117 @@ function statusBadge(code: number) {
   return 'bg-gray-100 text-gray-600';
 }
 
-function tryParseJSON(str: string | undefined): object | null {
+function deepParse(str: string | undefined): Record<string, unknown> | null {
   if (!str) return null;
   try {
-    const parsed = JSON.parse(str);
-    return typeof parsed === 'object' ? parsed : null;
+    let parsed = JSON.parse(str);
+    // Handle double-encoded JSON strings
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+    return typeof parsed === 'object' && parsed !== null ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function JSONBlock({ label, value, accent }: { label: string; value: string | undefined; accent?: string }) {
-  const parsed = tryParseJSON(value);
-  if (!parsed && !value) return null;
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+function DataTable({ label, value, accent }: { label: string; value: string | undefined; accent?: string }) {
+  const data = deepParse(value);
+  if (!data) return null;
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
   return (
     <div>
       <p className={cn('text-xs font-semibold mb-1.5', accent || 'text-gray-500')}>{label}</p>
-      <pre className="rounded-lg bg-gray-900 text-gray-100 p-3 text-[11px] leading-relaxed overflow-x-auto max-h-64 scrollbar-thin">
-        {parsed ? JSON.stringify(parsed, null, 2) : value}
-      </pre>
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-xs">
+          <tbody>
+            {entries.map(([k, v]) => (
+              <tr key={k} className="border-b border-gray-100 last:border-0">
+                <td className="px-3 py-1.5 font-medium text-gray-500 bg-gray-50 w-1/3 whitespace-nowrap">{k}</td>
+                <td className="px-3 py-1.5 text-gray-800 font-mono break-all">{formatValue(v)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DiffTable({ oldValue, newValue }: { oldValue?: string; newValue?: string }) {
+  const oldData = deepParse(oldValue);
+  const newData = deepParse(newValue);
+  if (!oldData && !newData) return null;
+
+  const allKeys = Array.from(new Set([
+    ...Object.keys(oldData || {}),
+    ...Object.keys(newData || {}),
+  ]));
+
+  // Separate changed, added, removed, unchanged
+  const rows = allKeys.map((key) => {
+    const o = oldData?.[key];
+    const n = newData?.[key];
+    const oStr = formatValue(o);
+    const nStr = formatValue(n);
+    const inOld = oldData ? key in oldData : false;
+    const inNew = newData ? key in newData : false;
+    let status: 'changed' | 'added' | 'removed' | 'same' = 'same';
+    if (!inOld && inNew) status = 'added';
+    else if (inOld && !inNew) status = 'removed';
+    else if (oStr !== nStr) status = 'changed';
+    return { key, oStr, nStr, status };
+  });
+
+  const hasOld = !!oldData;
+  const hasNew = !!newData;
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-500 mb-1.5">Changes</p>
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 border-b border-gray-200">
+              <th className="px-3 py-2 text-left font-medium w-1/4">Field</th>
+              {hasOld && <th className="px-3 py-2 text-left font-medium">Before</th>}
+              {hasNew && <th className="px-3 py-2 text-left font-medium">After</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ key, oStr, nStr, status }) => (
+              <tr key={key} className={cn(
+                'border-b border-gray-100 last:border-0',
+                status === 'changed' && 'bg-amber-50/50',
+                status === 'added' && 'bg-green-50/50',
+                status === 'removed' && 'bg-red-50/50',
+              )}>
+                <td className="px-3 py-1.5 font-medium text-gray-600 whitespace-nowrap">
+                  {status === 'added' && <span className="text-green-600 mr-1">+</span>}
+                  {status === 'removed' && <span className="text-red-600 mr-1">−</span>}
+                  {status === 'changed' && <span className="text-amber-600 mr-1">~</span>}
+                  {key}
+                </td>
+                {hasOld && (
+                  <td className={cn('px-3 py-1.5 font-mono break-all', status === 'changed' ? 'text-red-600 line-through' : status === 'removed' ? 'text-red-600' : 'text-gray-500')}>
+                    {oStr}
+                  </td>
+                )}
+                {hasNew && (
+                  <td className={cn('px-3 py-1.5 font-mono break-all', status === 'changed' ? 'text-green-700 font-semibold' : status === 'added' ? 'text-green-700' : 'text-gray-800')}>
+                    {nStr}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -137,29 +229,14 @@ function DetailPanel({ log, onClose }: { log: AuditLog; onClose: () => void }) {
 
           {/* Old / New value diff */}
           {(log.old_value || log.new_value) && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 mb-2">Changes</p>
-              <div className="grid grid-cols-1 gap-3">
-                {log.old_value && (
-                  <JSONBlock label="Before" value={log.old_value} accent="text-red-500" />
-                )}
-                {log.old_value && log.new_value && (
-                  <div className="flex justify-center">
-                    <ArrowRight className="h-4 w-4 text-gray-400 rotate-90" />
-                  </div>
-                )}
-                {log.new_value && (
-                  <JSONBlock label="After" value={log.new_value} accent="text-green-500" />
-                )}
-              </div>
-            </div>
+            <DiffTable oldValue={log.old_value} newValue={log.new_value} />
           )}
 
           {/* Request body */}
-          <JSONBlock label="Request Body" value={log.request_body} />
+          <DataTable label="Request Body" value={log.request_body} />
 
           {/* Metadata */}
-          <JSONBlock label="Metadata" value={log.metadata} />
+          <DataTable label="Metadata" value={log.metadata} />
 
           {/* User agent */}
           {log.user_agent && (

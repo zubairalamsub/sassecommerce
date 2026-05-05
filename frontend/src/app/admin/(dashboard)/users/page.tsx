@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react';
 import { cn, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { userApi, type User } from '@/lib/api';
+import { authApi, userApi, type User } from '@/lib/api';
 import {
   Users,
   Shield,
   ShoppingBag,
   Search,
   Loader2,
+  Plus,
+  X,
 } from 'lucide-react';
 
 type RoleFilter = 'all' | 'staff' | 'customer';
@@ -20,12 +22,36 @@ const ROLE_BADGE: Record<string, string> = {
   customer: 'bg-gray-100 text-gray-800',
 };
 
+interface StaffForm {
+  first_name: string;
+  last_name: string;
+  email: string;
+  username: string;
+  phone: string;
+  password: string;
+  role: 'admin' | 'moderator';
+}
+
+const emptyForm: StaffForm = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  username: '',
+  phone: '',
+  password: '',
+  role: 'moderator',
+};
+
 export default function UsersPage() {
   const { tenantId, token, user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<RoleFilter>('all');
   const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState<StaffForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -41,6 +67,46 @@ export default function UsersPage() {
       setUsers([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddStaff(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tenantId || !token) return;
+    setSaving(true);
+    setError('');
+
+    try {
+      // 1. Register the user
+      const res = await authApi.register(
+        {
+          tenant_id: tenantId,
+          email: form.email,
+          username: form.username,
+          password: form.password,
+          first_name: form.first_name,
+          last_name: form.last_name,
+          phone: form.phone || undefined,
+        },
+        tenantId,
+      );
+
+      // Response: { success, data: { id, ... }, message }
+      const newUser = (res as any)?.data ?? res;
+      const userId = newUser?.id;
+
+      // 2. Promote to the selected staff role
+      if (userId) {
+        await userApi.updateRole(userId, form.role, tenantId, token);
+      }
+
+      setShowModal(false);
+      setForm(emptyForm);
+      loadUsers();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create staff member');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -77,6 +143,13 @@ export default function UsersPage() {
             Manage your store team and customer accounts
           </p>
         </div>
+        <button
+          onClick={() => { setShowModal(true); setError(''); setForm(emptyForm); }}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Staff
+        </button>
       </div>
 
       {/* Stats */}
@@ -230,6 +303,126 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {/* Add Staff Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="relative w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute right-4 top-4 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <h2 className="text-lg font-semibold text-gray-900">Add Staff Member</h2>
+            <p className="mt-1 text-sm text-gray-500">Create a new staff account for your store.</p>
+
+            {error && (
+              <div className="mt-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleAddStaff} className="mt-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">First Name</label>
+                  <input
+                    required
+                    value={form.first_name}
+                    onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                  <input
+                    required
+                    value={form.last_name}
+                    onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Username</label>
+                <input
+                  required
+                  minLength={3}
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Phone</label>
+                <input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="+880..."
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'moderator' })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="moderator">Moderator</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {saving ? 'Adding...' : 'Add Staff'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

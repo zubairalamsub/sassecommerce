@@ -11,20 +11,11 @@ import {
   Check,
   Star,
   CalendarDays,
-  Receipt,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import {
-  BarChart,
-  Bar,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { tenantApi } from '@/lib/api';
+import { tenantApi, productApi, orderApi, userApi } from '@/lib/api';
 import type { Tenant } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -75,33 +66,7 @@ const plans: PlanDef[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Demo data
-// ---------------------------------------------------------------------------
-
-const demoUsage = {
-  products: 47,
-  orders: 156,
-  staff: 3,
-  storage: 245, // MB
-};
-
-const demoMonthlyUsage = [
-  { month: 'Nov', orders: 98, products: 32 },
-  { month: 'Dec', orders: 124, products: 38 },
-  { month: 'Jan', orders: 110, products: 41 },
-  { month: 'Feb', orders: 132, products: 44 },
-  { month: 'Mar', orders: 148, products: 45 },
-  { month: 'Apr', orders: 156, products: 47 },
-];
-
-const demoInvoices = [
-  { id: 'INV-2026-004', date: '2026-04-01', amount: 2999, status: 'paid' as const },
-  { id: 'INV-2026-003', date: '2026-03-01', amount: 2999, status: 'paid' as const },
-  { id: 'INV-2026-002', date: '2026-02-01', amount: 2999, status: 'paid' as const },
-  { id: 'INV-2026-001', date: '2026-01-01', amount: 2999, status: 'paid' as const },
-  { id: 'INV-2025-012', date: '2025-12-01', amount: 0, status: 'free' as const },
-];
+// No demo data — all usage is fetched from real APIs
 
 // ---------------------------------------------------------------------------
 // Animations
@@ -124,33 +89,6 @@ const sectionVariants = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0, 0, 0.2, 1] as const } },
 };
-
-// ---------------------------------------------------------------------------
-// Chart Tooltip
-// ---------------------------------------------------------------------------
-
-function ChartTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-lg">
-      {label && <p className="mb-1 text-text-secondary">{label}</p>}
-      {payload.map((p) => (
-        <p key={p.name} className="font-semibold text-text">
-          <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ backgroundColor: p.color }} />
-          {p.name}: {p.value.toLocaleString()}
-        </p>
-      ))}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Usage Progress Bar
@@ -194,23 +132,42 @@ function UsageBar({ used, limit, color }: { used: number; limit: number; color: 
 // ---------------------------------------------------------------------------
 
 export default function BillingPage() {
-  const { tenantId } = useAuthStore();
-  const [currentTier, setCurrentTier] = useState<Tenant['tier']>('starter');
+  const { tenantId, token } = useAuthStore();
+  const [currentTier, setCurrentTier] = useState<Tenant['tier']>('free');
   const [tenantName, setTenantName] = useState('My Store');
-  const [usage] = useState(demoUsage);
-  const [invoices] = useState(demoInvoices);
-  const [monthlyUsage] = useState(demoMonthlyUsage);
+  const [usage, setUsage] = useState({ products: 0, orders: 0, staff: 0, storage: 0 });
+  const [tenantCreated, setTenantCreated] = useState('');
 
   const currentPlan = plans.find((p) => p.tier === currentTier) || plans[0];
-  const renewalDate = '2026-05-01';
 
   useEffect(() => {
     if (!tenantId) return;
+
     tenantApi.get(tenantId).then((tenant) => {
       setCurrentTier(tenant.tier);
       setTenantName(tenant.name);
+      setTenantCreated(tenant.created_at);
     }).catch(() => {});
-  }, [tenantId]);
+
+    // Fetch real product count
+    productApi.list(tenantId, 1, 1).then((res) => {
+      setUsage((prev) => ({ ...prev, products: res.total ?? 0 }));
+    }).catch(() => {});
+
+    // Fetch real order count
+    orderApi.listByTenant(tenantId, token || undefined, 1, 1).then((res) => {
+      setUsage((prev) => ({ ...prev, orders: res.total ?? 0 }));
+    }).catch(() => {});
+
+    // Fetch real staff count — response has pagination.total_items
+    if (token) {
+      userApi.list(tenantId, token, 1, 1).then((res) => {
+        const raw = res as any;
+        const count = res.total ?? raw.pagination?.total_items ?? 0;
+        setUsage((prev) => ({ ...prev, staff: count }));
+      }).catch(() => {});
+    }
+  }, [tenantId, token]);
 
   const usageCards = [
     {
@@ -295,10 +252,10 @@ export default function BillingPage() {
                   </>
                 )}
               </p>
-              {currentPlan.price > 0 && (
+              {tenantCreated && (
                 <div className="mt-2 flex items-center gap-1.5 text-sm text-text-secondary">
                   <CalendarDays className="h-4 w-4" />
-                  <span>Next renewal: {formatDate(renewalDate)}</span>
+                  <span>Member since: {formatDate(tenantCreated.split('T')[0])}</span>
                 </div>
               )}
             </div>
@@ -344,58 +301,14 @@ export default function BillingPage() {
         })}
       </motion.div>
 
-      {/* Charts & Plans Row */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Monthly Usage Chart */}
-        <motion.div
-          className="rounded-2xl border border-border bg-surface p-6 lg:col-span-2"
-          variants={sectionVariants}
-          initial="hidden"
-          animate="show"
-          transition={{ delay: 0.3 }}
-        >
-          <h2 className="mb-4 text-lg font-semibold text-text">Monthly Usage</h2>
-          <div className="h-[260px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyUsage}>
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: 'var(--color-text-muted, #9ca3af)' }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: 'var(--color-text-muted, #9ca3af)' }}
-                  width={48}
-                />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="orders" name="Orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="products" name="Products" fill="#006A4E" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-3 flex justify-center gap-6">
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
-              Orders
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: '#006A4E' }} />
-              Products
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Quick Plan Comparison */}
-        <motion.div
-          className="rounded-2xl border border-border bg-surface p-6"
-          variants={sectionVariants}
-          initial="hidden"
-          animate="show"
-          transition={{ delay: 0.4 }}
-        >
+      {/* Plans */}
+      <motion.div
+        className="rounded-2xl border border-border bg-surface p-6"
+        variants={sectionVariants}
+        initial="hidden"
+        animate="show"
+        transition={{ delay: 0.3 }}
+      >
           <h2 className="mb-4 text-lg font-semibold text-text">Available Plans</h2>
           <ul className="space-y-3">
             {plans.map((plan) => {
@@ -439,65 +352,6 @@ export default function BillingPage() {
               );
             })}
           </ul>
-        </motion.div>
-      </div>
-
-      {/* Payment History */}
-      <motion.div
-        className="rounded-2xl border border-border bg-surface"
-        variants={sectionVariants}
-        initial="hidden"
-        animate="show"
-        transition={{ delay: 0.5 }}
-      >
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-text-secondary" />
-            <h2 className="text-lg font-semibold text-text">Payment History</h2>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-left text-sm text-text-secondary">
-                <th className="px-6 py-3 font-medium">Invoice</th>
-                <th className="px-6 py-3 font-medium">Date</th>
-                <th className="px-6 py-3 font-medium">Amount</th>
-                <th className="px-6 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr
-                  key={invoice.id}
-                  className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-hover"
-                >
-                  <td className="px-6 py-4 text-sm font-medium text-primary">
-                    {invoice.id}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text">
-                    {formatDate(invoice.date)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-text">
-                    {invoice.amount === 0 ? 'Free' : formatCurrency(invoice.amount)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize',
-                        invoice.status === 'paid'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-                      )}
-                    >
-                      {invoice.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </motion.div>
     </div>
   );

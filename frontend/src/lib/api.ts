@@ -103,8 +103,8 @@ export const configApi = {
     const res = await request<{ namespaces: { namespace: string; count: number }[] }>('config', '/api/v1/config/namespaces');
     return res.namespaces || [];
   },
-  bulkSet: (entries: SetConfigRequest[]) =>
-    request<{ data: ConfigEntry[]; count: number }>('config', '/api/v1/config/bulk/set', { method: 'POST', body: { entries } }),
+  bulkSet: (entries: SetConfigRequest[], token?: string) =>
+    request<{ data: ConfigEntry[]; count: number }>('config', '/api/v1/config/bulk/set', { method: 'POST', body: { entries }, token }),
 };
 
 // User / Auth Service
@@ -130,6 +130,10 @@ export const userApi = {
     request<PaginatedResponse<User>>('user', `/api/v1/users?page=${page}&page_size=${pageSize}`, { tenantId, token }),
   get: (id: string, tenantId: string, token: string) =>
     request<User>('user', `/api/v1/users/${id}`, { tenantId, token }),
+  updateRole: (id: string, role: User['role'], tenantId: string, token: string) =>
+    request<{ success: boolean }>('user', `/api/v1/users/${id}/role`, { method: 'PATCH', body: { role }, tenantId, token }),
+  updateStatus: (id: string, status: User['status'], tenantId: string, token: string) =>
+    request<{ success: boolean }>('user', `/api/v1/users/${id}/status`, { method: 'PATCH', body: { status }, tenantId, token }),
 };
 
 // Product Service
@@ -410,14 +414,37 @@ export const paymentApi = {
     request<Payment>('payment', '/api/v1/payments', { method: 'POST', body: data, tenantId, token }),
 };
 
+// Analytics mappers — normalise API response field names to frontend types
+function mapSalesReport(raw: any): SalesReport {
+  return {
+    total_revenue: raw.total_revenue ?? 0,
+    total_orders: raw.total_orders ?? 0,
+    avg_order_value: raw.avg_order_value ?? raw.average_order_value ?? 0,
+    data_points: raw.data_points ?? [],
+  };
+}
+
+function mapProductPerformance(raw: any): ProductPerformance {
+  const items = raw.top_products ?? raw.top_selling ?? [];
+  return {
+    top_products: items.map((p: any) => ({
+      id: p.id ?? p.product_id ?? '',
+      name: p.name ?? p.product_name ?? '',
+      revenue: p.revenue ?? 0,
+      units_sold: p.units_sold ?? p.quantity_sold ?? 0,
+    })),
+    categories_breakdown: raw.categories_breakdown ?? [],
+  };
+}
+
 // Analytics Service
 export const analyticsApi = {
-  sales: (tenantId: string, startDate: string, endDate: string, granularity = 'daily') =>
-    request<SalesReport>('analytics', `/api/v1/analytics/sales?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}&granularity=${granularity}`, { tenantId }),
-  customers: (tenantId: string, startDate: string, endDate: string) =>
-    request<CustomerInsights>('analytics', `/api/v1/analytics/customers?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId }),
-  products: (tenantId: string, startDate: string, endDate: string) =>
-    request<ProductPerformance>('analytics', `/api/v1/analytics/products?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId }),
+  sales: (tenantId: string, startDate: string, endDate: string, granularity = 'daily', token?: string) =>
+    request<any>('analytics', `/api/v1/analytics/sales?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}&granularity=${granularity}`, { tenantId, token }).then(mapSalesReport),
+  customers: (tenantId: string, startDate: string, endDate: string, token?: string) =>
+    request<CustomerInsights>('analytics', `/api/v1/analytics/customers?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId, token }),
+  products: (tenantId: string, startDate: string, endDate: string, token?: string) =>
+    request<any>('analytics', `/api/v1/analytics/products?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId, token }).then(mapProductPerformance),
 };
 
 // Review Service

@@ -132,7 +132,20 @@ export const useAuthStore = create<AuthState>()(
       },
       isCustomer: () => get().user?.role === 'customer',
     }),
-    { name: 'auth-storage' },
+    {
+      name: 'auth-storage',
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as object) };
+        // Clear stale non-JWT tokens (plain strings like "demo-admin-token-t1")
+        const tok = (merged as AuthState).token;
+        if (tok && tok.split('.').length !== 3) {
+          (merged as AuthState).token = null;
+          (merged as AuthState).user = null;
+          (merged as AuthState).tenantId = null;
+        }
+        return merged as AuthState;
+      },
+    },
   ),
 );
 
@@ -224,23 +237,17 @@ export async function demoLogin(email: string, password: string): Promise<{ user
   const entry = DEMO_USERS[email];
   if (!entry || entry.password !== password) return null;
 
-  try {
-    const res = await fetch('/api/auth/demo-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: entry.user.id,
-        tenant_id: entry.user.tenant_id || '',
-        email: entry.user.email,
-        role: entry.user.role,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return { user: entry.user, token: data.token };
-    }
-  } catch {
-    // API route unavailable — use fallback token
-  }
-  return { user: entry.user, token: entry.token };
+  const res = await fetch('/api/auth/demo-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: entry.user.id,
+      tenant_id: entry.user.tenant_id || '',
+      email: entry.user.email,
+      role: entry.user.role,
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return { user: entry.user, token: data.token };
 }

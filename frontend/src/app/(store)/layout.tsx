@@ -10,27 +10,65 @@ import { useThemeStore } from '@/stores/theme';
 
 const TENANT_ID = 'tenant_saajan';
 
+// Cache tenant info on `window` so the result survives Fast Refresh, Turbopack
+// module re-evaluation, and any layout remount in dev. Without this guard, each
+// time the (store) layout's effect re-fires (StrictMode mount-unmount-mount,
+// navigation across the route group, etc.) it would issue a fresh tenant fetch.
+type TenantValue = Awaited<ReturnType<typeof tenantApi.get>>;
+type TenantCache = { promise: Promise<TenantValue> | null; resolved: TenantValue | null };
+function tenantCache(): TenantCache {
+  if (typeof window === 'undefined') return { promise: null, resolved: null };
+  const w = window as typeof window & { __saajanTenantCache?: TenantCache };
+  if (!w.__saajanTenantCache) w.__saajanTenantCache = { promise: null, resolved: null };
+  return w.__saajanTenantCache;
+}
+function loadTenantOnce(): Promise<TenantValue> {
+  const cache = tenantCache();
+  if (cache.resolved) { console.log('[saajan] tenant RESOLVED-cache'); return Promise.resolve(cache.resolved); }
+  if (cache.promise) { console.log('[saajan] tenant PROMISE-cache'); return cache.promise; }
+  console.log('[saajan] tenant FRESH FETCH');
+  cache.promise = tenantApi.get(TENANT_ID).then(
+    (tenant) => {
+      cache.resolved = tenant;
+      return tenant;
+    },
+    (err) => {
+      // Drop the failed promise so the *next* mount that needs the tenant can
+      // retry — this is one retry per mount, not a polling loop.
+      cache.promise = null;
+      throw err;
+    },
+  );
+  return cache.promise;
+}
+
 export default function StoreLayout({ children }: { children: React.ReactNode }) {
   const [storeName, setStoreName] = useState('Saajan');
   const [branding, setBranding] = useState<TenantConfig['branding'] | null>(null);
-  const fetchConfig = useStoreConfigStore((s) => s.fetchConfig);
   const accent = useThemeStore((s) => s.accent);
 
   useEffect(() => {
-    async function loadTenant() {
-      try {
-        const tenant = await tenantApi.get(TENANT_ID);
+    let cancelled = false;
+    loadTenantOnce()
+      .then((tenant) => {
+        if (cancelled) return;
         setStoreName(tenant.name || 'Saajan');
         if (tenant.config?.branding) {
           setBranding(tenant.config.branding);
         }
-      } catch {
-        // use defaults
-      }
-      fetchConfig(TENANT_ID);
-    }
-    loadTenant();
-  }, [fetchConfig]);
+      })
+      .catch(() => {
+        // Tenant fetch failed — keep fallback storeName/no-branding. The next
+        // mount will retry via the cleared cache promise.
+      });
+    // store-config has its own loaded-once + in-flight de-dupe guards. Pulling
+    // it via getState() avoids re-firing this effect on any state change and
+    // keeps `fetchConfig` out of the dependency array.
+    useStoreConfigStore.getState().fetchConfig(TENANT_ID);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Apply tenant branding on <html> only when user hasn't picked a custom accent
   useEffect(() => {

@@ -20,6 +20,7 @@ import (
 	"github.com/ecommerce/tenant-service/pkg/kafka"
 	"github.com/ecommerce/tenant-service/pkg/logger"
 
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -73,11 +74,12 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(metrics.Middleware("tenant-service"))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          log,
 		LogRequestBody:  true,
 		LogResponseBody: true,
-		SkipPaths:       []string{"/health", "/ready"},
+		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
 	// Configure CORS
@@ -100,6 +102,9 @@ func main() {
 			"time":    time.Now().UTC(),
 		})
 	})
+
+	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

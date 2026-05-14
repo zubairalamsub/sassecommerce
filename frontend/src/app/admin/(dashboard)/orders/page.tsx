@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Eye, Loader2 } from 'lucide-react';
+import { Eye, Loader2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatCurrency, formatDate, statusColor } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -30,11 +30,20 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-text">Orders</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Manage and track all customer orders.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Orders</h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            Manage and track all customer orders.
+          </p>
+        </div>
+        <Link
+          href="/admin/sales/new"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-dark"
+        >
+          <Zap className="h-4 w-4" />
+          New Sale
+        </Link>
       </div>
 
       <div className="border-b border-border">

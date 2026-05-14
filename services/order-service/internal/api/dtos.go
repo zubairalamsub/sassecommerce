@@ -50,6 +50,17 @@ type DeliverOrderRequest struct {
 	ReceivedBy string `json:"received_by" binding:"required"`
 }
 
+// SendReceiptRequest is the body for POST /api/v1/orders/:id/send-receipt.
+// `Email` is the only required field — the rest are presentational
+// overrides for the email body. When omitted, the notification-service
+// consumer falls back to per-tenant defaults.
+type SendReceiptRequest struct {
+	Email         string `json:"email" binding:"required,email"`
+	CustomerName  string `json:"customer_name,omitempty"`
+	StoreName     string `json:"store_name,omitempty"`
+	PaymentMethod string `json:"payment_method,omitempty"`
+}
+
 // Address represents a shipping or billing address
 type Address struct {
 	Street     string `json:"street" binding:"required"`

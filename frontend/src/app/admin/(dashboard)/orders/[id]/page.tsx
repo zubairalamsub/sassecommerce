@@ -2,9 +2,9 @@
 
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, X, PackageX } from 'lucide-react';
+import { ArrowLeft, Loader2, X, PackageX, FileText } from 'lucide-react';
 import { cn, formatCurrency, formatDate, statusColor } from '@/lib/utils';
-import { orderApi, type Order } from '@/lib/api';
+import { orderApi, tenantApi, type Order } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +19,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [carrier, setCarrier] = useState('');
   const [cancelReason, setCancelReason] = useState('');
   const [error, setError] = useState('');
+  // Track the tenant-level invoices feature flag so we can gate the
+  // "View invoice" link. Defaults to false; if we can't read tenant config,
+  // the button just stays hidden.
+  const [invoicesEnabled, setInvoicesEnabled] = useState(false);
 
   useEffect(() => {
     async function loadOrder() {
@@ -37,6 +41,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
     loadOrder();
   }, [id, tenantId, token]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    tenantApi
+      .get(tenantId)
+      .then((t) => {
+        if (!cancelled) setInvoicesEnabled(t.config?.features?.invoices_enabled === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
 
   async function handleConfirm() {
     if (!order || !tenantId || !user) return;
@@ -134,6 +152,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </span>
         </div>
         <div className="flex gap-3">
+          {invoicesEnabled && (
+            <Link
+              href={`/admin/orders/${order.id}/invoice`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-hover"
+            >
+              <FileText className="h-4 w-4" />
+              View invoice
+            </Link>
+          )}
           {order.status === 'pending' && (
             <>
               <button onClick={handleConfirm} disabled={actionLoading}

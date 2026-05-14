@@ -305,6 +305,23 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 		"old_values":  oldValues,
 	})
 
+	// Also publish a dedicated ProductPriceChanged event whenever the price
+	// actually moved. Catching insider price manipulation is the main
+	// driver — the high-signal event makes that pattern trivial to alert on,
+	// instead of having to grep ProductUpdated for a changed price field.
+	if oldPrice, ok := oldValues["price"].(float64); ok && oldPrice != product.Price {
+		s.publishEvent(ctx, "ProductPriceChanged", map[string]interface{}{
+			"tenant_id":  product.TenantID,
+			"product_id": id,
+			"sku":        product.SKU,
+			"updated_by": product.UpdatedBy,
+			"price":      product.Price,
+			"old_values": map[string]interface{}{
+				"price": oldPrice,
+			},
+		})
+	}
+
 	return product.ToResponse(), nil
 }
 

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: frontend, namespace: ecommerce, labels: { app: frontend } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: frontend } }
+  template:
+    metadata: { labels: { app: frontend } }
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/saajan/frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 3000 }]
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: NEXT_PUBLIC_API_BASE_URL, value: "https://api.saajan.com" }
+            - { name: NEXT_PUBLIC_TENANT_API_URL,        value: http://tenant-service:8080 }
+            - { name: NEXT_PUBLIC_USER_API_URL,          value: http://user-service:8082 }
+            - { name: NEXT_PUBLIC_PRODUCT_API_URL,       value: http://product-service:8083 }
+            - { name: NEXT_PUBLIC_INVENTORY_API_URL,     value: http://inventory-service:8084 }
+            - { name: NEXT_PUBLIC_PAYMENT_API_URL,       value: http://payment-service:8085 }
+            - { name: NEXT_PUBLIC_SHIPPING_API_URL,      value: http://shipping-service:8086 }
+            - { name: NEXT_PUBLIC_NOTIFICATION_API_URL,  value: http://notification-service:8087 }
+            - { name: NEXT_PUBLIC_REVIEW_API_URL,        value: http://review-service:8088 }
+            - { name: NEXT_PUBLIC_CART_API_URL,          value: http://cart-service:8089 }
+            - { name: NEXT_PUBLIC_SEARCH_API_URL,        value: http://search-service:8090 }
+            - { name: NEXT_PUBLIC_PROMOTION_API_URL,     value: http://promotion-service:8091 }
+            - { name: NEXT_PUBLIC_VENDOR_API_URL,        value: http://vendor-service:8092 }
+            - { name: NEXT_PUBLIC_ANALYTICS_API_URL,     value: http://analytics-service:8093 }
+            - { name: NEXT_PUBLIC_RECOMMENDATION_API_URL, value: http://recommendation-service:8094 }
+            - { name: NEXT_PUBLIC_CONFIG_API_URL,        value: http://config-service:8095 }
+            - { name: NEXT_PUBLIC_ORDER_API_URL,         value: http://order-service:8080 }
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits:   { cpu: 1000m, memory: 1Gi }
+          livenessProbe:  { httpGet: { path: /, port: http }, initialDelaySeconds: 30, periodSeconds: 30 }
+          readinessProbe: { httpGet: { path: /, port: http }, initialDelaySeconds: 5,  periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: frontend, namespace: ecommerce }
+spec:
+  type: ClusterIP
+  selector: { app: frontend }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: frontend, namespace: ecommerce }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: frontend }
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

@@ -1,33 +1,32 @@
-# Build stage
-FROM golang:1.21-alpine AS builder
+# Build stage — uses project-root context so the shared module is reachable.
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy shared module first (referenced by go.mod replace directive).
+COPY shared/go /shared/go
+
+# Copy service module files; rewrite the replace directive to /shared/go.
+COPY services/tenant-service/go.mod services/tenant-service/go.sum ./
+RUN sed -i 's|../../shared/go|/shared/go|' go.mod
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy the rest of the service source.
+COPY services/tenant-service/ .
+RUN sed -i 's|../../shared/go|/shared/go|' go.mod
 
-# Build the application
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o tenant-service ./cmd/server
 
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
-
-# Copy the binary from builder
 COPY --from=builder /app/tenant-service .
 
-# Expose port
 EXPOSE 8080
-
-# Run the application
 CMD ["./tenant-service"]

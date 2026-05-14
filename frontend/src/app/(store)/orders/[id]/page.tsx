@@ -11,8 +11,9 @@ import {
   Clock,
   Loader2,
   Truck,
+  FileText,
 } from 'lucide-react';
-import { orderApi, type Order } from '@/lib/api';
+import { orderApi, tenantApi, type Order } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, formatDate, statusColor } from '@/lib/utils';
 
@@ -37,12 +38,12 @@ function StatusTimeline({ status }: { status: string }) {
         return (
           <div key={step} className="flex flex-1 items-center">
             <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-              done ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'
+              done ? 'bg-primary text-white' : 'bg-surface-hover text-text-muted'
             } ${active ? 'ring-2 ring-primary ring-offset-1' : ''}`}>
               {idx + 1}
             </div>
             {idx < STATUS_STEPS.length - 1 && (
-              <div className={`h-0.5 flex-1 transition-colors ${done && idx < currentIdx ? 'bg-primary' : 'bg-gray-200'}`} />
+              <div className={`h-0.5 flex-1 transition-colors ${done && idx < currentIdx ? 'bg-primary' : 'bg-border'}`} />
             )}
           </div>
         );
@@ -60,6 +61,9 @@ export default function OrderConfirmationPage({
   const token = useAuthStore((s) => s.token);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  // Tenant-level feature flag. We default to false so we never flash an
+  // invoice link before knowing whether the feature is enabled.
+  const [invoicesEnabled, setInvoicesEnabled] = useState(false);
 
   useEffect(() => {
     orderApi.get(id, TENANT_ID, token || undefined)
@@ -67,6 +71,19 @@ export default function OrderConfirmationPage({
       .catch(() => setOrder(null))
       .finally(() => setLoading(false));
   }, [id, token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    tenantApi
+      .get(TENANT_ID)
+      .then((t) => {
+        if (!cancelled) setInvoicesEnabled(t.config?.features?.invoices_enabled === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -83,30 +100,30 @@ export default function OrderConfirmationPage({
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Success banner */}
-      <div className="rounded-xl bg-green-50 border border-green-200 p-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-          <CheckCircle className="h-8 w-8 text-green-600" />
+      <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-6 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+          <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
         </div>
-        <h1 className="mt-4 text-2xl font-bold text-green-900">
+        <h1 className="mt-4 text-2xl font-bold text-green-900 dark:text-green-200">
           Order Placed Successfully!
         </h1>
-        <p className="mt-1 text-green-700">
+        <p className="mt-1 text-green-700 dark:text-green-300">
           Thank you for your purchase. We will process your order shortly.
         </p>
       </div>
 
       {/* Order details */}
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="mt-8 rounded-xl border border-border bg-surface overflow-hidden">
         {/* Order header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-4">
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Order Number</p>
-            <p className="text-lg font-bold text-gray-900">{orderId}</p>
+            <p className="text-xs text-text-secondary uppercase tracking-wide">Order Number</p>
+            <p className="text-lg font-bold text-text">{orderId}</p>
           </div>
           {order && (
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Date</p>
-              <div className="flex items-center gap-1 text-sm text-gray-700">
+              <p className="text-xs text-text-secondary uppercase tracking-wide">Date</p>
+              <div className="flex items-center gap-1 text-sm text-text-secondary">
                 <Clock className="h-3.5 w-3.5" />
                 {formatDate(order.created_at)}
               </div>
@@ -121,21 +138,21 @@ export default function OrderConfirmationPage({
 
         {/* Status timeline */}
         {order && (
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+          <div className="px-6 py-4 border-b border-border">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-text-secondary">
               <Truck className="h-4 w-4" />
               Order Progress
             </div>
             <StatusTimeline status={order.status} />
-            <div className="mt-2 flex justify-between text-xs text-gray-400">
+            <div className="mt-2 flex justify-between text-xs text-text-muted">
               {STATUS_STEPS.map((s) => (
                 <span key={s} className="capitalize">{s}</span>
               ))}
             </div>
             {order.tracking_number && (
-              <p className="mt-3 text-sm text-gray-600">
-                Tracking: <span className="font-medium text-gray-900">{order.tracking_number}</span>
-                {order.carrier && <span className="ml-1 text-gray-400">via {order.carrier}</span>}
+              <p className="mt-3 text-sm text-text-secondary">
+                Tracking: <span className="font-medium text-text">{order.tracking_number}</span>
+                {order.carrier && <span className="ml-1 text-text-muted">via {order.carrier}</span>}
               </p>
             )}
           </div>
@@ -143,12 +160,12 @@ export default function OrderConfirmationPage({
 
         {/* Order items */}
         <div className="px-6 py-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
             <Package className="h-4 w-4" />
             Items
           </h2>
           {order && order.items && order.items.length > 0 ? (
-            <div className="mt-3 divide-y divide-gray-100">
+            <div className="mt-3 divide-y divide-border-light">
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center gap-4 py-3">
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5">
@@ -157,47 +174,47 @@ export default function OrderConfirmationPage({
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900">{item.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-medium text-text">{item.name}</p>
+                    <p className="text-xs text-text-secondary">
                       SKU: {item.sku} &middot; Qty: {item.quantity}
                     </p>
                   </div>
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-text">
                     {formatCurrency(item.unit_price * item.quantity)}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="mt-3 text-sm text-gray-500">
+            <p className="mt-3 text-sm text-text-secondary">
               Items will appear once the order is confirmed.
             </p>
           )}
 
           {/* Totals */}
           {order && (
-            <div className="mt-4 space-y-2 border-t border-gray-200 pt-4">
+            <div className="mt-4 space-y-2 border-t border-border pt-4">
               {order.subtotal > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="text-gray-900">{formatCurrency(order.subtotal)}</span>
+                  <span className="text-text-secondary">Subtotal</span>
+                  <span className="text-text">{formatCurrency(order.subtotal)}</span>
                 </div>
               )}
               {order.shipping_cost > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Shipping</span>
-                  <span className="text-gray-900">{formatCurrency(order.shipping_cost)}</span>
+                  <span className="text-text-secondary">Shipping</span>
+                  <span className="text-text">{formatCurrency(order.shipping_cost)}</span>
                 </div>
               )}
               {order.tax > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tax</span>
-                  <span className="text-gray-900">{formatCurrency(order.tax)}</span>
+                  <span className="text-text-secondary">Tax</span>
+                  <span className="text-text">{formatCurrency(order.tax)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-gray-200 pt-2">
-                <span className="font-semibold text-gray-900">Total</span>
-                <span className="text-lg font-bold text-gray-900">
+              <div className="flex justify-between border-t border-border pt-2">
+                <span className="font-semibold text-text">Total</span>
+                <span className="text-lg font-bold text-text">
                   {formatCurrency(order.total)}
                 </span>
               </div>
@@ -207,14 +224,14 @@ export default function OrderConfirmationPage({
 
         {/* Shipping & Payment info */}
         {order && (
-          <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2">
             {order.shipping_address && (
-            <div className="bg-white px-6 py-4">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <div className="bg-surface px-6 py-4">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
                 <MapPin className="h-4 w-4" />
                 Shipping Address
               </h3>
-              <div className="mt-2 space-y-1 text-sm text-gray-600">
+              <div className="mt-2 space-y-1 text-sm text-text-secondary">
                 <p>{order.shipping_address.street}</p>
                 <p>
                   {order.shipping_address.city}, {order.shipping_address.postal_code}
@@ -223,12 +240,12 @@ export default function OrderConfirmationPage({
               </div>
             </div>
             )}
-            <div className="bg-white px-6 py-4">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <div className="bg-surface px-6 py-4">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
                 <CreditCard className="h-4 w-4" />
                 Order ID
               </h3>
-              <p className="mt-2 font-mono text-xs text-gray-500 break-all">{id}</p>
+              <p className="mt-2 font-mono text-xs text-text-secondary break-all">{id}</p>
             </div>
           </div>
         )}
@@ -236,9 +253,18 @@ export default function OrderConfirmationPage({
 
       {/* CTA */}
       <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+        {invoicesEnabled && order && (
+          <Link
+            href={`/orders/${order.id}/invoice`}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 font-medium text-text-secondary transition-colors hover:border-primary/40 hover:bg-surface-hover"
+          >
+            <FileText className="h-4 w-4" />
+            Download invoice
+          </Link>
+        )}
         <Link
           href="/account/orders"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-6 py-3 font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 font-medium text-text-secondary transition-colors hover:border-primary/40 hover:bg-surface-hover"
         >
           View All Orders
         </Link>

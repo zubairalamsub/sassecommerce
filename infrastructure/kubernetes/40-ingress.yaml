@@ -1,0 +1,49 @@
+# NGINX ingress wiring the frontend (root) and an /api/* gateway routing to
+# each service. Adjust hostnames / TLS issuer to your environment.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: saajan-ingress
+  namespace: ecommerce
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 25m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [saajan.com, www.saajan.com, api.saajan.com]
+      secretName: saajan-tls
+  rules:
+    - host: saajan.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: frontend, port: { number: 80 } } } }
+    - host: www.saajan.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: frontend, port: { number: 80 } } } }
+    - host: api.saajan.com
+      http:
+        paths:
+          - { path: /tenants,         pathType: Prefix, backend: { service: { name: tenant-service,         port: { number: 8080 } } } }
+          - { path: /users,           pathType: Prefix, backend: { service: { name: user-service,           port: { number: 8082 } } } }
+          - { path: /auth,            pathType: Prefix, backend: { service: { name: user-service,           port: { number: 8082 } } } }
+          - { path: /products,        pathType: Prefix, backend: { service: { name: product-service,        port: { number: 8083 } } } }
+          - { path: /categories,      pathType: Prefix, backend: { service: { name: product-service,        port: { number: 8083 } } } }
+          - { path: /inventory,       pathType: Prefix, backend: { service: { name: inventory-service,      port: { number: 8084 } } } }
+          - { path: /payments,        pathType: Prefix, backend: { service: { name: payment-service,        port: { number: 8085 } } } }
+          - { path: /shipping,        pathType: Prefix, backend: { service: { name: shipping-service,       port: { number: 8086 } } } }
+          - { path: /shipments,       pathType: Prefix, backend: { service: { name: shipping-service,       port: { number: 8086 } } } }
+          - { path: /notifications,   pathType: Prefix, backend: { service: { name: notification-service,   port: { number: 8087 } } } }
+          - { path: /reviews,         pathType: Prefix, backend: { service: { name: review-service,         port: { number: 8088 } } } }
+          - { path: /cart,            pathType: Prefix, backend: { service: { name: cart-service,           port: { number: 8089 } } } }
+          - { path: /search,          pathType: Prefix, backend: { service: { name: search-service,         port: { number: 8090 } } } }
+          - { path: /coupons,         pathType: Prefix, backend: { service: { name: promotion-service,      port: { number: 8091 } } } }
+          - { path: /promotions,      pathType: Prefix, backend: { service: { name: promotion-service,      port: { number: 8091 } } } }
+          - { path: /vendors,         pathType: Prefix, backend: { service: { name: vendor-service,         port: { number: 8092 } } } }
+          - { path: /analytics,       pathType: Prefix, backend: { service: { name: analytics-service,      port: { number: 8093 } } } }
+          - { path: /recommendations, pathType: Prefix, backend: { service: { name: recommendation-service, port: { number: 8094 } } } }
+          - { path: /config,          pathType: Prefix, backend: { service: { name: config-service,         port: { number: 8095 } } } }
+          - { path: /orders,          pathType: Prefix, backend: { service: { name: order-service,          port: { number: 8080 } } } }
+          - { path: /customers,       pathType: Prefix, backend: { service: { name: order-service,          port: { number: 8080 } } } }

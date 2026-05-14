@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: config-service, namespace: ecommerce, labels: { app: config-service } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: config-service } }
+  template:
+    metadata: { labels: { app: config-service } }
+    spec:
+      containers:
+        - name: config-service
+          image: ghcr.io/saajan/config-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8095 }]
+          envFrom: [{ configMapRef: { name: shared-config } }]
+          env:
+            - { name: PORT, value: "8095" }
+            - { name: DB_HOST, value: postgres }
+            - { name: DB_NAME, value: config_db }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: username } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: password } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: jwt-secret, key: secret } }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          livenessProbe:  { httpGet: { path: /health, port: http }, initialDelaySeconds: 30, periodSeconds: 30 }
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 5,  periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: config-service, namespace: ecommerce }
+spec:
+  type: ClusterIP
+  selector: { app: config-service }
+  ports: [{ name: http, port: 8095, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: config-service, namespace: ecommerce }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: config-service }
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

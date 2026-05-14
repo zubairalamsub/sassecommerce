@@ -77,7 +77,7 @@ badges/
 *.out
 
 # =========================
-# Docker (local volumes)
+# Docker (local volumes + local-only overrides)
 # =========================
 docker-data/
 postgres-data/
@@ -86,6 +86,8 @@ redis-data/
 es-data/
 kafka-data/
 zookeeper-data/
+docker-compose.override.yml
+docker-compose.override.*.yml
 
 # =========================
 # Logs & Temp
@@ -101,3 +103,7 @@ temp/
 *.key
 *.crt
 *.p12
+
+# Local-built CLI binaries from the storage cmd helpers
+/shared/go/storagecheck
+/shared/go/storageupload

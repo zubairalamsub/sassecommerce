@@ -98,7 +98,7 @@ export default function ProductDetailPage({
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-        <p className="mt-3 text-gray-500">Loading...</p>
+        <p className="mt-3 text-text-secondary">Loading...</p>
       </div>
     );
   }
@@ -106,8 +106,8 @@ export default function ProductDetailPage({
   if (!product) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-gray-900">Product Not Found</h1>
-        <p className="mt-2 text-gray-500">The product you are looking for does not exist.</p>
+        <h1 className="text-2xl font-bold text-text">Product Not Found</h1>
+        <p className="mt-2 text-text-secondary">The product you are looking for does not exist.</p>
         <Link
           href="/products"
           className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-colors hover:bg-primary-dark"
@@ -156,12 +156,12 @@ export default function ProductDetailPage({
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Breadcrumb */}
-      <nav className="mb-6 flex items-center gap-2 text-sm text-gray-500">
+      <nav className="mb-6 flex items-center gap-2 text-sm text-text-secondary">
         <Link href="/products" className="hover:text-primary transition-colors">
           Products
         </Link>
         <span>/</span>
-        <span className="text-gray-900">{product.name}</span>
+        <span className="text-text">{product.name}</span>
       </nav>
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
@@ -188,15 +188,15 @@ export default function ProductDetailPage({
 
         {/* Product info */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
+          <h1 className="text-3xl font-bold text-text">{product.name}</h1>
 
           {/* Price */}
           <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-2xl font-bold text-gray-900">
+            <span className="text-2xl font-bold text-text">
               {formatCurrency(activePrice)}
             </span>
             {product.compare_at_price && (
-              <span className="text-lg text-gray-400 line-through">
+              <span className="text-lg text-text-muted line-through">
                 {formatCurrency(product.compare_at_price)}
               </span>
             )}
@@ -213,14 +213,14 @@ export default function ProductDetailPage({
           </div>
 
           {/* Description */}
-          <p className="mt-6 leading-relaxed text-gray-600">
+          <p className="mt-6 leading-relaxed text-text-secondary">
             {product.description || 'No description available.'}
           </p>
 
           {/* Variant selector */}
           {product.variants && product.variants.length > 0 && (
             <div className="mt-6">
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label className="mb-2 block text-sm font-medium text-text-secondary">
                 {product.variants[0].name}
               </label>
               <div className="flex flex-wrap gap-2">
@@ -231,7 +231,7 @@ export default function ProductDetailPage({
                     className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                       selectedVariantIndex === i
                         ? 'border-primary bg-primary-light text-primary'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                        : 'border-border bg-surface text-text-secondary hover:border-primary/40'
                     }`}
                   >
                     {variant.value}
@@ -243,22 +243,22 @@ export default function ProductDetailPage({
 
           {/* Quantity selector */}
           <div className="mt-6">
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium text-text-secondary">
               Quantity
             </label>
-            <div className="inline-flex items-center rounded-lg border border-gray-200">
+            <div className="inline-flex items-center rounded-lg border border-border">
               <button
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="flex h-10 w-10 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
+                className="flex h-10 w-10 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover"
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="flex h-10 w-12 items-center justify-center border-x border-gray-200 text-sm font-medium">
+              <span className="flex h-10 w-12 items-center justify-center border-x border-border text-sm font-medium text-text">
                 {quantity}
               </span>
               <button
                 onClick={() => setQuantity((q) => q + 1)}
-                className="flex h-10 w-10 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
+                className="flex h-10 w-10 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover"
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -281,7 +281,7 @@ export default function ProductDetailPage({
               {product.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"
+                  className="rounded-full bg-surface-hover px-3 py-1 text-xs font-medium text-text-secondary"
                 >
                   {tag}
                 </span>
@@ -290,16 +290,16 @@ export default function ProductDetailPage({
           )}
 
           {/* Delivery, Return & Warranty */}
-          <div className="mt-8 space-y-0 divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50">
+          <div className="mt-8 space-y-0 divide-y divide-border-light rounded-xl border border-border bg-surface-secondary">
             {/* Delivery */}
             <div className="flex gap-3 p-4">
               <Truck className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
               <div>
-                <p className="text-sm font-medium text-gray-900">Delivery</p>
-                <p className="mt-0.5 text-xs text-gray-600">
+                <p className="text-sm font-medium text-text">Delivery</p>
+                <p className="mt-0.5 text-xs text-text-secondary">
                   Inside Dhaka: {deliveryProfile.estimated_delivery_dhaka} ({deliveryProfile.inside_dhaka_rate === 0 ? 'Free' : `৳${deliveryProfile.inside_dhaka_rate}`})
                 </p>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-text-secondary">
                   Outside Dhaka: {deliveryProfile.estimated_delivery_outside} ({deliveryProfile.outside_dhaka_rate === 0 ? 'Free' : `৳${deliveryProfile.outside_dhaka_rate}`})
                 </p>
               </div>
@@ -308,22 +308,22 @@ export default function ProductDetailPage({
             <div className="flex gap-3 p-4">
               <RotateCcw className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
               <div>
-                <p className="text-sm font-medium text-gray-900">7-Day Easy Return</p>
-                <p className="mt-0.5 text-xs text-gray-600">Return or exchange within 7 days of delivery. Item must be unused and in original packaging.</p>
+                <p className="text-sm font-medium text-text">7-Day Easy Return</p>
+                <p className="mt-0.5 text-xs text-text-secondary">Return or exchange within 7 days of delivery. Item must be unused and in original packaging.</p>
               </div>
             </div>
             {/* Warranty */}
             <div className="flex gap-3 p-4">
               <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
               <div>
-                <p className="text-sm font-medium text-gray-900">Warranty & Authenticity</p>
-                <p className="mt-0.5 text-xs text-gray-600">100% authentic products. Manufacturer warranty applicable where mentioned.</p>
+                <p className="text-sm font-medium text-text">Warranty & Authenticity</p>
+                <p className="mt-0.5 text-xs text-text-secondary">100% authentic products. Manufacturer warranty applicable where mentioned.</p>
               </div>
             </div>
           </div>
 
           {/* SKU */}
-          <p className="mt-6 text-xs text-gray-400">
+          <p className="mt-6 text-xs text-text-muted">
             SKU: {selectedVariant?.sku ?? product.sku}
           </p>
         </div>

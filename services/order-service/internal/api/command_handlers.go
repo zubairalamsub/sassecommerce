@@ -11,17 +11,22 @@ import (
 	"github.com/yourusername/ecommerce/order-service/internal/domain/commands"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/events"
 	"github.com/yourusername/ecommerce/order-service/internal/eventstore"
+	"github.com/yourusername/ecommerce/order-service/internal/messaging"
 	"github.com/yourusername/ecommerce/order-service/internal/saga"
 	"go.uber.org/zap"
 )
 
 // CommandHandler handles HTTP requests for commands
 type CommandHandler struct {
-	commandHandler *commands.CommandHandler
-	eventStore     eventstore.EventStore
-	logger         *zap.Logger
-	inventoryURL   string
-	paymentURL     string
+	commandHandler        *commands.CommandHandler
+	eventStore            eventstore.EventStore
+	logger                *zap.Logger
+	inventoryURL          string
+	paymentURL            string
+	// notificationPublisher is optional — when nil, /send-receipt returns 503.
+	// This lets local dev / tests run without Kafka while still wiring the
+	// route into the router.
+	notificationPublisher messaging.NotificationPublisher
 }
 
 // NewCommandHandler creates a new command handler
@@ -39,6 +44,13 @@ func NewCommandHandler(
 		inventoryURL:   inventoryURL,
 		paymentURL:     paymentURL,
 	}
+}
+
+// SetNotificationPublisher injects the Kafka notification publisher used by
+// SendReceipt. Wired separately from the constructor so the publisher can
+// stay optional — tests and Kafka-disabled deployments simply skip it.
+func (h *CommandHandler) SetNotificationPublisher(p messaging.NotificationPublisher) {
+	h.notificationPublisher = p
 }
 
 // CreateOrder handles POST /api/v1/orders
@@ -345,6 +357,99 @@ func (h *CommandHandler) DeliverOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, SuccessResponse{
 		Message: "Order delivered successfully",
 	})
+}
+
+// SendReceipt handles POST /api/v1/orders/:id/send-receipt.
+//
+// The endpoint is small on purpose: it publishes a `ReceiptRequested` event
+// to Kafka with the order summary inline. The notification-service consumer
+// renders and sends the email asynchronously. We deliberately do NOT block
+// on email delivery — the cashier sees a fast acknowledgement.
+//
+// Request body: { "email": "customer@example.com" }
+// The `email` field overrides whatever address is on file; it's required
+// because the POS flow often serves walk-in customers without a stored
+// profile.
+func (h *CommandHandler) SendReceipt(c *gin.Context) {
+	orderID := c.Param("id")
+
+	var req SendReceiptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_request",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	if h.notificationPublisher == nil {
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
+			Error:   "notifications_disabled",
+			Message: "Notification publisher is not configured on this deployment",
+		})
+		return
+	}
+
+	// Load order summary from the event store. We replay events on the
+	// aggregate so this works even when the read-model projection lags.
+	order, err := h.loadOrder(orderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "order_not_found",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Project the aggregate's item map into the wire shape. Iteration order
+	// of a map is undefined in Go; for receipt rendering this is acceptable
+	// (most POS sales have <10 items, line order is not load-bearing).
+	items := make([]messaging.ReceiptRequestedItem, 0, len(order.Items))
+	var subtotal float64
+	for _, it := range order.Items {
+		line := it.UnitPrice * float64(it.Quantity)
+		subtotal += line
+		items = append(items, messaging.ReceiptRequestedItem{
+			Name:       it.Name,
+			SKU:        it.SKU,
+			Quantity:   it.Quantity,
+			UnitPrice:  it.UnitPrice,
+			TotalPrice: line,
+		})
+	}
+
+	payload := messaging.ReceiptRequestedPayload{
+		TenantID:      order.TenantID,
+		OrderID:       order.ID,
+		CustomerID:    order.CustomerID,
+		CustomerEmail: req.Email,
+		CustomerName:  req.CustomerName,
+		StoreName:     req.StoreName,
+		PaymentMethod: req.PaymentMethod,
+		Currency:      "BDT",
+		Subtotal:      subtotal,
+		Total:         subtotal, // No discount/tax tracked on the aggregate yet.
+		Items:         items,
+	}
+
+	if err := h.notificationPublisher.PublishReceiptRequested(c.Request.Context(), payload); err != nil {
+		h.logger.Error("Failed to publish ReceiptRequested",
+			zap.String("order_id", orderID),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "publish_failed",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Receipt email queued",
+		zap.String("order_id", orderID),
+		zap.String("recipient", req.Email),
+	)
+
+	c.JSON(http.StatusOK, SuccessResponse{Message: "Receipt email queued"})
 }
 
 // Helper functions

@@ -6,6 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ecommerce/user-service/internal/models"
@@ -15,6 +19,58 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// LockoutConfig captures the brute-force protection thresholds applied to
+// the login flow. Zero values disable the corresponding check.
+type LockoutConfig struct {
+	MaxFailedPerEmail        int
+	MaxFailedPerIP           int
+	Window                   time.Duration
+	ForgotPasswordMaxPerHour int
+}
+
+// DefaultLockoutConfig returns the documented defaults: 5 failures per email
+// and 20 per IP in a 15-minute rolling window, plus 3 forgot-password
+// requests per hour.
+func DefaultLockoutConfig() LockoutConfig {
+	return LockoutConfig{
+		MaxFailedPerEmail:        5,
+		MaxFailedPerIP:           20,
+		Window:                   15 * time.Minute,
+		ForgotPasswordMaxPerHour: 3,
+	}
+}
+
+// LockoutConfigFromEnv overlays env-var overrides on top of the defaults.
+// Recognised vars:
+//   LOGIN_MAX_FAILED_PER_EMAIL      (default 5)
+//   LOGIN_MAX_FAILED_PER_IP         (default 20)
+//   LOGIN_LOCKOUT_WINDOW_MINUTES    (default 15)
+//   FORGOT_PASSWORD_MAX_PER_HOUR    (default 3)
+func LockoutConfigFromEnv() LockoutConfig {
+	cfg := DefaultLockoutConfig()
+	if v := os.Getenv("LOGIN_MAX_FAILED_PER_EMAIL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxFailedPerEmail = n
+		}
+	}
+	if v := os.Getenv("LOGIN_MAX_FAILED_PER_IP"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxFailedPerIP = n
+		}
+	}
+	if v := os.Getenv("LOGIN_LOCKOUT_WINDOW_MINUTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.Window = time.Duration(n) * time.Minute
+		}
+	}
+	if v := os.Getenv("FORGOT_PASSWORD_MAX_PER_HOUR"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.ForgotPasswordMaxPerHour = n
+		}
+	}
+	return cfg
+}
 
 // KafkaPublisher defines the interface for publishing messages to Kafka
 type KafkaPublisher interface {
@@ -35,14 +91,39 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo      repository.UserRepository
-	tokenRepo     repository.TokenRepository
-	tokenConfig   models.TokenConfig
-	kafkaProducer KafkaPublisher
-	logger        *logrus.Logger
+	userRepo         repository.UserRepository
+	tokenRepo        repository.TokenRepository
+	loginAttemptRepo repository.LoginAttemptRepository
+	lockout          LockoutConfig
+	tokenConfig      models.TokenConfig
+	kafkaProducer    KafkaPublisher
+	logger           *logrus.Logger
 }
 
-// NewAuthService creates a new authentication service
+// AuthServiceOption configures optional dependencies on authService.
+type AuthServiceOption func(*authService)
+
+// WithLoginAttemptRepository attaches a brute-force tracking repository.
+// When omitted, lockout checks are silently skipped (gracefully degrades).
+func WithLoginAttemptRepository(repo repository.LoginAttemptRepository) AuthServiceOption {
+	return func(s *authService) { s.loginAttemptRepo = repo }
+}
+
+// WithLockoutConfig overrides the lockout thresholds.
+func WithLockoutConfig(cfg LockoutConfig) AuthServiceOption {
+	return func(s *authService) { s.lockout = cfg }
+}
+
+// WithTokenRepository attaches the verification/password-reset token repo.
+func WithTokenRepository(repo repository.TokenRepository) AuthServiceOption {
+	return func(s *authService) { s.tokenRepo = repo }
+}
+
+// NewAuthService creates a new authentication service.
+//
+// The variadic tokenRepo parameter is kept for backward compatibility with
+// existing call sites. For new options (lockout, login-attempt repo, etc.)
+// prefer NewAuthServiceWithOptions.
 func NewAuthService(
 	userRepo repository.UserRepository,
 	tokenConfig models.TokenConfig,
@@ -55,9 +136,33 @@ func NewAuthService(
 		tokenConfig:   tokenConfig,
 		kafkaProducer: kafkaProducer,
 		logger:        logger,
+		lockout:       DefaultLockoutConfig(),
 	}
 	if len(tokenRepo) > 0 {
 		s.tokenRepo = tokenRepo[0]
+	}
+	return s
+}
+
+// NewAuthServiceWithOptions constructs an authService and applies functional
+// options. Use this when you need to inject the login-attempt repository,
+// override the lockout policy, or attach other optional collaborators.
+func NewAuthServiceWithOptions(
+	userRepo repository.UserRepository,
+	tokenConfig models.TokenConfig,
+	kafkaProducer KafkaPublisher,
+	logger *logrus.Logger,
+	opts ...AuthServiceOption,
+) AuthService {
+	s := &authService{
+		userRepo:      userRepo,
+		tokenConfig:   tokenConfig,
+		kafkaProducer: kafkaProducer,
+		logger:        logger,
+		lockout:       DefaultLockoutConfig(),
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 	return s
 }
@@ -135,38 +240,70 @@ func (s *authService) Register(ctx context.Context, req *models.RegisterRequest)
 	return user.ToResponse(), nil
 }
 
-// Login authenticates a user and returns a JWT token
+// Login authenticates a user and returns a JWT token.
+//
+// Brute-force protection: before any password check we count recent failed
+// attempts both for the email and for the source IP. Exceeding either
+// threshold returns a lockout error and records the attempt so the lockout
+// window keeps sliding for as long as abuse continues.
+//
+// The lockout error never reveals whether the email belongs to a real
+// account — it is the same shape for an unknown email and a real one.
 func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*models.LoginResponse, error) {
-	// Get user by email
+	emailKey := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// 1. Pre-check lockout windows (per-email and per-IP).
+	if msg, locked := s.checkLockout(ctx, req.TenantID, emailKey, req.IPAddress); locked {
+		s.publishLoginFailed(ctx, req.TenantID, "", req.Email, "rate_limited", req.IPAddress, req.UserAgent)
+		return nil, errors.New(msg)
+	}
+
+	// 2. Get user by email. Don't reveal not-found yet — record the attempt
+	//    against the typed email so enumeration is impossible.
 	user, err := s.userRepo.GetByEmail(ctx, req.TenantID, req.Email)
 	if err != nil {
 		s.logger.WithError(err).WithField("email", req.Email).Warn("Login attempt with non-existent email")
+		s.recordAttempt(ctx, req.TenantID, "", emailKey, req.IPAddress, req.UserAgent, false, models.LoginAttemptReasonUnknownEmail)
+		s.publishLoginFailed(ctx, req.TenantID, "", req.Email, "unknown_email", req.IPAddress, req.UserAgent)
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Check if user is active
+	// 3. Check if user is active
 	if user.Status != models.UserStatusActive {
 		s.logger.WithField("user_id", user.ID).Warn("Login attempt for inactive user")
+		s.recordAttempt(ctx, user.TenantID, user.ID, emailKey, req.IPAddress, req.UserAgent, false, models.LoginAttemptReasonUserInactive)
+		s.publishLoginFailed(ctx, user.TenantID, user.ID, req.Email, "user_inactive", req.IPAddress, req.UserAgent)
 		return nil, errors.New("user account is not active")
 	}
 
-	// Verify password
+	// 4. Verify password
 	if !verifyPassword(user.PasswordHash, req.Password) {
 		s.logger.WithField("user_id", user.ID).Warn("Login attempt with incorrect password")
+		s.recordAttempt(ctx, user.TenantID, user.ID, emailKey, req.IPAddress, req.UserAgent, false, models.LoginAttemptReasonInvalidPassword)
+		s.publishLoginFailed(ctx, user.TenantID, user.ID, req.Email, "invalid_password", req.IPAddress, req.UserAgent)
 		return nil, errors.New("invalid email or password")
 	}
 
-	// Generate JWT token
+	// 5. Generate JWT token
 	token, expiresAt, err := s.generateToken(user)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to generate token")
 		return nil, errors.New("failed to generate authentication token")
 	}
 
-	// Update last login timestamp
+	// 6. Update last login timestamp
 	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
 		s.logger.WithError(err).Warn("Failed to update last login timestamp")
 	}
+
+	// 7. Clear the failed-attempt counter and record an audit row for the
+	//    successful login. Best-effort: failures don't block login.
+	if s.loginAttemptRepo != nil {
+		if err := s.loginAttemptRepo.MarkSuccess(ctx, emailKey); err != nil {
+			s.logger.WithError(err).Warn("Failed to clear failed login attempts")
+		}
+	}
+	s.recordAttempt(ctx, user.TenantID, user.ID, emailKey, req.IPAddress, req.UserAgent, true, models.LoginAttemptReasonSuccess)
 
 	s.logger.WithFields(logrus.Fields{
 		"user_id":   user.ID,
@@ -174,11 +311,151 @@ func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		"email":     user.Email,
 	}).Info("User logged in successfully")
 
+	// Publish LoginSucceeded for the centralised audit log. Includes the
+	// originating IP and user agent so security review can correlate sessions.
+	s.publishEvent(ctx, "LoginSucceeded", map[string]interface{}{
+		"tenant_id":  user.TenantID,
+		"user_id":    user.ID,
+		"email":      user.Email,
+		"role":       user.Role,
+		"ip_address": req.IPAddress,
+		"user_agent": req.UserAgent,
+	})
+
 	return &models.LoginResponse{
 		User:      user.ToResponse(),
 		Token:     token,
 		ExpiresAt: expiresAt,
 	}, nil
+}
+
+// publishLoginFailed emits a LoginFailed event for the centralised audit log.
+// The email is included (never the password) so operators can spot
+// enumeration / brute-force patterns. user_id may be empty when the email is
+// unknown. Publishing is best-effort: failures are logged but never returned.
+func (s *authService) publishLoginFailed(ctx context.Context, tenantID, userID, email, reason, ip, userAgent string) {
+	payload := map[string]interface{}{
+		"user_id":    userID,
+		"email":      email,
+		"reason":     reason,
+		"ip_address": ip,
+		"user_agent": userAgent,
+	}
+	// tenant_id is needed by the audit consumer to bucket the event. If we
+	// don't have one (unknown-email path with no tenant context) the consumer
+	// will skip the row rather than crash.
+	if tenantID != "" {
+		payload["tenant_id"] = tenantID
+	}
+	s.publishEvent(ctx, "LoginFailed", payload)
+}
+
+// checkLockout consults the LoginAttempt repository for recent failures and
+// returns (message, true) if either the per-email or per-IP threshold has
+// been hit. The locked-out attempt itself is also recorded so the window
+// keeps extending while the abuse continues.
+//
+// When the repository isn't configured (graceful-degradation mode) this
+// always returns ("", false) — the older behavior with no lockout.
+func (s *authService) checkLockout(ctx context.Context, tenantID, email, ip string) (string, bool) {
+	if s.loginAttemptRepo == nil {
+		return "", false
+	}
+	window := s.lockout.Window
+	if window <= 0 {
+		window = 15 * time.Minute
+	}
+	since := time.Now().Add(-window)
+
+	// Per-email check.
+	if s.lockout.MaxFailedPerEmail > 0 {
+		count, err := s.loginAttemptRepo.CountRecentFailedByEmail(ctx, tenantID, email, since)
+		if err != nil {
+			s.logger.WithError(err).Warn("Failed to count failed login attempts by email; allowing login")
+		} else if count >= s.lockout.MaxFailedPerEmail {
+			s.recordAttempt(ctx, tenantID, "", email, ip, "", false, models.LoginAttemptReasonAccountLocked)
+			mins := int(window.Minutes())
+			if mins < 1 {
+				mins = 1
+			}
+			return fmt.Sprintf("Too many login attempts. Try again in %d minutes", mins), true
+		}
+	}
+
+	// Per-IP check.
+	if s.lockout.MaxFailedPerIP > 0 && ip != "" {
+		count, err := s.loginAttemptRepo.CountRecentFailedByIP(ctx, ip, since)
+		if err != nil {
+			s.logger.WithError(err).Warn("Failed to count failed login attempts by IP; allowing login")
+		} else if count >= s.lockout.MaxFailedPerIP {
+			s.recordAttempt(ctx, tenantID, "", email, ip, "", false, models.LoginAttemptReasonRateLimited)
+			return "Too many login attempts from your network", true
+		}
+	}
+
+	return "", false
+}
+
+// recordAttempt persists a LoginAttempt. Errors are logged but never
+// surfaced — audit logging must not block authentication.
+func (s *authService) recordAttempt(ctx context.Context, tenantID, _ string, email, ip, ua string, successful bool, reason string) {
+	if s.loginAttemptRepo == nil {
+		return
+	}
+	attempt := &models.LoginAttempt{
+		TenantID:   tenantID,
+		Email:      email,
+		IPAddress:  ip,
+		UserAgent:  ua,
+		Successful: successful,
+		Reason:     reason,
+	}
+	if err := s.loginAttemptRepo.Create(ctx, attempt); err != nil {
+		s.logger.WithError(err).Warn("Failed to record login attempt")
+	}
+}
+
+// forgotPasswordReasonPrefix marks LoginAttempt rows used purely for
+// forgot-password rate-limiting. The rows are kept separate from login
+// failures by being recorded as Successful=true so they do not contribute
+// to the per-email lockout counter; the reason value lets us filter them
+// when counting forgot-password traffic.
+const (
+	forgotPasswordReason        = "forgot_password"
+	forgotPasswordRateLimitedReason = "forgot_password_rate_limited"
+)
+
+// countForgotPasswordRequests returns how many forgot-password requests we
+// have seen for an email within the given time window.
+func (s *authService) countForgotPasswordRequests(ctx context.Context, tenantID, email string, since time.Time) (int, error) {
+	if s.loginAttemptRepo == nil {
+		return 0, nil
+	}
+	return s.loginAttemptRepo.CountRecentByEmailAndReason(ctx, tenantID, email, forgotPasswordReason, since)
+}
+
+// recordForgotPasswordRequest writes a marker row so future rate-limit
+// checks can see the request. Recorded as Successful=true to keep these
+// rows out of the login failure counter.
+func (s *authService) recordForgotPasswordRequest(ctx context.Context, tenantID, email, ip, ua, reason string) {
+	if s.loginAttemptRepo == nil {
+		return
+	}
+	r := forgotPasswordReason
+	if reason == "rate_limited" {
+		r = forgotPasswordRateLimitedReason
+	}
+	attempt := &models.LoginAttempt{
+		TenantID:   tenantID,
+		Email:      email,
+		IPAddress:  ip,
+		UserAgent:  ua,
+		Successful: true,
+		Reason:     r,
+	}
+	if err := s.loginAttemptRepo.Create(ctx, attempt); err != nil {
+		s.logger.WithError(err).Warn("Failed to record forgot-password request")
+	}
 }
 
 // VerifyToken verifies a JWT token and returns the claims
@@ -237,6 +514,16 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, req *mo
 	}
 
 	s.logger.WithField("user_id", userID).Info("Password changed successfully")
+
+	// Publish PasswordChanged so the audit log records the change. The
+	// "changed_by" is the user themselves (self-service flow); admin-initiated
+	// password changes would go through a different code path with a separate
+	// event payload.
+	s.publishEvent(ctx, "PasswordChanged", map[string]interface{}{
+		"tenant_id":  user.TenantID,
+		"user_id":    user.ID,
+		"changed_by": "self",
+	})
 
 	return nil
 }
@@ -345,8 +632,34 @@ func (s *authService) ResendEmailVerification(ctx context.Context, req *models.R
 	return nil
 }
 
-// RequestPasswordReset generates a password reset token and publishes an event
+// RequestPasswordReset generates a password reset token and publishes an event.
+//
+// Forgot-password requests are rate-limited per email (default 3/hour) to
+// protect the email-sending pipeline from abuse. The limit is applied
+// before the user lookup so it also serves to dampen email enumeration
+// probes. A throttled request is silently dropped — the caller always sees
+// the same "if the email exists..." response shape from the HTTP handler.
 func (s *authService) RequestPasswordReset(ctx context.Context, req *models.ForgotPasswordRequest) error {
+	emailKey := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Rate-limit per email. We piggyback on the LoginAttempt table by using
+	// a synthetic reason value, which keeps the schema lean.
+	if s.loginAttemptRepo != nil && s.lockout.ForgotPasswordMaxPerHour > 0 {
+		since := time.Now().Add(-time.Hour)
+		count, err := s.countForgotPasswordRequests(ctx, req.TenantID, emailKey, since)
+		if err != nil {
+			s.logger.WithError(err).Warn("Failed to count recent password-reset requests; allowing")
+		} else if count >= s.lockout.ForgotPasswordMaxPerHour {
+			s.logger.WithField("email", emailKey).Warn("Forgot-password rate limit exceeded; dropping request")
+			// Record the throttled attempt so the window keeps sliding,
+			// then return nil — caller behavior is identical to the
+			// unknown-email path.
+			s.recordForgotPasswordRequest(ctx, req.TenantID, emailKey, req.IPAddress, req.UserAgent, "rate_limited")
+			return nil
+		}
+		s.recordForgotPasswordRequest(ctx, req.TenantID, emailKey, req.IPAddress, req.UserAgent, "forgot_password")
+	}
+
 	// Look up user — return success even if not found to prevent email enumeration
 	user, err := s.userRepo.GetByEmail(ctx, req.TenantID, req.Email)
 	if err != nil {

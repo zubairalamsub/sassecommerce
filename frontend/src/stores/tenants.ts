@@ -47,7 +47,7 @@ export const useTenantStore = create<TenantStore>()(
             config: {
               general: { timezone: 'Asia/Dhaka', currency: 'BDT', language: 'en', date_format: 'DD/MM/YYYY', time_format: '12h', contact_email: data.email, contact_phone: '', support_url: '' },
               branding: { logo_url: '', favicon_url: '', primary_color: '#006A4E', secondary_color: '#F42A41', custom_css: '', custom_fonts: {} },
-              features: { multi_currency: false, wishlist: true, product_reviews: true, guest_checkout: true, social_login: false, ai_recommendations: false, loyalty_program: false, subscriptions: false, gift_cards: false },
+              features: { multi_currency: false, wishlist: true, product_reviews: true, guest_checkout: true, social_login: false, ai_recommendations: false, loyalty_program: false, subscriptions: false, gift_cards: false, invoices_enabled: false },
             },
             created_at: now,
             updated_at: now,

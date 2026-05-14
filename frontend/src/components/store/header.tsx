@@ -7,8 +7,12 @@ import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
 import { useProductStore } from '@/stores/products';
 import { useWishlistStore } from '@/stores/wishlist';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import ThemeSwitcher from '@/components/ui/theme-switcher';
+import {
+  InstantSearchTrigger,
+  InstantSearchPanel,
+} from '@/components/store/instant-search';
 import { cn } from '@/lib/utils';
 
 interface StoreHeaderProps {
@@ -23,13 +27,43 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
   const { user, isAuthenticated, logout } = useAuthStore();
   const categories = useProductStore((s) => s.categories);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+
+  // Global keyboard shortcuts: Cmd+K / Ctrl+K / "/" — open the search palette
+  useEffect(() => {
+    function isEditable(el: Element | null): boolean {
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      const html = el as HTMLElement;
+      return html.isContentEditable === true;
+    }
+
+    function onKey(e: KeyboardEvent) {
+      // Cmd+K (macOS) / Ctrl+K (everything else)
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+        return;
+      }
+      // "/" — only when not typing in another input
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (isEditable(document.activeElement)) return;
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const authenticated = mounted && isAuthenticated();
   const initials = user
@@ -86,38 +120,23 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
             ))}
           </nav>
 
-          {/* Search — grows to fill space */}
+          {/* Search trigger — grows to fill space (desktop only) */}
           <div className="hidden sm:block flex-1 max-w-sm ml-auto">
-            <div className="relative">
-              <Search className={cn(
-                'absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 transition-colors',
-                searchFocused ? 'text-primary' : 'text-text-muted',
-              )} />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                    setSearchQuery('');
-                  }
-                }}
-                className={cn(
-                  'w-full rounded-full border bg-surface-secondary py-2 pl-10 pr-4 text-sm text-text transition-all duration-200 placeholder:text-text-muted outline-none',
-                  searchFocused
-                    ? 'border-primary ring-2 ring-primary/20 bg-surface'
-                    : 'border-transparent hover:border-border hover:bg-surface-hover',
-                )}
-              />
-            </div>
+            <InstantSearchTrigger onClick={openSearch} />
           </div>
 
           {/* Right actions */}
           <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Mobile: search icon opens the same palette (fullscreen on small screens) */}
+            <button
+              type="button"
+              aria-label="Search"
+              onClick={openSearch}
+              className="sm:hidden p-2 rounded-lg text-text-secondary hover:text-text hover:bg-surface-hover transition-colors"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+
             <ThemeSwitcher compact />
 
             <Link href="/wishlist" className="relative p-2 rounded-lg text-text-secondary hover:text-text hover:bg-surface-hover transition-colors">
@@ -198,24 +217,6 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
       {/* Mobile menu */}
       {mobileMenuOpen && (
         <div className="border-t border-border bg-surface px-4 py-4 lg:hidden">
-          {/* Mobile search */}
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
-              <input type="text" placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                    setSearchQuery('');
-                    setMobileMenuOpen(false);
-                  }
-                }}
-                className="w-full rounded-full border border-border bg-surface-secondary py-2.5 pl-10 pr-4 text-sm text-text placeholder:text-text-muted outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
-          </div>
-
           <nav className="space-y-1">
             <Link href="/products" onClick={() => setMobileMenuOpen(false)}
               className="block rounded-lg px-3 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-hover hover:text-text transition-colors">
@@ -258,6 +259,9 @@ export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHead
           )}
         </div>
       )}
+
+      {/* Command-palette search overlay — fullscreen on mobile, centered on desktop */}
+      <InstantSearchPanel open={searchOpen} onOpenChange={setSearchOpen} />
     </header>
   );
 }

@@ -35,9 +35,12 @@ const (
 	TypePaymentConfirmed   NotificationType = "payment_confirmed"
 	TypePaymentFailed      NotificationType = "payment_failed"
 	TypeWelcome            NotificationType = "welcome"
+	TypeEmailVerification  NotificationType = "email_verification"
 	TypePasswordReset      NotificationType = "password_reset"
+	TypeReceipt            NotificationType = "receipt"
 	TypeStockAlert         NotificationType = "stock_alert"
 	TypePromotion          NotificationType = "promotion"
+	TypeCustom             NotificationType = "custom"
 )
 
 // Notification represents a notification record
@@ -127,6 +130,38 @@ type SendNotificationRequest struct {
 	ReferenceID   string                 `json:"reference_id,omitempty"`
 	ReferenceType string                 `json:"reference_type,omitempty"`
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type CreateTemplateRequest struct {
+	Type            string `json:"type" binding:"required"`
+	Channel         string `json:"channel" binding:"required"`
+	Name            string `json:"name" binding:"required"`
+	SubjectTemplate string `json:"subject_template"`
+	BodyTemplate    string `json:"body_template" binding:"required"`
+	IsActive        bool   `json:"is_active"`
+}
+
+type UpdateTemplateRequest struct {
+	Type            *string `json:"type,omitempty"`
+	Channel         *string `json:"channel,omitempty"`
+	Name            *string `json:"name,omitempty"`
+	SubjectTemplate *string `json:"subject_template,omitempty"`
+	BodyTemplate    *string `json:"body_template,omitempty"`
+	IsActive        *bool   `json:"is_active,omitempty"`
+}
+
+type PreviewTemplateRequest struct {
+	SampleVars map[string]interface{} `json:"sample_vars,omitempty"`
+}
+
+type TestSendTemplateRequest struct {
+	Email      string                 `json:"email" binding:"required"`
+	SampleVars map[string]interface{} `json:"sample_vars,omitempty"`
+}
+
+type RenderedTemplate struct {
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
 }
 
 type UpdatePreferenceRequest struct {

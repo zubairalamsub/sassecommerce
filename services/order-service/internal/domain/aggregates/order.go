@@ -155,7 +155,13 @@ func (o *Order) Confirm(confirmedBy string) error {
 	return nil
 }
 
-// Cancel cancels the order
+// Cancel cancels the order.
+//
+// When the order has already taken a payment (PaymentID set), an additional
+// OrderRefunded event is raised immediately after OrderCancelled so the
+// audit pipeline gets a high-signal, dedicated entry for the refund. The
+// payment service still handles the actual money movement via the saga
+// compensation — this event is purely the audit-trail breadcrumb.
 func (o *Order) Cancel(reason, cancelledBy string) error {
 	if o.Status == StatusCancelled {
 		return errors.New("order already cancelled")
@@ -165,6 +171,10 @@ func (o *Order) Cancel(reason, cancelledBy string) error {
 		return errors.New("cannot cancel delivered order")
 	}
 
+	hadPayment := o.PaymentID != ""
+	refundAmount := o.TotalAmount
+	paymentID := o.PaymentID
+
 	event := events.OrderCancelled{
 		BaseEvent:   events.NewBaseEvent(o.ID, events.OrderCancelledEvent, o.Version+1),
 		Reason:      reason,
@@ -173,6 +183,19 @@ func (o *Order) Cancel(reason, cancelledBy string) error {
 	}
 
 	o.raise(event)
+
+	if hadPayment {
+		refundEvent := events.OrderRefunded{
+			BaseEvent:   events.NewBaseEvent(o.ID, events.OrderRefundedEvent, o.Version+1),
+			PaymentID:   paymentID,
+			Amount:      refundAmount,
+			Reason:      reason,
+			RefundedBy:  cancelledBy,
+			RefundedAt:  time.Now().UTC(),
+		}
+		o.raise(refundEvent)
+	}
+
 	return nil
 }
 
@@ -328,6 +351,11 @@ func (o *Order) apply(event events.Event) {
 
 	case events.OrderCancelled:
 		o.Status = StatusCancelled
+		o.UpdatedAt = e.Timestamp
+
+	case events.OrderRefunded:
+		// Refund itself doesn't change Status (cancellation already did) — we
+		// just bump UpdatedAt so the read model sees the latest activity.
 		o.UpdatedAt = e.Timestamp
 
 	case events.OrderShipped:

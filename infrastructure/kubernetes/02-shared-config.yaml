@@ -1,0 +1,29 @@
+# Shared configuration referenced by every service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-config
+  namespace: ecommerce
+data:
+  KAFKA_BROKERS: kafka:9092
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  MONGO_URI: mongodb://mongodb:27017
+  ELASTICSEARCH_URL: http://elasticsearch:9200
+  ENVIRONMENT: production
+  LOG_LEVEL: info
+  DEFAULT_CURRENCY: BDT
+  DEFAULT_TIMEZONE: Asia/Dhaka
+  DEFAULT_COUNTRY: BD
+  DEFAULT_LANGUAGE: bn
+  # Object storage (Oracle Cloud Object Storage, S3-compatible).
+  # Namespace is non-secret. Region+bucket here so other services can refer to
+  # the same bucket without duplicating values.
+  OCI_S3_ENDPOINT: https://axwcv3hbytve.compat.objectstorage.ap-singapore-1.oraclecloud.com
+  OCI_S3_REGION: ap-singapore-1
+  OCI_S3_BUCKET: free_bucket
+  # Public URL prefix served via CDN. Replace with your CDN hostname (Cloudflare
+  # in front of OCI is recommended). Falls back to direct OCI URL if unset.
+  OCI_S3_PUBLIC_BASE_URL: ""

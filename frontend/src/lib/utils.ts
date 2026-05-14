@@ -57,21 +57,21 @@ export function mediaUrl(relativePath: string | undefined | null): string {
 
 export function statusColor(status: string): string {
   const colors: Record<string, string> = {
-    active: 'bg-green-100 text-green-800',
-    pending: 'bg-yellow-100 text-yellow-800',
-    confirmed: 'bg-blue-100 text-blue-800',
-    shipped: 'bg-purple-100 text-purple-800',
-    delivered: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
-    suspended: 'bg-red-100 text-red-800',
-    inactive: 'bg-gray-100 text-gray-800',
-    draft: 'bg-gray-100 text-gray-800',
-    archived: 'bg-gray-100 text-gray-800',
-    Completed: 'bg-green-100 text-green-800',
-    Pending: 'bg-yellow-100 text-yellow-800',
-    Failed: 'bg-red-100 text-red-800',
-    Cancelled: 'bg-red-100 text-red-800',
-    Refunded: 'bg-orange-100 text-orange-800',
+    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    confirmed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    shipped: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+    delivered: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    inactive: 'bg-surface-hover text-text-secondary',
+    draft: 'bg-surface-hover text-text-secondary',
+    archived: 'bg-surface-hover text-text-secondary',
+    Completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    Failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    Cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    Refunded: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
   };
-  return colors[status] || 'bg-gray-100 text-gray-800';
+  return colors[status] || 'bg-surface-hover text-text-secondary';
 }

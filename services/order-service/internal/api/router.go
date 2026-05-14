@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -36,6 +37,7 @@ func NewRouter(
 func (r *Router) Setup() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(metrics.Middleware("order-service"))
 	router.Use(r.requestResponseLogger())
 
 	// Health check
@@ -45,6 +47,9 @@ func (r *Router) Setup() *gin.Engine {
 			"service": "order-service",
 		})
 	})
+
+	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	// Rate limiting
 	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
@@ -79,6 +84,9 @@ func (r *Router) Setup() *gin.Engine {
 			authOrders.POST("/:id/cancel", r.commandHandler.CancelOrder)
 			authOrders.POST("/:id/ship", r.commandHandler.ShipOrder)
 			authOrders.POST("/:id/deliver", r.commandHandler.DeliverOrder)
+			// POS receipt email — publishes a ReceiptRequested event onto
+			// Kafka for the notification-service consumer to render+send.
+			authOrders.POST("/:id/send-receipt", r.commandHandler.SendReceipt)
 		}
 
 		// Authenticated query routes
@@ -127,7 +135,7 @@ func (r *Router) requestResponseLogger() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/ready" {
+		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/ready" || c.Request.URL.Path == "/metrics" {
 			c.Next()
 			return
 		}

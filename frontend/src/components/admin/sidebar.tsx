@@ -17,6 +17,9 @@ import {
   CreditCard,
   Store,
   ScrollText,
+  Zap,
+  BadgePercent,
+  Mail,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import ThemeSwitcher from '@/components/ui/theme-switcher';
@@ -26,7 +29,10 @@ const navItems = [
   { href: '/admin/products', label: 'Products', icon: Package },
   { href: '/admin/categories', label: 'Categories', icon: FolderTree },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+  { href: '/admin/sales/new', label: 'Instant Sell', icon: Zap },
   { href: '/admin/inventory', label: 'Inventory', icon: Warehouse },
+  { href: '/admin/promotions', label: 'Promotions', icon: BadgePercent },
+  { href: '/admin/email-templates', label: 'Email templates', icon: Mail },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/vendors', label: 'Vendors', icon: Store },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },

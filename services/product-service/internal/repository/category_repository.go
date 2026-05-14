@@ -23,6 +23,7 @@ type CategoryRepository interface {
 	Delete(ctx context.Context, id string) error
 	SlugExists(ctx context.Context, tenantID, slug string) (bool, error)
 	UpdateStatus(ctx context.Context, id string, status models.CategoryStatus) error
+	UpdateImage(ctx context.Context, id string, imageURL string) error
 }
 
 type categoryRepository struct {
@@ -239,6 +240,39 @@ func (r *categoryRepository) SlugExists(ctx context.Context, tenantID, slug stri
 	}
 
 	return count > 0, nil
+}
+
+// UpdateImage sets the image field on a category. Passing an empty string clears it.
+// Used by the category image service after a successful upload confirmation
+// or when an image is removed.
+func (r *categoryRepository) UpdateImage(ctx context.Context, id string, imageURL string) error {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("invalid category ID")
+	}
+
+	filter := bson.M{
+		"_id":        objectID,
+		"deleted_at": bson.M{"$exists": false},
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"image":      imageURL,
+			"updated_at": time.Now(),
+		},
+	}
+
+	result, err := r.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return errors.New("category not found")
+	}
+
+	return nil
 }
 
 // UpdateStatus updates a category's status

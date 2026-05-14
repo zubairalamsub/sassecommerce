@@ -121,6 +121,16 @@ describe("Auth Store", () => {
 });
 
 describe("demoLogin", () => {
+  // Stub /api/auth/demo-token so jsdom's missing fetch doesn't blow up.
+  beforeEach(() => {
+    (global.fetch as jest.Mock) = jest.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/api/auth/demo-token")) {
+        return { ok: true, status: 200, json: async () => ({ token: "demo-jwt-token" }) };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+  });
+
   test("returns user and token for valid demo credentials", async () => {
     const result = await demoLogin("admin@fashion.com.bd", "admin123");
     expect(result).not.toBeNull();

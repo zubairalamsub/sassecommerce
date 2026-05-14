@@ -276,11 +276,11 @@ export default function CheckoutPage() {
   if (items.length === 0 && !orderPlaced) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 lg:px-8">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gray-100">
-          <ShoppingBag className="h-10 w-10 text-gray-400" />
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-surface-hover">
+          <ShoppingBag className="h-10 w-10 text-text-muted" />
         </div>
-        <h1 className="mt-6 text-2xl font-bold text-gray-900">Your cart is empty</h1>
-        <p className="mt-2 text-gray-500">Add some products before checkout.</p>
+        <h1 className="mt-6 text-2xl font-bold text-text">Your cart is empty</h1>
+        <p className="mt-2 text-text-secondary">Add some products before checkout.</p>
         <Link
           href="/products"
           className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-medium text-white transition-colors hover:bg-primary-dark"
@@ -295,11 +295,11 @@ export default function CheckoutPage() {
   if (orderPlaced) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 lg:px-8">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-green-100">
-          <CheckCircle className="h-12 w-12 text-green-600" />
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+          <CheckCircle className="h-12 w-12 text-green-600 dark:text-green-400" />
         </div>
-        <h1 className="mt-6 text-2xl font-bold text-gray-900">Order Placed Successfully!</h1>
-        <p className="mt-2 text-gray-500">
+        <h1 className="mt-6 text-2xl font-bold text-text">Order Placed Successfully!</h1>
+        <p className="mt-2 text-text-secondary">
           Thank you for your order. You will be redirected shortly.
         </p>
       </div>
@@ -308,20 +308,20 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold text-gray-900">Checkout</h1>
-      <p className="mt-1 text-gray-500">Complete your order details below</p>
+      <h1 className="text-3xl font-bold text-text">Checkout</h1>
+      <p className="mt-1 text-text-secondary">Complete your order details below</p>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left column - Forms */}
         <div className="lg:col-span-2 space-y-8">
           {/* Shipping Information */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-lg font-semibold text-gray-900">Shipping Information</h2>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-text">Shipping Information</h2>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Full Name */}
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Full Name
                 </label>
                 <input
@@ -331,7 +331,7 @@ export default function CheckoutPage() {
                   onChange={handleChange}
                   placeholder="e.g. Rahim Uddin"
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.name ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.name ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 />
                 {errors.name && (
@@ -341,7 +341,7 @@ export default function CheckoutPage() {
 
               {/* Phone */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Phone Number
                 </label>
                 <input
@@ -351,7 +351,7 @@ export default function CheckoutPage() {
                   onChange={handleChange}
                   placeholder="+880 1XXXXXXXXX"
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.phone ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 />
                 {errors.phone && (
@@ -361,7 +361,7 @@ export default function CheckoutPage() {
 
               {/* Email */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Email Address
                 </label>
                 <input
@@ -371,7 +371,7 @@ export default function CheckoutPage() {
                   onChange={handleChange}
                   placeholder="you@example.com"
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.email ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.email ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 />
                 {errors.email && (
@@ -381,7 +381,7 @@ export default function CheckoutPage() {
 
               {/* Street Address */}
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Street Address
                 </label>
                 <input
@@ -391,7 +391,7 @@ export default function CheckoutPage() {
                   onChange={handleChange}
                   placeholder="House #, Road #, Area"
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.street ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.street ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 />
                 {errors.street && (
@@ -401,7 +401,7 @@ export default function CheckoutPage() {
 
               {/* City */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   City
                 </label>
                 <select
@@ -409,7 +409,7 @@ export default function CheckoutPage() {
                   value={formData.city}
                   onChange={handleChange}
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.city ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.city ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 >
                   <option value="">Select city</option>
@@ -426,7 +426,7 @@ export default function CheckoutPage() {
 
               {/* Postal Code */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-text-secondary">
                   Postal Code
                 </label>
                 <input
@@ -436,7 +436,7 @@ export default function CheckoutPage() {
                   onChange={handleChange}
                   placeholder="e.g. 1205"
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary ${
-                    errors.postalCode ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    errors.postalCode ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20' : 'border-border bg-surface text-text'
                   }`}
                 />
                 {errors.postalCode && (
@@ -447,8 +447,8 @@ export default function CheckoutPage() {
           </div>
 
           {/* Payment Method */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-lg font-semibold text-gray-900">Payment Method</h2>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-text">Payment Method</h2>
 
             <div className="mt-4 space-y-3">
               {PAYMENT_METHODS.map((method) => (
@@ -457,7 +457,7 @@ export default function CheckoutPage() {
                   className={`flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors ${
                     paymentMethod === method.id
                       ? 'border-primary bg-primary-light'
-                      : 'border-gray-200 hover:border-gray-300'
+                      : 'border-border hover:border-primary/40'
                   }`}
                 >
                   <input
@@ -470,15 +470,15 @@ export default function CheckoutPage() {
                   />
                   <div className="flex items-center gap-3">
                     {method.id === 'cod' ? (
-                      <Banknote className="h-5 w-5 text-gray-600" />
+                      <Banknote className="h-5 w-5 text-text-secondary" />
                     ) : (
-                      <CreditCard className="h-5 w-5 text-gray-600" />
+                      <CreditCard className="h-5 w-5 text-text-secondary" />
                     )}
                     <div>
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-text">
                         {method.label}
                       </span>
-                      <p className="text-xs text-gray-500">{method.description}</p>
+                      <p className="text-xs text-text-secondary">{method.description}</p>
                     </div>
                   </div>
                 </label>
@@ -489,11 +489,11 @@ export default function CheckoutPage() {
 
         {/* Right column - Order summary */}
         <div>
-          <div className="sticky top-8 rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
+          <div className="sticky top-8 rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-text">Order Summary</h2>
 
             {/* Items list */}
-            <div className="mt-4 divide-y divide-gray-100">
+            <div className="mt-4 divide-y divide-border-light">
               {items.map((item) => (
                 <div
                   key={`${item.productId}-${item.variantId ?? ''}`}
@@ -505,12 +505,12 @@ export default function CheckoutPage() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900">
+                    <p className="truncate text-sm font-medium text-text">
                       {item.name}
                     </p>
-                    <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+                    <p className="text-xs text-text-secondary">Qty: {item.quantity}</p>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-sm font-medium text-text">
                     {formatCurrency(item.price * item.quantity)}
                   </span>
                 </div>
@@ -519,13 +519,13 @@ export default function CheckoutPage() {
 
             {/* Delivery Option */}
             {shippingRates.length > 0 && (
-              <div className="mt-4 border-t border-gray-200 pt-4">
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <div className="mt-4 border-t border-border pt-4">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-text-secondary">
                   <Truck className="h-4 w-4" />
                   Delivery Option
                 </h3>
-                <div className="mb-2 rounded-md bg-blue-50 px-3 py-1.5">
-                  <span className="text-xs font-medium text-blue-700">
+                <div className="mb-2 rounded-md bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5">
+                  <span className="text-xs font-medium text-blue-700 dark:text-blue-300">
                     {DHAKA_ZONE.includes(formData.city) ? 'Inside Dhaka Zone' : 'Outside Dhaka'}
                   </span>
                 </div>
@@ -539,7 +539,7 @@ export default function CheckoutPage() {
                         className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-3 transition-colors ${
                           isSelected
                             ? 'border-primary bg-primary/5'
-                            : 'border-gray-200 hover:border-gray-300'
+                            : 'border-border hover:border-primary/40'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -552,19 +552,19 @@ export default function CheckoutPage() {
                           />
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-gray-900">
+                              <span className="text-sm font-medium text-text">
                                 {isExpress ? 'Express Delivery' : 'Standard Delivery'}
                               </span>
                               {isExpress && (
-                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">FAST</span>
+                                <span className="rounded-full bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">FAST</span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-text-secondary">
                               {rate.estimated_days === 1 ? 'Next day delivery' : `${rate.estimated_days}-${rate.estimated_days + 1} business days`}
                             </p>
                           </div>
                         </div>
-                        <span className="text-sm font-semibold text-gray-900">
+                        <span className="text-sm font-semibold text-text">
                           ৳{rate.rate}
                         </span>
                       </label>
@@ -575,42 +575,42 @@ export default function CheckoutPage() {
             )}
 
             {/* Coupon Code */}
-            <div className="mt-4 border-t border-gray-200 pt-4">
+            <div className="mt-4 border-t border-border pt-4">
               {couponApplied ? (
-                <div className="flex items-center justify-between rounded-lg bg-green-50 px-3 py-2">
-                  <div className="flex items-center gap-2 text-sm text-green-700">
+                <div className="flex items-center justify-between rounded-lg bg-green-50 dark:bg-green-900/30 px-3 py-2">
+                  <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
                     <Tag className="h-4 w-4" />
                     <span className="font-medium">{couponApplied.code}</span>
-                    <span className="text-green-600">applied</span>
+                    <span className="text-green-600 dark:text-green-400">applied</span>
                   </div>
                   <button
                     onClick={() => { setCouponApplied(null); setCouponCode(''); setCouponError(''); }}
-                    className="text-green-600 hover:text-green-800"
+                    className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
                     Coupon Code
                   </label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
-                      <Tag className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <Tag className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                       <input
                         type="text"
                         value={couponCode}
                         onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(''); }}
                         onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
                         placeholder="Enter code"
-                        className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>
                     <button
                       onClick={handleApplyCoupon}
                       disabled={couponLoading || !couponCode.trim()}
-                      className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
+                      className="rounded-lg bg-text px-4 py-2 text-sm font-medium text-surface transition-colors hover:bg-text/85 disabled:opacity-50"
                     >
                       {couponLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -627,42 +627,42 @@ export default function CheckoutPage() {
             </div>
 
             {/* Totals */}
-            <div className="mt-4 space-y-3 border-t border-gray-200 pt-4">
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-text-secondary">Subtotal</span>
+                <span className="font-medium text-text">
                   {formatCurrency(subtotal)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
+                <span className="text-text-secondary">
                   Delivery
                   {selectedCarrier && (
-                    <span className="ml-1 text-gray-400">
+                    <span className="ml-1 text-text-muted">
                       ({selectedCarrier.carrier === 'express' ? 'Express' : 'Standard'})
                     </span>
                   )}
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-text">
                   {shippingRates.length > 0 ? (
                     formatCurrency(shippingCost)
                   ) : (
-                    <span className="text-gray-400 text-xs">Select city</span>
+                    <span className="text-text-muted text-xs">Select city</span>
                   )}
                 </span>
               </div>
               {couponApplied && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-green-600">Discount ({couponApplied.code})</span>
-                  <span className="font-medium text-green-600">
+                  <span className="text-green-600 dark:text-green-400">Discount ({couponApplied.code})</span>
+                  <span className="font-medium text-green-600 dark:text-green-400">
                     -{formatCurrency(discount)}
                   </span>
                 </div>
               )}
-              <div className="border-t border-gray-200 pt-3">
+              <div className="border-t border-border pt-3">
                 <div className="flex justify-between">
-                  <span className="text-base font-semibold text-gray-900">Total</span>
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-base font-semibold text-text">Total</span>
+                  <span className="text-lg font-bold text-text">
                     {formatCurrency(grandTotal)}
                   </span>
                 </div>
@@ -671,7 +671,7 @@ export default function CheckoutPage() {
 
             {/* Order error */}
             {orderError && (
-              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                 {orderError}
               </div>
             )}
@@ -695,7 +695,7 @@ export default function CheckoutPage() {
               )}
             </button>
 
-            <p className="mt-3 text-center text-xs text-gray-400">
+            <p className="mt-3 text-center text-xs text-text-muted">
               By placing your order you agree to our Terms &amp; Conditions
             </p>
           </div>

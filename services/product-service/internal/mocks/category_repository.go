@@ -67,3 +67,8 @@ func (m *MockCategoryRepository) UpdateStatus(ctx context.Context, id string, st
 	args := m.Called(ctx, id, status)
 	return args.Error(0)
 }
+
+func (m *MockCategoryRepository) UpdateImage(ctx context.Context, id string, imageURL string) error {
+	args := m.Called(ctx, id, imageURL)
+	return args.Error(0)
+}

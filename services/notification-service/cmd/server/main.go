@@ -16,9 +16,9 @@ import (
 	"github.com/ecommerce/notification-service/internal/repository"
 	"github.com/ecommerce/notification-service/internal/service"
 	"github.com/ecommerce/notification-service/pkg/logger"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -98,14 +98,19 @@ func main() {
 
 	// Initialize service
 	notifService := service.NewNotificationService(notifRepo, providers, log)
+	tmplService := service.NewTemplateService(notifRepo, providers, log)
 
-	// Initialize Kafka consumer
-	consumer := messaging.NewEventConsumer(cfg.Kafka.Brokers, cfg.Kafka.GroupID, notifService, log)
+	// Initialize Kafka consumer — templates are looked up via the repository
+	// directly so the consumer can override the hardcoded RenderEmailHTML
+	// output when a tenant has an active template configured.
+	frontendBaseURL := getEnv("FRONTEND_BASE_URL", "https://shop.example.com")
+	consumer := messaging.NewEventConsumer(cfg.Kafka.Brokers, cfg.Kafka.GroupID, notifService, notifRepo, frontendBaseURL, log)
 	consumer.Start(context.Background())
 	defer consumer.Stop()
 
 	// Initialize handler
 	handler := api.NewNotificationHandler(notifService, log)
+	tmplHandler := api.NewTemplateHandler(tmplService, log)
 
 	// Setup Gin router
 	if cfg.Server.Env == "production" {
@@ -114,20 +119,22 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	// Security headers land early so they apply to every response — including
+	// errors raised by middleware further down the chain.
+	router.Use(sharedmiddleware.SecurityHeaders(sharedmiddleware.SecurityHeadersConfig{}))
+	router.Use(metrics.Middleware("notification-service"))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          log,
 		LogRequestBody:  true,
 		LogResponseBody: true,
-		SkipPaths:       []string{"/health", "/ready"},
+		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
-	// Configure CORS
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-Id"},
+	// CORS: origins are sourced from CORS_ALLOWED_ORIGINS in production and
+	// fall back to localhost dev origins otherwise. AllowCredentials is set
+	// because the storefront/admin call us with a JWT cookie/bearer.
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
 		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
 	}))
 
 	// Health check endpoint
@@ -139,6 +146,9 @@ func main() {
 		})
 	})
 
+	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+
 	// JWT Auth middleware
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -148,6 +158,7 @@ func main() {
 
 	// Register API routes
 	api.RegisterRoutes(router, handler)
+	api.RegisterTemplateRoutes(router, tmplHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

@@ -80,3 +80,8 @@ func (m *MockUserRepository) SetEmailVerified(ctx context.Context, userID string
 	args := m.Called(ctx, userID)
 	return args.Error(0)
 }
+
+func (m *MockUserRepository) UpdateAvatar(ctx context.Context, userID, avatarURL string) error {
+	args := m.Called(ctx, userID, avatarURL)
+	return args.Error(0)
+}

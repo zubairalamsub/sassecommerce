@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
@@ -91,11 +92,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Surface request-derived context into the service so it can apply
+	// brute-force protection and record an audit trail.
+	req.IPAddress = c.ClientIP()
+	req.UserAgent = c.Request.UserAgent()
+
 	loginResp, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
+		// 429 for lockout-class errors so clients can react sensibly; the
+		// message itself never reveals whether the account exists.
 		status := http.StatusUnauthorized
-		if err.Error() == "user account is not active" {
+		switch {
+		case err.Error() == "user account is not active":
 			status = http.StatusForbidden
+		case strings.HasPrefix(err.Error(), "Too many login attempts"):
+			status = http.StatusTooManyRequests
 		}
 
 		c.JSON(status, gin.H{
@@ -282,6 +293,10 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		})
 		return
 	}
+
+	// Carry request metadata into the service for rate-limit accounting.
+	req.IPAddress = c.ClientIP()
+	req.UserAgent = c.Request.UserAgent()
 
 	if err := h.authService.RequestPasswordReset(c.Request.Context(), &req); err != nil {
 		h.logger.WithError(err).Error("Failed to process password reset request")

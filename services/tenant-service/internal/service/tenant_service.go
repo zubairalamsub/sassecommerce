@@ -167,6 +167,10 @@ func (s *tenantService) UpdateTenant(ctx context.Context, id string, req *models
 		return nil, err
 	}
 
+	// Snapshot the pre-update status so we can emit a security event when
+	// the tenant is suspended or reactivated.
+	oldStatus := tenant.Status
+
 	// Update fields
 	if req.Name != nil {
 		tenant.Name = *req.Name
@@ -203,6 +207,29 @@ func (s *tenantService) UpdateTenant(ctx context.Context, id string, req *models
 		s.logger.WithError(err).Warn("Failed to publish tenant updated event")
 	}
 
+	// Additionally emit a status-specific security event when the tenant
+	// gets suspended or reactivated. These are higher-signal than the
+	// generic TenantUpdated and let the audit log surface them clearly.
+	if tenant.Status != oldStatus {
+		var statusEvent string
+		switch tenant.Status {
+		case models.StatusSuspended:
+			statusEvent = "TenantSuspended"
+		case models.StatusActive:
+			if oldStatus == models.StatusSuspended {
+				statusEvent = "TenantReactivated"
+			}
+		}
+		if statusEvent != "" {
+			s.publishSecurityEvent(ctx, statusEvent, map[string]interface{}{
+				"tenant_id":  tenant.ID,
+				"name":       tenant.Name,
+				"status":     tenant.Status,
+				"old_values": map[string]interface{}{"status": oldStatus},
+			})
+		}
+	}
+
 	return toTenantResponse(tenant), nil
 }
 
@@ -229,11 +256,16 @@ func (s *tenantService) DeleteTenant(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateTenantConfig replaces the tenant's configuration. To keep the audit
+// log readable (configs are large and noisy), the published event lists only
+// the keys whose top-level value changed — not the full before/after blob.
 func (s *tenantService) UpdateTenantConfig(ctx context.Context, id string, config *models.TenantConfig) error {
 	tenant, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
+
+	changedKeys := diffTenantConfigKeys(&tenant.Config, config)
 
 	tenant.Config = *config
 
@@ -241,7 +273,44 @@ func (s *tenantService) UpdateTenantConfig(ctx context.Context, id string, confi
 		return err
 	}
 
+	// Only emit an event when something actually changed; otherwise this
+	// can flood the audit log on idempotent PATCH retries.
+	if len(changedKeys) > 0 {
+		s.publishSecurityEvent(ctx, "TenantConfigChanged", map[string]interface{}{
+			"tenant_id":    tenant.ID,
+			"changed_keys": changedKeys,
+		})
+	}
+
 	return nil
+}
+
+// diffTenantConfigKeys returns the names of the top-level config sections
+// whose value changed between two TenantConfig snapshots. We intentionally
+// stop at the section granularity (general, branding, features, …) so the
+// audit log stays compact even when nested values change.
+func diffTenantConfigKeys(oldCfg, newCfg *models.TenantConfig) []string {
+	if oldCfg == nil || newCfg == nil {
+		return nil
+	}
+	var changed []string
+	oldBytes, _ := json.Marshal(oldCfg)
+	newBytes, _ := json.Marshal(newCfg)
+	var oldMap, newMap map[string]json.RawMessage
+	_ = json.Unmarshal(oldBytes, &oldMap)
+	_ = json.Unmarshal(newBytes, &newMap)
+	for k, newVal := range newMap {
+		oldVal, ok := oldMap[k]
+		if !ok || string(oldVal) != string(newVal) {
+			changed = append(changed, k)
+		}
+	}
+	for k := range oldMap {
+		if _, ok := newMap[k]; !ok {
+			changed = append(changed, k)
+		}
+	}
+	return changed
 }
 
 // Helper functions
@@ -253,6 +322,23 @@ func (s *tenantService) publishEvent(ctx context.Context, event map[string]inter
 	}
 
 	return s.kafkaProducer.Publish(ctx, "tenant-events", string(event["event_id"].(string)), data)
+}
+
+// publishSecurityEvent is a thin wrapper that builds the standard envelope
+// for security-relevant events (suspend, reactivate, config change) and
+// publishes them to tenant-events. Errors are logged but never returned —
+// auditing is best-effort and must not block the calling mutation.
+func (s *tenantService) publishSecurityEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	event := map[string]interface{}{
+		"event_id":   uuid.New().String(),
+		"event_type": eventType,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"version":    "1.0.0",
+		"payload":    payload,
+	}
+	if err := s.publishEvent(ctx, event); err != nil {
+		s.logger.WithError(err).WithField("event_type", eventType).Warn("Failed to publish tenant security event")
+	}
 }
 
 func generateSlug(name string) string {

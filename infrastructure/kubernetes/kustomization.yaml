@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ecommerce
+
+resources:
+  - 00-namespace.yaml
+  - 01-secrets.yaml
+  - 02-shared-config.yaml
+  - 10-tenant-service.yaml
+  - 11-user-service.yaml
+  - 12-product-service.yaml
+  - 13-inventory-service.yaml
+  - 14-payment-service.yaml
+  - 15-shipping-service.yaml
+  - 16-notification-service.yaml
+  - 17-review-service.yaml
+  - 18-cart-service.yaml
+  - 19-search-service.yaml
+  - 20-promotion-service.yaml
+  - 21-vendor-service.yaml
+  - 22-analytics-service.yaml
+  - 23-recommendation-service.yaml
+  - 24-config-service.yaml
+  - 25-order-service.yaml
+  - 30-frontend.yaml
+  - 40-ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: saajan-ecommerce

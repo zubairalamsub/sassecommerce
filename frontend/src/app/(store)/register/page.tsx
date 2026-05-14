@@ -85,14 +85,14 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           {/* Header */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-light">
               <UserPlus className="h-7 w-7 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-text">Create Account</h1>
+            <p className="mt-1 text-sm text-text-secondary">
               Join Saajan to start shopping
             </p>
           </div>
@@ -101,7 +101,7 @@ export default function RegisterPage() {
             {/* First + Last Name (side by side) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-gray-700">
+                <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-text-secondary">
                   First Name
                 </label>
                 <input
@@ -112,7 +112,7 @@ export default function RegisterPage() {
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-1 ${
                     errors.firstName
                       ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:border-primary focus:ring-primary'
+                      : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                   }`}
                   placeholder="Rahim"
                 />
@@ -121,7 +121,7 @@ export default function RegisterPage() {
                 )}
               </div>
               <div>
-                <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-gray-700">
+                <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-text-secondary">
                   Last Name
                 </label>
                 <input
@@ -132,7 +132,7 @@ export default function RegisterPage() {
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-1 ${
                     errors.lastName
                       ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:border-primary focus:ring-primary'
+                      : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                   }`}
                   placeholder="Ahmed"
                 />
@@ -144,7 +144,7 @@ export default function RegisterPage() {
 
             {/* Email */}
             <div>
-              <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="mb-1 block text-sm font-medium text-text-secondary">
                 Email Address
               </label>
               <input
@@ -155,7 +155,7 @@ export default function RegisterPage() {
                 className={`w-full rounded-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-1 ${
                   errors.email
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                    : 'border-gray-300 focus:border-primary focus:ring-primary'
+                    : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                 }`}
                 placeholder="rahim@example.com"
               />
@@ -166,11 +166,11 @@ export default function RegisterPage() {
 
             {/* Phone */}
             <div>
-              <label htmlFor="phone" className="mb-1 block text-sm font-medium text-gray-700">
-                Phone Number <span className="text-gray-400">(optional)</span>
+              <label htmlFor="phone" className="mb-1 block text-sm font-medium text-text-secondary">
+                Phone Number <span className="text-text-muted">(optional)</span>
               </label>
               <div className="flex">
-                <span className="inline-flex items-center gap-1 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 px-3 text-sm text-gray-500">
+                <span className="inline-flex items-center gap-1 rounded-l-lg border border-r-0 border-border bg-surface-secondary px-3 text-sm text-text-secondary">
                   <Phone className="h-3.5 w-3.5" />
                   +880
                 </span>
@@ -182,7 +182,7 @@ export default function RegisterPage() {
                   className={`w-full rounded-r-lg border px-4 py-2.5 text-sm focus:outline-none focus:ring-1 ${
                     errors.phone
                       ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:border-primary focus:ring-primary'
+                      : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                   }`}
                   placeholder="1712345678"
                   maxLength={11}
@@ -195,7 +195,7 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="mb-1 block text-sm font-medium text-text-secondary">
                 Password
               </label>
               <div className="relative">
@@ -207,14 +207,14 @@ export default function RegisterPage() {
                   className={`w-full rounded-lg border px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-1 ${
                     errors.password
                       ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:border-primary focus:ring-primary'
+                      : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                   }`}
                   placeholder="At least 6 characters"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -226,7 +226,7 @@ export default function RegisterPage() {
 
             {/* Confirm Password */}
             <div>
-              <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="confirmPassword" className="mb-1 block text-sm font-medium text-text-secondary">
                 Confirm Password
               </label>
               <div className="relative">
@@ -238,14 +238,14 @@ export default function RegisterPage() {
                   className={`w-full rounded-lg border px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-1 ${
                     errors.confirmPassword
                       ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:border-primary focus:ring-primary'
+                      : 'border-border bg-surface text-text placeholder:text-text-muted focus:border-primary focus:ring-primary'
                   }`}
                   placeholder="Re-enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
                 >
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -273,7 +273,7 @@ export default function RegisterPage() {
           </form>
 
           {/* Footer link */}
-          <p className="mt-6 text-center text-sm text-gray-500">
+          <p className="mt-6 text-center text-sm text-text-secondary">
             Already have an account?{' '}
             <Link href="/login" className="font-medium text-primary hover:text-primary-dark">
               Sign in
@@ -281,7 +281,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
+        <p className="mt-4 text-center text-xs text-text-muted">
           <Link href="/products" className="hover:text-primary">
             Back to store
           </Link>

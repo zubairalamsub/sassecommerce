@@ -172,7 +172,104 @@ export const categoryApi = {
     request<void>('product', `/api/v1/categories/${id}`, { method: 'DELETE', tenantId }),
   updateStatus: (id: string, status: 'active' | 'inactive', tenantId: string) =>
     request<CategoryResponse>('product', `/api/v1/categories/${id}/status`, { method: 'PATCH', body: { status }, tenantId }),
+
+  /** Step 1 of category image upload: request a presigned PUT URL. The browser
+   *  then PUTs the file directly to object storage, bypassing the API server. */
+  presignImage: (
+    id: string,
+    contentType: string,
+    filename: string,
+    tenantId: string,
+    token: string,
+  ) =>
+    request<PresignUploadResult>('product', `/api/v1/categories/${id}/image/presign`, {
+      method: 'POST',
+      body: { content_type: contentType, filename },
+      tenantId,
+      token,
+    }),
+
+  /** Step 3: tell the API the upload succeeded so it can persist the URL on the
+   *  category. Backend verifies the object actually exists in storage before saving. */
+  confirmImage: (id: string, imageUrl: string, tenantId: string, token: string) =>
+    request<{ success: boolean; image_url: string }>(
+      'product',
+      `/api/v1/categories/${id}/image`,
+      { method: 'POST', body: { image_url: imageUrl }, tenantId, token },
+    ),
+
+  /** Remove the category's image — clears the field and best-effort deletes the object. */
+  removeImage: (id: string, tenantId: string, token: string) =>
+    request<{ success: boolean }>(
+      'product',
+      `/api/v1/categories/${id}/image`,
+      { method: 'DELETE', tenantId, token },
+    ),
 };
+
+// Shape returned by the *image/presign endpoints (product + category).
+export interface PresignUploadResult {
+  upload_url: string;
+  upload_method: string;
+  headers?: Record<string, string>;
+  expires_at: string;
+  object_key: string;
+  image_url: string;
+}
+
+/**
+ * High-level helper that runs the full presign → PUT → confirm flow for a
+ * category image. The caller passes a (typically pre-compressed) File; this
+ * function takes care of the three round-trips so the admin UI doesn't have
+ * to repeat the choreography.
+ *
+ * `onProgress` reports XHR upload bytes for the PUT step only — that's the
+ * step the user spends the most time waiting on.
+ */
+export async function uploadCategoryImage(
+  file: File,
+  categoryId: string,
+  tenantId: string,
+  token: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<string> {
+  // 1. Ask the API for a presigned PUT URL.
+  const presign = await categoryApi.presignImage(
+    categoryId,
+    file.type || 'application/octet-stream',
+    file.name,
+    tenantId,
+    token,
+  );
+
+  // 2. Upload the file directly to object storage. We use XHR (not fetch)
+  // because fetch still lacks first-class upload progress events.
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(presign.upload_method || 'PUT', presign.upload_url);
+    if (presign.headers) {
+      for (const [k, v] of Object.entries(presign.headers)) xhr.setRequestHeader(k, v);
+    }
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(e.loaded, e.total);
+      };
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed: network error'));
+    xhr.send(file);
+  });
+
+  // 3. Tell the API the upload succeeded. Backend will HEAD the object before
+  // persisting so a hijacked presign URL can't trick it into saving a path
+  // that doesn't exist.
+  await categoryApi.confirmImage(categoryId, presign.image_url, tenantId, token);
+
+  return presign.image_url;
+}
 
 // Order Service
 // Backend response shapes differ from frontend types — map them here.
@@ -241,14 +338,45 @@ export const orderApi = {
     request<any>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId, token }).then(mapOrder),
   ship: (id: string, data: { tracking_number: string; carrier: string; shipped_by: string }, tenantId: string, token?: string) =>
     request<any>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId, token }).then(mapOrder),
+  /** Trigger an email receipt for an order. The backend publishes a
+   *  `ReceiptRequested` event onto the order-events topic; the
+   *  notification-service consumer picks it up and dispatches the email. */
+  sendReceipt: (id: string, email: string, tenantId: string, token?: string) =>
+    request<{ message: string }>('order', `/api/v1/orders/${id}/send-receipt`, {
+      method: 'POST',
+      body: { email },
+      tenantId,
+      token,
+    }),
 };
 
 // Promotion Service
+// Backend exposes only: POST /promotions, GET /promotions/:id, GET /promotions/active,
+// POST /coupons, POST /coupons/validate/:code, POST /coupons/apply.
+// There are NO list-all / update / delete endpoints on the backend (as of this writing),
+// so the admin list views fall back to /active and the "edit" / "delete" actions are
+// not exposed in the UI.
 export const promotionApi = {
+  // --- Customer-facing (unchanged) ---
   validate: (code: string, data: { tenant_id: string; user_id: string; order_total: number }) =>
     request<CouponValidateResponse>('promotion', `/api/v1/coupons/validate/${encodeURIComponent(code)}`, { method: 'POST', body: data }),
   apply: (data: { tenant_id: string; user_id: string; order_id: string; order_total: number; code: string }) =>
     request<CouponValidateResponse>('promotion', '/api/v1/coupons/apply', { method: 'POST', body: data }),
+
+  // --- Admin ---
+  // No global "list all" endpoint exists; we list active promotions only.
+  listActivePromotions: (tenantId: string, token?: string) =>
+    request<Promotion[]>('promotion', `/api/v1/promotions/active?tenant_id=${encodeURIComponent(tenantId)}`, { tenantId, token }),
+  getPromotion: (id: string, tenantId: string, token?: string) =>
+    request<Promotion>('promotion', `/api/v1/promotions/${encodeURIComponent(id)}`, { tenantId, token }),
+  createPromotion: (data: CreatePromotionRequest, tenantId: string, token?: string) =>
+    request<Promotion>('promotion', '/api/v1/promotions', { method: 'POST', body: data, tenantId, token }),
+  createCoupon: (data: CreateCouponRequest, tenantId: string, token?: string) =>
+    request<Coupon>('promotion', '/api/v1/coupons', { method: 'POST', body: data, tenantId, token }),
+
+  // --- Loyalty ---
+  getLoyaltyAccount: (userId: string, tenantId: string, token?: string) =>
+    request<LoyaltyAccount>('promotion', `/api/v1/loyalty/${encodeURIComponent(userId)}?tenant_id=${encodeURIComponent(tenantId)}`, { tenantId, token }),
 };
 
 // Cart Service
@@ -467,6 +595,76 @@ export const recommendationApi = {
     request<RecommendationResponse>('recommendation', `/api/v1/recommendations/user/${userId}?tenant_id=${tenantId}&limit=${limit}`, { tenantId }),
 };
 
+// Notification Templates (admin-managed bodies that override the hardcoded
+// renderer in the notification-service consumer). All endpoints require the
+// X-Tenant-Id header and an admin JWT.
+export const notificationTemplateApi = {
+  list: (tenantId: string, token: string, channel?: string, type?: string) => {
+    // Filtering is done client-side; the backend returns every template for
+    // the tenant and the admin UI applies channel/type filters in-memory.
+    void channel;
+    void type;
+    return request<{ data: NotificationTemplate[] }>(
+      'notification',
+      '/api/v1/notification-templates',
+      { tenantId, token },
+    ).then((r) => r.data || []);
+  },
+  get: (id: string, tenantId: string, token: string) =>
+    request<NotificationTemplate>('notification', `/api/v1/notification-templates/${encodeURIComponent(id)}`, { tenantId, token }),
+  create: (data: CreateNotificationTemplateRequest, tenantId: string, token: string) =>
+    request<NotificationTemplate>('notification', '/api/v1/notification-templates', { method: 'POST', body: data, tenantId, token }),
+  update: (id: string, data: Partial<CreateNotificationTemplateRequest>, tenantId: string, token: string) =>
+    request<NotificationTemplate>('notification', `/api/v1/notification-templates/${encodeURIComponent(id)}`, { method: 'PUT', body: data, tenantId, token }),
+  delete: (id: string, tenantId: string, token: string) =>
+    request<void>('notification', `/api/v1/notification-templates/${encodeURIComponent(id)}`, { method: 'DELETE', tenantId, token }),
+  preview: (id: string, sampleVars: Record<string, unknown> | undefined, tenantId: string, token: string) =>
+    request<{ subject: string; body: string }>(
+      'notification',
+      `/api/v1/notification-templates/${encodeURIComponent(id)}/preview`,
+      { method: 'POST', body: { sample_vars: sampleVars || {} }, tenantId, token },
+    ),
+  testSend: (id: string, email: string, tenantId: string, token: string, sampleVars?: Record<string, unknown>) =>
+    request<{ message: string }>(
+      'notification',
+      `/api/v1/notification-templates/${encodeURIComponent(id)}/test-send`,
+      { method: 'POST', body: { email, sample_vars: sampleVars || {} }, tenantId, token },
+    ),
+  // installDefaults seeds the tenant with the pre-designed starter pack.
+  // Pass force=true to overwrite existing templates that share the same
+  // (type, channel) pair; otherwise duplicates are skipped and counted.
+  installDefaults: (force: boolean, tenantId: string, token: string) =>
+    request<InstallDefaultsResult>(
+      'notification',
+      '/api/v1/notification-templates/install-defaults',
+      { method: 'POST', body: { force }, tenantId, token },
+    ),
+  // listDefaults returns the read-only catalogue of starter-pack templates.
+  // Used by the editor's "Start from template" picker to pre-fill subject +
+  // body when authoring a new template from a known-good baseline.
+  listDefaults: (tenantId: string, token: string) =>
+    request<{ data: DefaultTemplate[] }>(
+      'notification',
+      '/api/v1/notification-templates/defaults',
+      { tenantId, token },
+    ).then((r) => r.data || []),
+};
+
+export interface InstallDefaultsResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  templates: NotificationTemplate[];
+}
+
+export interface DefaultTemplate {
+  type: string;
+  channel: string;
+  name: string;
+  subject_template: string;
+  body_template: string;
+}
+
 // Types
 
 export interface PaginatedResponse<T> {
@@ -518,7 +716,10 @@ export interface TenantConfig {
     loyalty_program: boolean;
     subscriptions: boolean;
     gift_cards: boolean;
-    [key: string]: boolean;
+    /** Toggle for printable/downloadable order invoices. Optional so older
+     *  config objects without this field still satisfy the type. */
+    invoices_enabled?: boolean;
+    [key: string]: boolean | undefined;
   };
 }
 
@@ -645,7 +846,13 @@ export interface Category {
   slug: string;
   description: string;
   parent_id: string | null;
-  image_url: string | null;
+  // Backend field is `image` (string, "" when unset). `image_url` is the
+  // historical frontend alias — kept optional so persisted localStorage data
+  // from older builds still type-checks. Read via `category.image ?? category.image_url`.
+  image?: string;
+  image_url?: string | null;
+  icon?: string;
+  sort_order?: number;
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
@@ -958,6 +1165,68 @@ export interface CouponValidateResponse {
   message?: string;
 }
 
+// Promotion / Coupon types — matches Go models in promotion-service/internal/models/promotion.go
+export type DiscountType = 'percentage' | 'fixed_amount' | 'free_shipping';
+export type PromotionStatus = 'draft' | 'active' | 'expired' | 'disabled';
+
+export interface Promotion {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  min_order_amount: number;
+  max_discount: number;
+  status: PromotionStatus;
+  start_date: string;
+  end_date: string;
+  applicable_categories?: string[];
+  applicable_products?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePromotionRequest {
+  tenant_id: string;
+  name: string;
+  description?: string;
+  discount_type: DiscountType;
+  discount_value: number;
+  min_order_amount?: number;
+  max_discount?: number;
+  start_date: string; // ISO 8601 (RFC 3339) — Go time.Time
+  end_date: string;
+}
+
+export interface Coupon {
+  id: string;
+  tenant_id: string;
+  promotion_id: string;
+  code: string;
+  max_uses: number; // 0 = unlimited
+  used_count: number;
+  max_uses_per_user: number;
+  is_active: boolean;
+  discount_type?: DiscountType;
+  discount_value?: number;
+}
+
+export interface CreateCouponRequest {
+  tenant_id: string;
+  promotion_id: string;
+  code: string;
+  max_uses?: number;
+  max_uses_per_user?: number;
+}
+
+export interface LoyaltyAccount {
+  user_id: string;
+  tenant_id: string;
+  points: number;
+  tier_level: string;
+}
+
 export interface CartAddItemRequest {
   tenant_id: string;
   user_id: string;
@@ -1112,6 +1381,51 @@ export interface WishlistItemResponse {
 export interface WishlistResponse {
   items: WishlistItemResponse[];
   count: number;
+}
+
+// === Notification Templates ===
+
+// NotificationChannel mirrors the backend enum used to persist templates and
+// to dispatch notifications.
+export type NotificationChannel = 'email' | 'sms' | 'push';
+
+// Known notification types. The "custom" entry lets admins author one-off
+// templates that don't map to a system event.
+export type NotificationTemplateType =
+  | 'order_confirmation'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'order_cancelled'
+  | 'payment_confirmed'
+  | 'payment_failed'
+  | 'welcome'
+  | 'email_verification'
+  | 'password_reset'
+  | 'receipt'
+  | 'stock_alert'
+  | 'promotion'
+  | 'custom';
+
+export interface NotificationTemplate {
+  id: string;
+  tenant_id: string;
+  type: NotificationTemplateType | string;
+  channel: NotificationChannel;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateNotificationTemplateRequest {
+  type: string;
+  channel: NotificationChannel;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  is_active: boolean;
 }
 
 export interface AddWishlistItemRequest {

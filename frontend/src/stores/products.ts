@@ -14,6 +14,13 @@ import {
 
 export type StoreProduct = Product;
 
+// In-flight de-duping for read-only fetches. React StrictMode (and remounts
+// across navigation) can call fetchProducts/fetchCategories several times
+// before the first request resolves; sharing a module-level promise per tenant
+// collapses them into a single network call.
+const productsInflight: Map<string, Promise<void>> = new Map();
+const categoriesInflight: Map<string, Promise<void>> = new Map();
+
 interface ProductStore {
   products: StoreProduct[];
   categories: Category[];
@@ -39,38 +46,56 @@ export const useProductStore = create<ProductStore>()(
       error: null,
 
       fetchProducts: async (tenantId: string) => {
+        const pending = productsInflight.get(tenantId);
+        if (pending) return pending;
+
         set({ loading: true, error: null });
-        try {
-          const res = await productApi.list(tenantId, 1, 100);
-          const apiProducts = res.data || [];
-          if (apiProducts.length > 0) {
-            // Merge: keep local-only products that don't exist on the backend
-            const apiIds = new Set(apiProducts.map((p: StoreProduct) => p.id));
-            const localOnly = get().products.filter((p) => !apiIds.has(p.id));
-            set({ products: [...apiProducts, ...localOnly], loading: false });
-          } else {
-            // API returned empty — keep locally persisted data
+        const task = (async () => {
+          try {
+            const res = await productApi.list(tenantId, 1, 100);
+            const apiProducts = res.data || [];
+            if (apiProducts.length > 0) {
+              // Merge: keep local-only products that don't exist on the backend
+              const apiIds = new Set(apiProducts.map((p: StoreProduct) => p.id));
+              const localOnly = get().products.filter((p) => !apiIds.has(p.id));
+              set({ products: [...apiProducts, ...localOnly], loading: false });
+            } else {
+              // API returned empty — keep locally persisted data
+              set({ loading: false });
+            }
+          } catch {
+            // Backend unavailable — keep localStorage data
             set({ loading: false });
+          } finally {
+            productsInflight.delete(tenantId);
           }
-        } catch {
-          // Backend unavailable — keep localStorage data
-          set({ loading: false });
-        }
+        })();
+        productsInflight.set(tenantId, task);
+        return task;
       },
 
       fetchCategories: async (tenantId: string) => {
-        try {
-          const res = await categoryApi.list(tenantId);
-          const apiCategories = res.data || [];
-          if (apiCategories.length > 0) {
-            const apiIds = new Set(apiCategories.map((c: Category) => c.id));
-            const localOnly = get().categories.filter((c) => !apiIds.has(c.id));
-            set({ categories: [...apiCategories, ...localOnly] });
+        const pending = categoriesInflight.get(tenantId);
+        if (pending) return pending;
+
+        const task = (async () => {
+          try {
+            const res = await categoryApi.list(tenantId);
+            const apiCategories = res.data || [];
+            if (apiCategories.length > 0) {
+              const apiIds = new Set(apiCategories.map((c: Category) => c.id));
+              const localOnly = get().categories.filter((c) => !apiIds.has(c.id));
+              set({ categories: [...apiCategories, ...localOnly] });
+            }
+            // If empty, keep locally persisted data
+          } catch {
+            // Backend unavailable — keep previously persisted data
+          } finally {
+            categoriesInflight.delete(tenantId);
           }
-          // If empty, keep locally persisted data
-        } catch {
-          // Backend unavailable — keep previously persisted data
-        }
+        })();
+        categoriesInflight.set(tenantId, task);
+        return task;
       },
 
       addProduct: async (data: CreateProductRequest, tenantId: string, token?: string) => {
@@ -107,6 +132,7 @@ export const useProductStore = create<ProductStore>()(
             slug: data.slug,
             description: data.description || '',
             parent_id: data.parent_id || null,
+            image: '',
             image_url: null,
             status: 'active',
             created_at: now,

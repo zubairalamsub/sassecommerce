@@ -61,6 +61,7 @@ const defaultTenantConfig: TenantConfig = {
     multi_currency: false, wishlist: true, product_reviews: true,
     guest_checkout: true, social_login: false, ai_recommendations: false,
     loyalty_program: false, subscriptions: false, gift_cards: false,
+    invoices_enabled: false,
   },
 };
 

@@ -322,21 +322,37 @@ function SectionRenderer({ section, products, discountProducts, categories, adde
 
       {section.type === 'category_showcase' ? (
         <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {categories.filter((c) => c.status === 'active').map((cat, idx) => (
+          {categories.filter((c) => c.status === 'active').map((cat, idx) => {
+            // Backend canonical field is `image`; older persisted data may
+            // still carry `image_url`. Either way, mediaUrl() resolves the
+            // CDN/proxy path.
+            const img = cat.image || cat.image_url || '';
+            return (
             <motion.div key={cat.id} variants={cardVariant}>
               <Link href={`/products?category=${cat.slug}`}
                 className="group relative block overflow-hidden rounded-2xl p-6 text-center transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                 <div className={cn('absolute inset-0 bg-gradient-to-br opacity-80 group-hover:opacity-100 transition-opacity', gradients[idx % gradients.length])} />
                 <div className="relative">
-                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/80 dark:bg-gray-800/80 text-2xl font-bold text-text shadow-sm group-hover:scale-110 transition-transform duration-300">
-                    {cat.name[0]}
+                  <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white/80 dark:bg-gray-800/80 text-2xl font-bold text-text shadow-sm group-hover:scale-110 transition-transform duration-300">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={mediaUrl(img)}
+                        alt={cat.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      cat.name[0]
+                    )}
                   </div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{cat.name}</h3>
                   {cat.description && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 line-clamp-2">{cat.description}</p>}
                 </div>
               </Link>
             </motion.div>
-          ))}
+            );
+          })}
           {categories.length === 0 && (
             <p className="col-span-full text-center text-sm text-text-muted py-8">No categories yet</p>
           )}

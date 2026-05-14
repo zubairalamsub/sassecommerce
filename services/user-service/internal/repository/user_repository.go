@@ -19,6 +19,7 @@ type UserRepository interface {
 	Update(ctx context.Context, user *models.User) error
 	UpdateLastLogin(ctx context.Context, userID string) error
 	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	UpdateAvatar(ctx context.Context, userID, avatarURL string) error
 	SetEmailVerified(ctx context.Context, userID string) error
 	Delete(ctx context.Context, id string) error
 	EmailExists(ctx context.Context, tenantID, email string) (bool, error)
@@ -218,6 +219,25 @@ func (r *userRepository) UpdatePassword(ctx context.Context, userID, passwordHas
 		Updates(map[string]interface{}{
 			"password_hash": passwordHash,
 			"updated_at":    time.Now(),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// UpdateAvatar sets the avatar URL on a user record.
+func (r *userRepository) UpdateAvatar(ctx context.Context, userID, avatarURL string) error {
+	result := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("id = ? AND deleted_at IS NULL", userID).
+		Updates(map[string]interface{}{
+			"avatar":     avatarURL,
+			"updated_at": time.Now(),
 		})
 
 	if result.Error != nil {

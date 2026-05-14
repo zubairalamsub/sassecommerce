@@ -107,7 +107,8 @@ function ProductsContent() {
         </p>
       </div>
 
-      {/* Category filters */}
+      {/* Category filters — pill chips with a small thumbnail when the
+          category has an image so customers can recognise it at a glance. */}
       {!searchParam && activeCategories.length > 0 && (
         <div className="mb-6 flex flex-wrap gap-2">
           <Link href="/products"
@@ -117,15 +118,30 @@ function ProductsContent() {
             )}>
             All
           </Link>
-          {activeCategories.map((cat) => (
-            <Link key={cat.id} href={`/products?category=${cat.slug}`}
-              className={cn(
-                'rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
-                categoryParam === cat.slug ? 'bg-primary text-white' : 'bg-surface-hover text-text-secondary hover:text-text',
-              )}>
-              {cat.name}
-            </Link>
-          ))}
+          {activeCategories.map((cat) => {
+            const img = cat.image || cat.image_url || '';
+            const active = categoryParam === cat.slug;
+            return (
+              <Link key={cat.id} href={`/products?category=${cat.slug}`}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full pr-4 text-sm font-medium transition-colors',
+                  img ? 'pl-1' : 'px-4',
+                  'py-1.5',
+                  active ? 'bg-primary text-white' : 'bg-surface-hover text-text-secondary hover:text-text',
+                )}>
+                {img && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mediaUrl(img)}
+                    alt=""
+                    className="h-6 w-6 rounded-full object-cover ring-1 ring-white/20"
+                    loading="lazy"
+                  />
+                )}
+                {cat.name}
+              </Link>
+            );
+          })}
         </div>
       )}
 

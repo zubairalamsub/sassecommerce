@@ -67,6 +67,7 @@ func main() {
 	var finalEventStore eventstore.EventStore = eventStore
 	var consumer messaging.EventConsumer
 	var externalConsumer *messaging.ExternalEventConsumer
+	var notificationPublisher messaging.NotificationPublisher
 
 	if cfg.Kafka.Enabled {
 		// Initialize Kafka publisher
@@ -76,6 +77,17 @@ func main() {
 			logger,
 		)
 		defer publisher.Close()
+
+		// Lightweight, non-domain publisher for one-shot events (e.g.
+		// ReceiptRequested fired from the POS flow). Publishes onto the
+		// same order-events topic so the notification-service consumer
+		// picks it up without an additional reader.
+		notificationPublisher = messaging.NewKafkaNotificationPublisher(
+			cfg.Kafka.Brokers,
+			cfg.Kafka.Topic,
+			logger,
+		)
+		defer notificationPublisher.Close()
 
 		logger.Info("Kafka publisher initialized",
 			zap.Strings("brokers", cfg.Kafka.Brokers),
@@ -141,6 +153,9 @@ func main() {
 		cfg.Services.InventoryURL,
 		cfg.Services.PaymentURL,
 	)
+	if notificationPublisher != nil {
+		apiCommandHandler.SetNotificationPublisher(notificationPublisher)
+	}
 
 	queryHandler := api.NewQueryHandler(orderProjection, finalEventStore, logger)
 

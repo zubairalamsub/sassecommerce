@@ -116,8 +116,8 @@ services:
   # Tenant Service (Go)
   tenant-service:
     build:
-      context: ./services/tenant-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/tenant-service/Dockerfile
     container_name: tenant-service
     ports:
       - "8081:8080"

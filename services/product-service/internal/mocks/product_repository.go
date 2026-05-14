@@ -80,3 +80,13 @@ func (m *MockProductRepository) UpdateStock(ctx context.Context, tenantID, produ
 	args := m.Called(ctx, tenantID, productID, quantity, inStock)
 	return args.Error(0)
 }
+
+func (m *MockProductRepository) AddImage(ctx context.Context, id, imageURL string) error {
+	args := m.Called(ctx, id, imageURL)
+	return args.Error(0)
+}
+
+func (m *MockProductRepository) RemoveImage(ctx context.Context, id, imageURL string) error {
+	args := m.Called(ctx, id, imageURL)
+	return args.Error(0)
+}

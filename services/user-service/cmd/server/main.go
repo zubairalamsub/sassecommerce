@@ -17,6 +17,7 @@ import (
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
 	"github.com/ecommerce/user-service/internal/service"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -54,6 +55,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	tokenRepo := repository.NewTokenRepository(db)
 	wishlistRepo := repository.NewWishlistRepository(db)
+	loginAttemptRepo := repository.NewLoginAttemptRepository(db)
 
 	// Initialize services
 	tokenConfig := models.TokenConfig{
@@ -61,7 +63,15 @@ func main() {
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "user-service",
 	}
-	authService := service.NewAuthService(userRepo, tokenConfig, kafkaProducer, log, tokenRepo)
+	authService := service.NewAuthServiceWithOptions(
+		userRepo,
+		tokenConfig,
+		kafkaProducer,
+		log,
+		service.WithTokenRepository(tokenRepo),
+		service.WithLoginAttemptRepository(loginAttemptRepo),
+		service.WithLockoutConfig(service.LockoutConfigFromEnv()),
+	)
 	userService := service.NewUserService(userRepo, kafkaProducer, log)
 
 	// Initialize handlers
@@ -182,6 +192,7 @@ func runMigrations(db *gorm.DB) error {
 		&models.VerificationToken{},
 		&models.PasswordResetToken{},
 		&models.WishlistItem{},
+		&models.LoginAttempt{},
 	)
 }
 
@@ -200,16 +211,13 @@ func setupRouter(
 
 	// Global middleware
 	router.Use(gin.Recovery())
+	router.Use(metrics.Middleware("user-service"))
 	router.Use(corsMiddleware())
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          logger,
 		LogRequestBody:  true,
 		LogResponseBody: true,
-		SkipPaths:       []string{"/health", "/ready"},
-	}))
-	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
-		Rate:   100,
-		Window: time.Minute,
+		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
 	// Health check
@@ -221,11 +229,26 @@ func setupRouter(
 		})
 	})
 
+	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+
+	// Rate limiting (after /metrics so Prometheus scrapes aren't throttled)
+	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+		Rate:   100,
+		Window: time.Minute,
+	}))
+
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
-		// Public authentication routes
+		// Public authentication routes — stricter per-IP rate limit because
+		// these endpoints (login/register/forgot-password) are the prime
+		// targets for credential-stuffing and email-enumeration scans.
 		auth := v1.Group("/auth")
+		auth.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+			Rate:   20,
+			Window: time.Minute,
+		}))
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)

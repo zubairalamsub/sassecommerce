@@ -52,11 +52,11 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 lg:px-8">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gray-100">
-          <ShoppingBag className="h-10 w-10 text-gray-400" />
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-surface-hover">
+          <ShoppingBag className="h-10 w-10 text-text-muted" />
         </div>
-        <h1 className="mt-6 text-2xl font-bold text-gray-900">Your cart is empty</h1>
-        <p className="mt-2 text-gray-500">
+        <h1 className="mt-6 text-2xl font-bold text-text">Your cart is empty</h1>
+        <p className="mt-2 text-text-secondary">
           Looks like you haven&apos;t added anything to your cart yet.
         </p>
         <Link
@@ -72,15 +72,15 @@ export default function CartPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
-      <p className="mt-1 text-gray-500">
+      <h1 className="text-3xl font-bold text-text">Shopping Cart</h1>
+      <p className="mt-1 text-text-secondary">
         {itemCount} {itemCount === 1 ? 'item' : 'items'} in your cart
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Cart items */}
         <div className="lg:col-span-2">
-          <div className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="divide-y divide-border rounded-xl border border-border bg-surface">
             {items.map((item) => (
               <div
                 key={`${item.productId}-${item.variantId ?? ''}`}
@@ -100,46 +100,46 @@ export default function CartPage() {
                 {/* Item details */}
                 <div className="flex flex-1 flex-col sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900">{item.name}</h3>
-                    <p className="mt-0.5 text-sm text-gray-500">SKU: {item.sku}</p>
-                    <p className="mt-1 text-sm font-medium text-gray-700">
+                    <h3 className="font-medium text-text">{item.name}</h3>
+                    <p className="mt-0.5 text-sm text-text-secondary">SKU: {item.sku}</p>
+                    <p className="mt-1 text-sm font-medium text-text-secondary">
                       {formatCurrency(item.price)}
                     </p>
                   </div>
 
                   <div className="mt-3 flex items-center gap-4 sm:mt-0">
                     {/* Quantity controls */}
-                    <div className="inline-flex items-center rounded-lg border border-gray-200">
+                    <div className="inline-flex items-center rounded-lg border border-border">
                       <button
                         onClick={() =>
                           updateQuantity(item.productId, item.quantity - 1, item.variantId, auth)
                         }
-                        className="flex h-8 w-8 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
+                        className="flex h-8 w-8 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
-                      <span className="flex h-8 w-10 items-center justify-center border-x border-gray-200 text-sm font-medium">
+                      <span className="flex h-8 w-10 items-center justify-center border-x border-border text-sm font-medium text-text">
                         {item.quantity}
                       </span>
                       <button
                         onClick={() =>
                           updateQuantity(item.productId, item.quantity + 1, item.variantId, auth)
                         }
-                        className="flex h-8 w-8 items-center justify-center text-gray-600 transition-colors hover:bg-gray-50"
+                        className="flex h-8 w-8 items-center justify-center text-text-secondary transition-colors hover:bg-surface-hover"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
                     </div>
 
                     {/* Line total */}
-                    <span className="min-w-[80px] text-right font-semibold text-gray-900">
+                    <span className="min-w-[80px] text-right font-semibold text-text">
                       {formatCurrency(item.price * item.quantity)}
                     </span>
 
                     {/* Remove button */}
                     <button
                       onClick={() => removeItem(item.productId, item.variantId, auth)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
                       title="Remove item"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -161,26 +161,26 @@ export default function CartPage() {
 
         {/* Cart summary sidebar */}
         <div>
-          <div className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-text">Order Summary</h2>
 
             <div className="mt-4 space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-text-secondary">Subtotal</span>
+                <span className="font-medium text-text">
                   {formatCurrency(subtotal)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Shipping</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-text-secondary">Shipping</span>
+                <span className="font-medium text-text">
                   {formatCurrency(shipping)}
                 </span>
               </div>
-              <div className="border-t border-gray-200 pt-3">
+              <div className="border-t border-border pt-3">
                 <div className="flex justify-between">
-                  <span className="text-base font-semibold text-gray-900">Total</span>
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-base font-semibold text-text">Total</span>
+                  <span className="text-lg font-bold text-text">
                     {formatCurrency(grandTotal)}
                   </span>
                 </div>
@@ -195,7 +195,7 @@ export default function CartPage() {
               <ArrowRight className="h-4 w-4" />
             </Link>
 
-            <p className="mt-4 text-center text-xs text-gray-400">
+            <p className="mt-4 text-center text-xs text-text-muted">
               Shipping calculated at checkout
             </p>
           </div>

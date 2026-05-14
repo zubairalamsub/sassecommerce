@@ -141,43 +141,63 @@ const defaultConfig: StorefrontConfig = {
 interface StoreConfigState {
   config: StorefrontConfig;
   loading: boolean;
+  loadedTenantId: string | null;
   error: string | null;
   fetchConfig: (tenantId: string) => Promise<void>;
   saveConfig: (tenantId: string, config: StorefrontConfig, token?: string) => Promise<void>;
   updateConfig: (config: Partial<StorefrontConfig>) => void;
 }
 
+// In-flight de-duping: React StrictMode and component remounts on navigation
+// can call fetchConfig several times before the first request resolves; sharing
+// a module-level promise per tenant collapses them into a single network call.
+const configInflight: Map<string, Promise<void>> = new Map();
+
 export const useStoreConfigStore = create<StoreConfigState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       config: defaultConfig,
       loading: false,
+      loadedTenantId: null,
       error: null,
 
       fetchConfig: async (tenantId: string) => {
-        set({ loading: true, error: null });
-        try {
-          const entries = await configApi.listByNamespace(NAMESPACE, 'all', tenantId);
-          if (Array.isArray(entries) && entries.length > 0) {
-            const configMap: Record<string, string> = {};
-            entries.forEach((e) => { configMap[e.key] = e.value; });
+        // Already loaded for this tenant — no-op.
+        if (get().loadedTenantId === tenantId) return;
+        // Coalesce concurrent callers.
+        const pending = configInflight.get(tenantId);
+        if (pending) return pending;
 
-            const parsed: StorefrontConfig = {
-              banners: configMap.banners ? JSON.parse(configMap.banners) : defaultConfig.banners,
-              sections: configMap.sections ? JSON.parse(configMap.sections) : defaultConfig.sections,
-              footer: configMap.footer ? JSON.parse(configMap.footer) : defaultConfig.footer,
-              about: configMap.about ? JSON.parse(configMap.about) : defaultConfig.about,
-              announcement_bar: configMap.announcement_bar ? JSON.parse(configMap.announcement_bar) : defaultConfig.announcement_bar,
-              announcement_popup: configMap.announcement_popup ? JSON.parse(configMap.announcement_popup) : defaultConfig.announcement_popup,
-            };
-            set({ config: parsed, loading: false });
-          } else {
-            set({ loading: false });
+        set({ loading: true, error: null });
+        const task = (async () => {
+          try {
+            const entries = await configApi.listByNamespace(NAMESPACE, 'all', tenantId);
+            if (Array.isArray(entries) && entries.length > 0) {
+              const configMap: Record<string, string> = {};
+              entries.forEach((e) => { configMap[e.key] = e.value; });
+
+              const parsed: StorefrontConfig = {
+                banners: configMap.banners ? JSON.parse(configMap.banners) : defaultConfig.banners,
+                sections: configMap.sections ? JSON.parse(configMap.sections) : defaultConfig.sections,
+                footer: configMap.footer ? JSON.parse(configMap.footer) : defaultConfig.footer,
+                about: configMap.about ? JSON.parse(configMap.about) : defaultConfig.about,
+                announcement_bar: configMap.announcement_bar ? JSON.parse(configMap.announcement_bar) : defaultConfig.announcement_bar,
+                announcement_popup: configMap.announcement_popup ? JSON.parse(configMap.announcement_popup) : defaultConfig.announcement_popup,
+              };
+              set({ config: parsed, loading: false, loadedTenantId: tenantId });
+            } else {
+              set({ loading: false, loadedTenantId: tenantId });
+            }
+          } catch {
+            // Backend unavailable — keep previously persisted config but mark
+            // as loaded so we don't hammer the API while it's down.
+            set({ loading: false, loadedTenantId: tenantId });
+          } finally {
+            configInflight.delete(tenantId);
           }
-        } catch {
-          // Backend unavailable — keep previously persisted config
-          set({ loading: false });
-        }
+        })();
+        configInflight.set(tenantId, task);
+        return task;
       },
 
       saveConfig: async (tenantId: string, config: StorefrontConfig, token?: string) => {
@@ -190,7 +210,8 @@ export const useStoreConfigStore = create<StoreConfigState>()(
           { namespace: NAMESPACE, key: 'announcement_popup', value: JSON.stringify(config.announcement_popup), value_type: 'json', tenant_id: tenantId, updated_by: 'admin' },
         ];
         await configApi.bulkSet(entries, token);
-        set({ config });
+        // Save() implies the local copy is now authoritative for this tenant.
+        set({ config, loadedTenantId: tenantId });
       },
 
       updateConfig: (partial: Partial<StorefrontConfig>) => {

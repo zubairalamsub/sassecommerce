@@ -107,11 +107,18 @@ type RegisterRequest struct {
 	Phone     string `json:"phone,omitempty"`
 }
 
-// LoginRequest represents a user login request
+// LoginRequest represents a user login request.
+//
+// IPAddress and UserAgent are populated by the HTTP handler (never trusted
+// from the JSON body) and are used by the auth service for brute-force
+// tracking and audit logging. They have the json:"-" tag so clients cannot
+// supply or spoof them.
 type LoginRequest struct {
-	TenantID string `json:"tenant_id" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	TenantID  string `json:"tenant_id" binding:"required"`
+	Email     string `json:"email" binding:"required,email"`
+	Password  string `json:"password" binding:"required"`
+	IPAddress string `json:"-"`
+	UserAgent string `json:"-"`
 }
 
 // UpdateUserRequest represents a user update request
@@ -128,10 +135,15 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=8"`
 }
 
-// ForgotPasswordRequest represents a forgot password request
+// ForgotPasswordRequest represents a forgot password request.
+//
+// IPAddress and UserAgent are populated by the HTTP handler for
+// anti-abuse rate limiting on the password-reset email pipeline.
 type ForgotPasswordRequest struct {
-	TenantID string `json:"tenant_id" binding:"required,uuid"`
-	Email    string `json:"email" binding:"required,email"`
+	TenantID  string `json:"tenant_id" binding:"required,uuid"`
+	Email     string `json:"email" binding:"required,email"`
+	IPAddress string `json:"-"`
+	UserAgent string `json:"-"`
 }
 
 // ResetPasswordRequest represents a password reset request

@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
-@theme inline {
+/* Register the `dark:` variant — without this, Tailwind v4 emits no output
+   for any `dark:bg-…` / `dark:text-…` utility class. Triggered by the
+   `.dark` class that ThemeProvider toggles on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light-mode default palette. Values are CSS custom properties so they can
+   be overridden at runtime by the .dark scope below.
+   NOTE: this is `@theme` (not `@theme inline`) so the tokens stay as
+   `var(--color-…)` references in the generated utilities — that's what makes
+   `.dark` actually swap colors instead of baking light values into the bundle. */
+@theme {
   --color-primary: #006A4E;
   --color-primary-dark: #004D38;
   --color-primary-light: #E6F2EE;
@@ -18,16 +28,24 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Dark mode overrides */
+/* Dark-mode overrides. Re-tunes surfaces, borders, text contrast, and the
+   brand-color *light* shades (which are unusable on dark backgrounds at the
+   light-mode lightness). Primary/accent stay branded but slightly lifted
+   toward the lighter end for legibility on dark surfaces. */
 .dark {
-  --color-surface: #111827;
-  --color-surface-secondary: #1f2937;
-  --color-surface-hover: #374151;
-  --color-border: #374151;
-  --color-border-light: #1f2937;
-  --color-text: #f9fafb;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #6b7280;
+  --color-primary: #1FA980;          /* lifted from #006A4E for contrast on dark */
+  --color-primary-dark: #178861;
+  --color-primary-light: #14352B;     /* dark-green tint to replace pale green */
+  --color-accent: #FF6B7E;
+  --color-accent-light: #3A1A1F;
+  --color-surface: #0F1722;          /* near-black with subtle blue */
+  --color-surface-secondary: #161F2E;
+  --color-surface-hover: #1F2A3D;
+  --color-border: #2A364D;
+  --color-border-light: #1A2335;
+  --color-text: #E8EDF4;
+  --color-text-secondary: #9AA5B8;
+  --color-text-muted: #5D6678;
 }
 
 html {
@@ -91,4 +109,65 @@ body {
 }
 .dark .glass {
   background: rgba(17, 24, 39, 0.8);
+}
+
+/* Print stylesheet — shared by the invoice (A4) and the POS receipt (80mm).
+   Both wrappers (`.invoice-print` and `.receipt-print`) hide page chrome and
+   render full-bleed. `.no-print` lets pages opt-out specific elements from
+   the print output (e.g. action toolbars).
+
+   IMPORTANT: We split the rules into two `@media print` blocks so the
+   `@page` size differs per document. When both classes appear on the same
+   page the browser uses whichever block is currently rendered — in
+   practice only one of them ever exists on a given route. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .invoice-print,
+  .invoice-print *,
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible;
+  }
+  .invoice-print,
+  .receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .invoice-print {
+    width: 100%;
+  }
+  /* 80 mm thermal width. `auto` height lets the printer cut at the end of
+     the content rather than forcing a fixed page length. */
+  .receipt-print {
+    width: 80mm;
+    box-shadow: none !important;
+    padding: 4mm 6mm !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}
+
+/* When a receipt is on the page, override the @page size to 80mm. The
+   browser uses the *last* matching @page declaration, so this block must
+   come after the A4 one above. We use :has() to scope the override to
+   routes that actually contain a receipt — invoice pages stay A4. */
+@media print {
+  @page receipt {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+  body:has(.receipt-print):not(:has(.invoice-print)) {
+    /* page selector binds via the `page` property at the element level */
+  }
+  .receipt-print {
+    page: receipt;
+  }
 }

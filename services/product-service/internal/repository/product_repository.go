@@ -25,6 +25,8 @@ type ProductRepository interface {
 	SKUExists(ctx context.Context, tenantID, sku string) (bool, error)
 	UpdateStatus(ctx context.Context, id string, status models.ProductStatus) error
 	UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error
+	AddImage(ctx context.Context, id, imageURL string) error
+	RemoveImage(ctx context.Context, id, imageURL string) error
 }
 
 type productRepository struct {
@@ -331,4 +333,46 @@ func (r *productRepository) UpdateStock(ctx context.Context, tenantID, productID
 
 	_, err = r.collection.UpdateOne(ctx, filter, update)
 	return err
+}
+
+// AddImage atomically appends an image URL to a product's Images list.
+func (r *productRepository) AddImage(ctx context.Context, id, imageURL string) error {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("invalid product ID")
+	}
+	filter := bson.M{"_id": objectID, "deleted_at": bson.M{"$exists": false}}
+	update := bson.M{
+		"$addToSet": bson.M{"images": imageURL},
+		"$set":      bson.M{"updated_at": time.Now()},
+	}
+	result, err := r.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("product not found")
+	}
+	return nil
+}
+
+// RemoveImage atomically pulls an image URL from a product's Images list.
+func (r *productRepository) RemoveImage(ctx context.Context, id, imageURL string) error {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("invalid product ID")
+	}
+	filter := bson.M{"_id": objectID, "deleted_at": bson.M{"$exists": false}}
+	update := bson.M{
+		"$pull": bson.M{"images": imageURL},
+		"$set":  bson.M{"updated_at": time.Now()},
+	}
+	result, err := r.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("product not found")
+	}
+	return nil
 }

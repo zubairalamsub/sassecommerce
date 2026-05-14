@@ -149,7 +149,11 @@ func (s *userService) DeleteUser(ctx context.Context, userID string) error {
 	return nil
 }
 
-// UpdateUserRole updates a user's role (admin function)
+// UpdateUserRole updates a user's role (admin function).
+//
+// Always publishes a UserRoleChanged event so the audit log captures the
+// privilege change. The old/new role values are included so the consumer
+// can render a clean before/after diff.
 func (s *userService) UpdateUserRole(ctx context.Context, userID string, role models.UserRole) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -157,6 +161,7 @@ func (s *userService) UpdateUserRole(ctx context.Context, userID string, role mo
 		return errors.New("user not found")
 	}
 
+	oldRole := user.Role
 	user.Role = role
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
@@ -169,10 +174,25 @@ func (s *userService) UpdateUserRole(ctx context.Context, userID string, role mo
 		"role":    role,
 	}).Info("User role updated successfully")
 
+	// Publish UserRoleChanged for the audit pipeline. old_values is the
+	// snapshot key the consumer recognises for diffing.
+	s.publishEvent(ctx, "UserRoleChanged", map[string]interface{}{
+		"tenant_id": user.TenantID,
+		"user_id":   user.ID,
+		"role":      role,
+		"old_values": map[string]interface{}{
+			"role": oldRole,
+		},
+	})
+
 	return nil
 }
 
-// UpdateUserStatus updates a user's status (admin function)
+// UpdateUserStatus updates a user's status (admin function).
+//
+// Publishes a status-specific security event so the audit log gets a clean
+// action label (e.g. "user.suspended.changed"). Transitions other than
+// suspend/reactivate fall back to the generic UserUpdated event.
 func (s *userService) UpdateUserStatus(ctx context.Context, userID string, status models.UserStatus) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -180,6 +200,7 @@ func (s *userService) UpdateUserStatus(ctx context.Context, userID string, statu
 		return errors.New("user not found")
 	}
 
+	oldStatus := user.Status
 	user.Status = status
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
@@ -191,6 +212,25 @@ func (s *userService) UpdateUserStatus(ctx context.Context, userID string, statu
 		"user_id": userID,
 		"status":  status,
 	}).Info("User status updated successfully")
+
+	// Pick a security-specific event type so the audit log gets a clean
+	// action label. Reactivation (any-status → active) and suspension
+	// (active → suspended) are the two security-relevant transitions.
+	eventType := "UserStatusChanged"
+	switch {
+	case status == models.UserStatusSuspended && oldStatus != models.UserStatusSuspended:
+		eventType = "UserSuspended"
+	case status == models.UserStatusActive && oldStatus != models.UserStatusActive:
+		eventType = "UserReactivated"
+	}
+	s.publishEvent(ctx, eventType, map[string]interface{}{
+		"tenant_id": user.TenantID,
+		"user_id":   user.ID,
+		"status":    status,
+		"old_values": map[string]interface{}{
+			"status": oldStatus,
+		},
+	})
 
 	return nil
 }

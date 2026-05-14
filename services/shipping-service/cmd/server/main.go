@@ -18,6 +18,7 @@ import (
 	"github.com/ecommerce/shipping-service/internal/service"
 	"github.com/ecommerce/shipping-service/pkg/database"
 	"github.com/ecommerce/shipping-service/pkg/logger"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
 	"github.com/gin-contrib/cors"
@@ -68,11 +69,12 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(metrics.Middleware("shipping-service"))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          log,
 		LogRequestBody:  true,
 		LogResponseBody: true,
-		SkipPaths:       []string{"/health", "/ready"},
+		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
 	// Configure CORS
@@ -92,6 +94,9 @@ func main() {
 			"time":    time.Now().UTC(),
 		})
 	})
+
+	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	// JWT Auth middleware
 	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production-12345")

@@ -22,17 +22,27 @@ type NotificationRepository interface {
 	// User preferences
 	GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreference, error)
 	UpsertPreference(ctx context.Context, pref *models.UserPreference) error
+
+	// Templates
+	ListTemplates(ctx context.Context, tenantID string) ([]models.NotificationTemplate, error)
+	GetTemplate(ctx context.Context, id string) (*models.NotificationTemplate, error)
+	GetTemplateByType(ctx context.Context, tenantID, channel, notifType string) (*models.NotificationTemplate, error)
+	CreateTemplate(ctx context.Context, t *models.NotificationTemplate) error
+	UpdateTemplate(ctx context.Context, id string, t *models.NotificationTemplate) error
+	DeleteTemplate(ctx context.Context, id string) error
 }
 
 type notificationRepository struct {
 	notifications *mongo.Collection
 	preferences   *mongo.Collection
+	templates     *mongo.Collection
 }
 
 func NewNotificationRepository(db *mongo.Database) NotificationRepository {
 	return &notificationRepository{
 		notifications: db.Collection("notifications"),
 		preferences:   db.Collection("user_preferences"),
+		templates:     db.Collection("notification_templates"),
 	}
 }
 
@@ -147,4 +157,111 @@ func (r *notificationRepository) UpsertPreference(ctx context.Context, pref *mod
 	opts := options.Update().SetUpsert(true)
 	_, err := r.preferences.UpdateOne(ctx, filter, update, opts)
 	return err
+}
+
+// === Templates ===
+
+func (r *notificationRepository) ListTemplates(ctx context.Context, tenantID string) ([]models.NotificationTemplate, error) {
+	filter := bson.M{"tenant_id": tenantID}
+	opts := options.Find().SetSort(bson.D{{Key: "updated_at", Value: -1}})
+
+	cursor, err := r.templates.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var templates []models.NotificationTemplate
+	if err := cursor.All(ctx, &templates); err != nil {
+		return nil, err
+	}
+	if templates == nil {
+		templates = []models.NotificationTemplate{}
+	}
+	return templates, nil
+}
+
+func (r *notificationRepository) GetTemplate(ctx context.Context, id string) (*models.NotificationTemplate, error) {
+	var t models.NotificationTemplate
+	err := r.templates.FindOne(ctx, bson.M{"_id": id}).Decode(&t)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.New("template not found")
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+// GetTemplateByType returns the active template for a tenant+channel+type tuple.
+// Returns nil (no error) when no template is configured — callers must treat
+// that as "fall back to the hardcoded renderer".
+func (r *notificationRepository) GetTemplateByType(ctx context.Context, tenantID, channel, notifType string) (*models.NotificationTemplate, error) {
+	var t models.NotificationTemplate
+	err := r.templates.FindOne(ctx, bson.M{
+		"tenant_id": tenantID,
+		"channel":   channel,
+		"type":      notifType,
+		"is_active": true,
+	}).Decode(&t)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *notificationRepository) CreateTemplate(ctx context.Context, t *models.NotificationTemplate) error {
+	if t.ID == "" {
+		t.ID = uuid.New().String()
+	}
+	now := time.Now().UTC()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+	_, err := r.templates.InsertOne(ctx, t)
+	return err
+}
+
+func (r *notificationRepository) UpdateTemplate(ctx context.Context, id string, t *models.NotificationTemplate) error {
+	t.UpdatedAt = time.Now().UTC()
+	set := bson.M{
+		"updated_at": t.UpdatedAt,
+	}
+	if t.Type != "" {
+		set["type"] = t.Type
+	}
+	if t.Channel != "" {
+		set["channel"] = t.Channel
+	}
+	if t.Name != "" {
+		set["name"] = t.Name
+	}
+	// Subject can legitimately be empty (push/sms with no subject); always set.
+	set["subject_template"] = t.SubjectTemplate
+	if t.BodyTemplate != "" {
+		set["body_template"] = t.BodyTemplate
+	}
+	set["is_active"] = t.IsActive
+
+	res, err := r.templates.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("template not found")
+	}
+	return nil
+}
+
+func (r *notificationRepository) DeleteTemplate(ctx context.Context, id string) error {
+	res, err := r.templates.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return errors.New("template not found")
+	}
+	return nil
 }

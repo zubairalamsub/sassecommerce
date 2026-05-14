@@ -91,12 +91,14 @@ describe('statusColor', () => {
     expect(statusColor('shipped')).toContain('purple');
   });
 
-  test('returns gray for draft', () => {
-    expect(statusColor('draft')).toContain('gray');
+  test('returns neutral surface for draft', () => {
+    // draft/inactive/archived map to the semantic surface-hover token so
+    // they swap palettes correctly between light and dark mode.
+    expect(statusColor('draft')).toContain('surface-hover');
   });
 
-  test('returns gray fallback for unknown status', () => {
-    expect(statusColor('unknown_status')).toContain('gray');
+  test('returns neutral surface fallback for unknown status', () => {
+    expect(statusColor('unknown_status')).toContain('surface-hover');
   });
 
   test('handles capitalized payment statuses', () => {

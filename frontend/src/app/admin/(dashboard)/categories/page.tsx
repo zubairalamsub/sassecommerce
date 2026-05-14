@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus,
   Pencil,
@@ -9,16 +9,30 @@ import {
   X,
   FolderTree,
   ChevronRight,
+  Upload,
+  ImageIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn, formatDate } from '@/lib/utils';
-import type {
-  Category,
-  CreateCategoryRequest,
-  UpdateCategoryRequest,
+import { cn, formatDate, mediaUrl } from '@/lib/utils';
+import {
+  categoryApi,
+  uploadCategoryImage,
+  type Category,
+  type CreateCategoryRequest,
+  type UpdateCategoryRequest,
 } from '@/lib/api';
+import { compressImage, ImagePresets } from '@/lib/image-compress';
 import { useAuthStore } from '@/stores/auth';
 import { useProductStore } from '@/stores/products';
+import { toast } from '@/stores/toast';
+
+// Resolves the storefront URL for a Category image. The backend stores the
+// canonical image on `category.image`; older persisted localStorage data may
+// still have `image_url`, so we accept both.
+function categoryImageSrc(c: Pick<Category, 'image' | 'image_url'> | null | undefined): string {
+  const raw = c?.image || c?.image_url || '';
+  return raw ? mediaUrl(raw) : '';
+}
 
 type CategoryStatus = 'active' | 'inactive';
 
@@ -77,6 +91,7 @@ function CategoryModal({
   saving,
   onClose,
   onSave,
+  onImageChanged,
 }: {
   open: boolean;
   category: Category | null;
@@ -84,6 +99,9 @@ function CategoryModal({
   saving: boolean;
   onClose: () => void;
   onSave: (data: CategoryFormData) => void;
+  /** Called after the image is successfully uploaded or removed so the parent
+   *  can refresh its in-memory category list without a full re-fetch. */
+  onImageChanged?: (categoryId: string, imageURL: string) => void;
 }) {
   const [form, setForm] = useState<CategoryFormData>({
     name: '',
@@ -93,6 +111,13 @@ function CategoryModal({
     status: 'active',
   });
   const [autoSlug, setAutoSlug] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [localImage, setLocalImage] = useState<string>(''); // currently shown image URL
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const tenantId = useAuthStore((s) => s.tenantId);
+  const token = useAuthStore((s) => s.token);
 
   useEffect(() => {
     if (category) {
@@ -104,11 +129,71 @@ function CategoryModal({
         status: category.status,
       });
       setAutoSlug(false);
+      setLocalImage(category.image || category.image_url || '');
     } else {
       setForm({ name: '', slug: '', description: '', parent_id: '', status: 'active' });
       setAutoSlug(true);
+      setLocalImage('');
     }
+    setUploadPct(0);
   }, [category, open]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset input so the same file can be selected again after an error.
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+    if (!category || !tenantId || !token) {
+      toast.error('Save the category first, then add an image.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      // Category banner — 1280px at 85% quality keeps file size reasonable while
+      // still looking sharp in the storefront grid. We define a per-surface
+      // preset rather than reusing `banner` so this is easy to tune later.
+      const compressed = await compressImage(file, ImagePresets.banner);
+      const url = await uploadCategoryImage(
+        compressed,
+        category.id,
+        tenantId,
+        token,
+        (loaded, total) => setUploadPct(Math.round((loaded / total) * 100)),
+      );
+      setLocalImage(url);
+      toast.success('Category image updated');
+      onImageChanged?.(category.id, url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+    }
+  }
+
+  async function handleRemoveImage() {
+    if (!category || !tenantId || !token) return;
+    if (!confirm('Remove the image from this category?')) return;
+    setUploading(true);
+    try {
+      await categoryApi.removeImage(category.id, tenantId, token);
+      setLocalImage('');
+      toast.success('Image removed');
+      onImageChanged?.(category.id, '');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Remove failed';
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function handleNameChange(name: string) {
     setForm((prev) => ({
@@ -202,6 +287,77 @@ function CategoryModal({
               />
             </div>
 
+            {/* Image — only available after the category exists (we need an ID
+                 to scope the storage key). For new categories the placeholder
+                 explains the two-step UX. */}
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Image</label>
+              <div className="flex items-center gap-3">
+                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-hover">
+                  {localImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mediaUrl(localImage)}
+                      alt="Category"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-text-muted" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  {!category ? (
+                    <p className="text-xs text-text-muted">
+                      Save the category first, then come back to upload an image.
+                    </p>
+                  ) : uploading ? (
+                    <div className="space-y-2">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-hover">
+                        <div
+                          className="h-full bg-primary transition-[width]"
+                          style={{ width: `${uploadPct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-text-muted">
+                        Uploading… {uploadPct}%
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-surface-hover"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {localImage ? 'Replace' : 'Upload'}
+                      </button>
+                      {localImage && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Remove
+                        </button>
+                      )}
+                      <p className="basis-full text-xs text-text-muted">
+                        JPG, PNG, or WebP up to ~10MB. Auto-compressed before upload.
+                      </p>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Parent Category */}
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">
@@ -290,9 +446,18 @@ function CategoryRow({
             {depth > 0 && (
               <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
             )}
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-              {category.name.charAt(0).toUpperCase()}
-            </div>
+            {categoryImageSrc(category) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={categoryImageSrc(category)}
+                alt={category.name}
+                className="h-9 w-9 flex-shrink-0 rounded-lg border border-border object-cover"
+              />
+            ) : (
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                {category.name.charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
               <span className="text-sm font-medium text-text">{category.name}</span>
               {category.description && (
@@ -588,6 +753,13 @@ export default function CategoriesPage() {
         saving={saving}
         onClose={() => setModalOpen(false)}
         onSave={handleSave}
+        onImageChanged={() => {
+          // Re-fetch so the list row thumbnail picks up the new image. We
+          // don't optimistically patch the local list because the modal's own
+          // in-memory state already reflects the change and the user typically
+          // closes the modal next — at which point we want fresh data anyway.
+          if (tenantId) fetchCategories(tenantId);
+        }}
       />
     </div>
   );

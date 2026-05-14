@@ -15,7 +15,9 @@ import (
 	"github.com/ecommerce/product-service/internal/messaging"
 	"github.com/ecommerce/product-service/internal/repository"
 	"github.com/ecommerce/product-service/internal/service"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedstorage "github.com/ecommerce/shared/go/pkg/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -71,8 +73,31 @@ func main() {
 	productHandler := api.NewProductHandler(productService, logger)
 	categoryHandler := api.NewCategoryHandler(categoryService, logger)
 
+	// Optional: initialise the object storage client and image handlers.
+	// Only register image upload routes when storage is configured — services
+	// running without OCI credentials (e.g. local dev without S3) should still
+	// boot cleanly with category/product CRUD intact.
+	var imageHandler *api.ImageHandler
+	var categoryImageHandler *api.CategoryImageHandler
+	if storageCfg, err := sharedstorage.NewFromEnv(os.Getenv); err == nil {
+		storageClient, err := sharedstorage.New(context.Background(), *storageCfg)
+		if err != nil {
+			logger.WithError(err).Warn("Object storage configured but client init failed; image uploads disabled")
+		} else {
+			imageService := service.NewImageService(productRepo, storageClient, logger)
+			imageHandler = api.NewImageHandler(imageService, logger)
+
+			categoryImageService := service.NewCategoryImageService(categoryRepo, storageClient, logger)
+			categoryImageHandler = api.NewCategoryImageHandler(categoryImageService, logger)
+
+			logger.WithField("bucket", storageClient.Bucket()).Info("Object storage configured; image upload routes enabled")
+		}
+	} else {
+		logger.WithError(err).Info("Object storage not configured; image upload routes disabled")
+	}
+
 	// Setup router
-	router := setupRouter(config, logger, productHandler, categoryHandler)
+	router := setupRouter(config, logger, productHandler, categoryHandler, imageHandler, categoryImageHandler)
 
 	// Start server
 	srv := &http.Server{
@@ -147,7 +172,7 @@ func connectMongoDB(uri string, logger *logrus.Logger) (*mongo.Client, error) {
 	return client, nil
 }
 
-func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.ProductHandler, categoryHandler *api.CategoryHandler) *gin.Engine {
+func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.ProductHandler, categoryHandler *api.CategoryHandler, imageHandler *api.ImageHandler, categoryImageHandler *api.CategoryImageHandler) *gin.Engine {
 	// Set Gin mode based on environment
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -157,21 +182,27 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 
 	// Global middleware
 	router.Use(gin.Recovery())
+	router.Use(metrics.Middleware("product-service"))
 	router.Use(corsMiddleware())
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          logger,
 		LogRequestBody:  true,
 		LogResponseBody: true,
-		SkipPaths:       []string{"/health", "/ready"},
-	}))
-	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
-		Rate:   100,
-		Window: time.Minute,
+		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
 	// Health check endpoint (no authentication required)
 	router.GET("/health", healthCheck)
 	router.GET("/ready", readinessCheck)
+
+	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
+	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+
+	// Rate limiting (after /metrics so Prometheus scrapes aren't throttled)
+	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
+		Rate:   100,
+		Window: time.Minute,
+	}))
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -190,6 +221,22 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 		// Register route handlers (auth middleware applied to write routes)
 		productHandler.RegisterRoutes(v1, authMw)
 		categoryHandler.RegisterRoutes(v1, authMw)
+
+		// Image upload routes are admin/moderator-only — they live under their
+		// own groups so we can apply auth + role middleware uniformly without
+		// touching the public read routes registered above.
+		if imageHandler != nil {
+			productImages := v1.Group("/products")
+			productImages.Use(authMw)
+			productImages.Use(sharedmiddleware.RequireRole("admin", "moderator"))
+			imageHandler.RegisterRoutes(productImages)
+		}
+		if categoryImageHandler != nil {
+			categoryImages := v1.Group("/categories")
+			categoryImages.Use(authMw)
+			categoryImages.Use(sharedmiddleware.RequireRole("admin", "moderator"))
+			categoryImageHandler.RegisterRoutes(categoryImages)
+		}
 	}
 
 	return router

@@ -14,6 +14,7 @@ const (
 	OrderCreatedEvent       EventType = "OrderCreated"
 	OrderConfirmedEvent     EventType = "OrderConfirmed"
 	OrderCancelledEvent     EventType = "OrderCancelled"
+	OrderRefundedEvent      EventType = "OrderRefunded"
 	OrderShippedEvent       EventType = "OrderShipped"
 	OrderDeliveredEvent     EventType = "OrderDelivered"
 	OrderItemAddedEvent     EventType = "OrderItemAdded"
@@ -80,6 +81,21 @@ type OrderCancelled struct {
 }
 
 func (e OrderCancelled) GetData() interface{} { return e }
+
+// OrderRefunded is raised when a paid order is cancelled. It is a separate
+// event from OrderCancelled so the audit pipeline can surface refunds with
+// a high-signal action label ("payment.refund.created") and operators can
+// alert on the pattern independently of generic cancellations.
+type OrderRefunded struct {
+	BaseEvent
+	PaymentID  string    `json:"payment_id"`
+	Amount     float64   `json:"amount"`
+	Reason     string    `json:"reason"`
+	RefundedBy string    `json:"refunded_by"`
+	RefundedAt time.Time `json:"refunded_at"`
+}
+
+func (e OrderRefunded) GetData() interface{} { return e }
 
 // OrderShipped event
 type OrderShipped struct {
@@ -216,6 +232,12 @@ func Deserialize(eventType EventType, data []byte) (Event, error) {
 		event = e
 	case OrderCancelledEvent:
 		var e OrderCancelled
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, err
+		}
+		event = e
+	case OrderRefundedEvent:
+		var e OrderRefunded
 		if err := json.Unmarshal(data, &e); err != nil {
 			return nil, err
 		}

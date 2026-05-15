@@ -7,8 +7,7 @@ import AuthGuard from '@/components/auth/auth-guard';
 import { useAuthStore } from '@/stores/auth';
 import { orderApi, type Order } from '@/lib/api';
 import { formatCurrency, formatDate, statusColor } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 function OrdersContent() {
   const user = useAuthStore((s) => s.user);

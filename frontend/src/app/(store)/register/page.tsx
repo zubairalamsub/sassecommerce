@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { UserPlus, Eye, EyeOff, Phone } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { ApiError } from '@/lib/api';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -93,7 +92,7 @@ export default function RegisterPage() {
             </div>
             <h1 className="text-2xl font-bold text-text">Create Account</h1>
             <p className="mt-1 text-sm text-text-secondary">
-              Join Saajan to start shopping
+              Join Demo Store to start shopping
             </p>
           </div>
 

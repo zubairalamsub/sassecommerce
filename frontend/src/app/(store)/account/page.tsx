@@ -20,8 +20,7 @@ import AuthGuard from '@/components/auth/auth-guard';
 import { useAuthStore } from '@/stores/auth';
 import { authApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 const quickLinks = [
   {

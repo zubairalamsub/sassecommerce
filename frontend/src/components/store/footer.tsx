@@ -4,14 +4,13 @@ import Link from 'next/link';
 import { useEffect } from 'react';
 import { ExternalLink, ArrowUp } from 'lucide-react';
 import { useStoreConfigStore } from '@/stores/store-config';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 interface StoreFooterProps {
   storeName?: string;
 }
 
-export default function StoreFooter({ storeName = 'Saajan' }: StoreFooterProps) {
+export default function StoreFooter({ storeName = 'Demo Store' }: StoreFooterProps) {
   const { config, fetchConfig } = useStoreConfigStore();
   const footer = config.footer;
 

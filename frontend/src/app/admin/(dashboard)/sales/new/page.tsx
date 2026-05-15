@@ -431,7 +431,7 @@ export default function InstantSellPage() {
       });
       setRecipientEmail(customerEmail);
       // Load tenant for receipt branding (best-effort — receipt renders fine
-      // even if this fails, falling back to "Saajan").
+      // even if this fails, falling back to "Demo Store").
       tenantApi
         .get(tenantId, tenantId)
         .then((t) => setTenant(t))

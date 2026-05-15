@@ -10,8 +10,7 @@ import { useProductStore, type StoreProduct } from '@/stores/products';
 import { useAuthStore } from '@/stores/auth';
 import { useWishlistStore } from '@/stores/wishlist';
 import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 const gradients = [
   'from-rose-100 to-pink-200 dark:from-rose-900/40 dark:to-pink-900/40',
@@ -52,7 +51,7 @@ function ProductsContent() {
   const [addedId, setAddedId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  const auth = user && token ? { userId: user.id, tenantId: 'tenant_saajan', token } : undefined;
+  const auth = user && token ? { userId: user.id, tenantId: TENANT_ID, token } : undefined;
 
   const searchParam = searchParams.get('search') || '';
   const categoryParam = searchParams.get('category') || '';

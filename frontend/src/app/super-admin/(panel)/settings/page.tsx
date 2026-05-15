@@ -332,7 +332,7 @@ export default function PlatformSettingsPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // ---- General Tab State ----
-  const [platformName, setPlatformName] = useState('Saajan Platform');
+  const [platformName, setPlatformName] = useState('Demo Store Platform');
   const [platformUrl, setPlatformUrl] = useState('https://saajan.com.bd');
   const [supportEmail, setSupportEmail] = useState('support@saajan.com.bd');
   const [supportPhone, setSupportPhone] = useState('+880 1700-000000');
@@ -351,7 +351,7 @@ export default function PlatformSettingsPage() {
   const [smtpPassword, setSmtpPassword] = useState('');
   const [smtpShowPassword, setSmtpShowPassword] = useState(false);
   const [smtpEncryption, setSmtpEncryption] = useState('tls');
-  const [smtpFromName, setSmtpFromName] = useState('Saajan Platform');
+  const [smtpFromName, setSmtpFromName] = useState('Demo Store Platform');
   const [smtpFromEmail, setSmtpFromEmail] = useState('noreply@saajan.com.bd');
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -751,7 +751,7 @@ export default function PlatformSettingsPage() {
           <>
             <SectionCard title="Platform Identity" description="Basic information about your platform">
               <Field label="Platform Name" description="Public-facing platform name">
-                <TextInput value={platformName} onChange={setPlatformName} placeholder="Saajan Platform" />
+                <TextInput value={platformName} onChange={setPlatformName} placeholder="Demo Store Platform" />
               </Field>
               <Field label="Platform URL" description="Root URL of the platform">
                 <TextInput value={platformUrl} onChange={setPlatformUrl} placeholder="https://saajan.com.bd" />
@@ -849,7 +849,7 @@ export default function PlatformSettingsPage() {
                 />
               </Field>
               <Field label="From Name">
-                <TextInput value={smtpFromName} onChange={setSmtpFromName} placeholder="Saajan Platform" />
+                <TextInput value={smtpFromName} onChange={setSmtpFromName} placeholder="Demo Store Platform" />
               </Field>
               <Field label="From Email">
                 <TextInput value={smtpFromEmail} onChange={setSmtpFromEmail} placeholder="noreply@saajan.com.bd" type="email" />

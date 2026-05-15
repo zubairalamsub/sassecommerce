@@ -10,35 +10,42 @@ interface AuthGuardProps {
   redirectTo?: string;
 }
 
+type GuardStatus = 'checking' | 'redirecting' | 'ok';
+
 export default function AuthGuard({ children, requiredRole, redirectTo }: AuthGuardProps) {
   const router = useRouter();
   const { isAuthenticated, hasRole, user } = useAuthStore();
-  const [checked, setChecked] = useState(false);
+  const [status, setStatus] = useState<GuardStatus>('checking');
+  const [redirectLabel, setRedirectLabel] = useState('login');
 
   useEffect(() => {
     if (!isAuthenticated()) {
       const loginPath = redirectTo || getLoginPath(requiredRole);
+      setRedirectLabel('login');
+      setStatus('redirecting');
       router.replace(loginPath);
       return;
     }
     if (!hasRole(requiredRole)) {
-      // Authenticated but wrong role — redirect to their appropriate area
-      if (user?.role === 'super_admin') {
-        router.replace('/platform/dashboard');
-      } else if (user?.role === 'admin' || user?.role === 'moderator') {
-        router.replace('/admin/dashboard');
-      } else {
-        router.replace('/products');
-      }
+      let path = '/products';
+      let label = 'storefront';
+      if (user?.role === 'super_admin') { path = '/platform/dashboard'; label = 'platform dashboard'; }
+      else if (user?.role === 'admin' || user?.role === 'moderator') { path = '/admin/dashboard'; label = 'admin dashboard'; }
+      setRedirectLabel(label);
+      setStatus('redirecting');
+      router.replace(path);
       return;
     }
-    setChecked(true);
+    setStatus('ok');
   }, [isAuthenticated, hasRole, requiredRole, redirectTo, router, user]);
 
-  if (!checked) {
+  if (status !== 'ok') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-primary" />
+        <p className="text-sm text-gray-500">
+          {status === 'redirecting' ? `Redirecting to ${redirectLabel}…` : 'Checking permissions…'}
+        </p>
       </div>
     );
   }

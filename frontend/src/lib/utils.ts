@@ -55,6 +55,34 @@ export function mediaUrl(relativePath: string | undefined | null): string {
   return `${base}/${clean}`;
 }
 
+// Minimal HTML sanitizer for rich-text content saved by the admin editor.
+// Strips <script>/<style>/<iframe>/<object>/<embed> tags, on*= event handlers,
+// and javascript: URLs in href/src. Anything else is kept verbatim.
+export function sanitizeHtml(html: string): string {
+  if (!html) return '';
+  let out = html;
+  out = out.replace(/<\/?(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, '');
+  out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  out = out.replace(/(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '$1="#"');
+  return out;
+}
+
+// Strip all HTML tags and decode common entities — used for snippets/cards
+// where rendering full HTML would break the layout.
+export function stripHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function statusColor(status: string): string {
   const colors: Record<string, string> = {
     active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',

@@ -16,15 +16,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Saajan - Fashion & Lifestyle",
-    template: "%s | Saajan",
+    default: "Demo Store - Fashion & Lifestyle",
+    template: "%s | Demo Store",
   },
   description: "Premium fashion and lifestyle products from Bangladesh. Shop sarees, panjabis, accessories, and more.",
   keywords: ["saajan", "fashion", "bangladesh", "ecommerce", "saree", "panjabi", "online shopping"],
   openGraph: {
     type: "website",
     locale: "en_BD",
-    siteName: "Saajan",
+    siteName: "Demo Store",
   },
 };
 

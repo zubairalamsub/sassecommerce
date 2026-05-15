@@ -6,8 +6,7 @@ import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Loader2 } from 'lucide-re
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, mediaUrl } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 const SHIPPING_COST = 100;
 
 export default function CartPage() {

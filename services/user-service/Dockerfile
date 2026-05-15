@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Build stage
 FROM golang:1.24-alpine AS builder
 
@@ -5,6 +6,7 @@ WORKDIR /app
 
 # Install build dependencies
 RUN apk add --no-cache git
+ENV GOPROXY=https://proxy.golang.org,direct
 
 # Copy shared module first
 COPY shared/go /shared/go
@@ -14,7 +16,9 @@ COPY services/user-service/go.mod services/user-service/go.sum ./
 
 # Fix replace directive for Docker context
 RUN sed -i 's|../../shared/go|/shared/go|' go.mod
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
 # Copy source code
 COPY services/user-service/ .
@@ -23,8 +27,12 @@ COPY services/user-service/ .
 RUN sed -i 's|../../shared/go|/shared/go|' go.mod
 
 # Build the application
-RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o user-service ./cmd/server
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod tidy
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -o user-service ./cmd/server
 
 # Final stage
 FROM alpine:latest

@@ -5,7 +5,7 @@ const API_BASE = process.env.API_BASE || 'http://localhost';
 const SERVICE_PORTS: Record<string, number> = {
   tenant: 8081,
   user: 8082,
-  order: 8080,
+  order: 8096,
   product: 8083,
   inventory: 8084,
   payment: 8085,
@@ -19,7 +19,15 @@ const SERVICE_PORTS: Record<string, number> = {
   analytics: 8093,
   recommendation: 8094,
   config: 8095,
+  prometheus: 9090,
 };
+
+// Per-service URLs override the default `${API_BASE}:${port}`. Used in Docker
+// where each service has its own DNS hostname on the internal network.
+function serviceTarget(service: string, port: number): string {
+  const envKey = `${service.toUpperCase()}_SERVICE_URL`;
+  return process.env[envKey] || `${API_BASE}:${port}`;
+}
 
 // Content-Security-Policy for the SSR storefront/admin. Loose enough to let
 // Next.js boot (inline + eval scripts are required by the framework) but
@@ -69,7 +77,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return Object.entries(SERVICE_PORTS).map(([service, port]) => ({
       source: `/proxy/${service}/:path*`,
-      destination: `${API_BASE}:${port}/:path*`,
+      destination: `${serviceTarget(service, port)}/:path*`,
     }));
   },
   async headers() {

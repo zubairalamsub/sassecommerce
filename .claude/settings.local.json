@@ -103,7 +103,17 @@
       "Bash(DOCKER_HOST=unix:///var/run/docker.sock docker ps *)",
       "Bash(lsof -ti:8084)",
       "Bash(lsof -ti:8083)",
-      "Bash(lsof -ti:3000)"
+      "Bash(lsof -ti:3000)",
+      "Bash(docker --version)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell($env:TENANT_NAME = \"Demo Store Fresh\"; $env:TENANT_EMAIL = \"owner+fresh1@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 80)",
+      "PowerShell($env:TENANT_NAME = \"Demo Store Fresh 2\"; $env:TENANT_EMAIL = \"owner+fresh2@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 80)",
+      "PowerShell($env:TENANT_NAME = \"Demo Store Fresh 3\"; $env:TENANT_EMAIL = \"owner+fresh3@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 80)",
+      "PowerShell($env:TENANT_NAME = \"Demo Store Live\"; $env:TENANT_EMAIL = \"owner+live@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 100)",
+      "PowerShell($env:TENANT_NAME = \"Demo Store Live\"; $env:TENANT_EMAIL = \"owner+live@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 50)",
+      "PowerShell($env:TENANT_ID = \"tenant_saajan\"; $env:TENANT_NAME = \"Saajan Demo Store\"; $env:TENANT_EMAIL = \"owner@saajan.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 60)",
+      "Bash(DOCKER_BUILDKIT=1 docker compose build tenant-service)"
     ]
   },
   "model": "opus",

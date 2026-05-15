@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authApi, ApiError } from '@/lib/api';
+import { DEFAULT_TENANT_ID } from '@/lib/tenant';
 
 // Role hierarchy: super_admin > admin > moderator > customer > guest
 export type UserRole = 'super_admin' | 'admin' | 'moderator' | 'customer' | 'guest';
@@ -176,7 +177,7 @@ export const DEMO_USERS: Record<string, { password: string; user: AuthUser; toke
     token: 'demo-admin-token-t1',
     user: {
       id: 'ta-001',
-      tenant_id: 'tenant_saajan',
+      tenant_id: DEFAULT_TENANT_ID,
       email: 'admin@fashion.com.bd',
       username: 'fashion_admin',
       first_name: 'Karim',
@@ -196,7 +197,7 @@ export const DEMO_USERS: Record<string, { password: string; user: AuthUser; toke
     token: 'demo-mod-token-t1',
     user: {
       id: 'tm-001',
-      tenant_id: 'tenant_saajan',
+      tenant_id: DEFAULT_TENANT_ID,
       email: 'staff@fashion.com.bd',
       username: 'fashion_staff',
       first_name: 'Nusrat',
@@ -216,7 +217,7 @@ export const DEMO_USERS: Record<string, { password: string; user: AuthUser; toke
     token: 'demo-customer-token',
     user: {
       id: 'cu-001',
-      tenant_id: 'tenant_saajan',
+      tenant_id: DEFAULT_TENANT_ID,
       email: 'rahim@example.com',
       username: 'rahim_ahmed',
       first_name: 'Rahim',

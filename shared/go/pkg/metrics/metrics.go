@@ -34,6 +34,11 @@ var (
 	httpRequestsTotal *prometheus.CounterVec
 	httpRequestDur    *prometheus.HistogramVec
 	httpInFlight      *prometheus.GaugeVec
+
+	// Per-tenant counters. Tenant cardinality is bounded by the number of
+	// active tenants on the platform, so labelling here is safe.
+	tenantRequestsTotal *prometheus.CounterVec
+	tenantBytesTotal    *prometheus.CounterVec
 )
 
 // Register initialises the default Prometheus registry with standard
@@ -78,7 +83,25 @@ func Register(service string) {
 			[]string{},
 		)
 
-		prometheus.MustRegister(httpRequestsTotal, httpRequestDur, httpInFlight)
+		tenantRequestsTotal = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name:        "tenant_http_requests_total",
+				Help:        "Total HTTP requests handled, partitioned by tenant.",
+				ConstLabels: prometheus.Labels{"service": service},
+			},
+			[]string{"tenant", "status"},
+		)
+
+		tenantBytesTotal = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name:        "tenant_http_bytes_total",
+				Help:        "Total HTTP bytes transferred, partitioned by tenant and direction (in|out).",
+				ConstLabels: prometheus.Labels{"service": service},
+			},
+			[]string{"tenant", "direction"},
+		)
+
+		prometheus.MustRegister(httpRequestsTotal, httpRequestDur, httpInFlight, tenantRequestsTotal, tenantBytesTotal)
 	})
 }
 
@@ -120,6 +143,25 @@ func Middleware(service string) gin.HandlerFunc {
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 		httpRequestDur.WithLabelValues(method, path).Observe(time.Since(start).Seconds())
+
+		// Per-tenant accounting. The tenant id arrives as a header from the
+		// edge; treat unknown/anonymous traffic as the literal "unknown" so
+		// it's still visible in the super-admin report.
+		tenant := c.GetHeader("X-Tenant-ID")
+		if tenant == "" {
+			tenant = "unknown"
+		}
+		tenantRequestsTotal.WithLabelValues(tenant, status).Inc()
+
+		// Bytes accounting. Request body size from Content-Length (may be
+		// -1 for chunked transfers — we record 0 in that case rather than
+		// over-reporting); response size from the gin writer.
+		if c.Request.ContentLength > 0 {
+			tenantBytesTotal.WithLabelValues(tenant, "in").Add(float64(c.Request.ContentLength))
+		}
+		if respSize := c.Writer.Size(); respSize > 0 {
+			tenantBytesTotal.WithLabelValues(tenant, "out").Add(float64(respSize))
+		}
 	}
 }
 

@@ -53,14 +53,17 @@ func main() {
 	// Initialize repositories
 	tenantRepo := repository.NewTenantRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	usageRepo := repository.NewUsageRepository(db)
 
 	// Initialize services
 	auditService := service.NewAuditService(auditRepo, log)
 	tenantService := service.NewTenantService(tenantRepo, kafkaProducer, log)
+	usageService := service.NewUsageService(usageRepo, log)
 
 	// Initialize handlers
 	tenantHandler := api.NewTenantHandler(tenantService, log)
 	auditHandler := api.NewAuditHandler(auditService, log)
+	usageHandler := api.NewUsageHandler(usageService, log)
 
 	// Start centralised audit event consumer (listens to all service Kafka topics)
 	auditConsumer := messaging.NewAuditEventConsumer(cfg.Kafka.Brokers, auditService, log)
@@ -124,6 +127,9 @@ func main() {
 		// Audit logs
 		v1.GET("/audit-logs", auditHandler.ListAuditLogs)
 		v1.GET("/audit-logs/:id", auditHandler.GetAuditLog)
+
+		// Admin-only reports (super-admin layout gates this on the frontend).
+		v1.GET("/admin/usage", usageHandler.GetUsage)
 	}
 
 	// Create HTTP server

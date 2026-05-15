@@ -20,7 +20,7 @@ export default function PlatformSettingsPage() {
   const [saved, setSaved] = useState(false);
 
   // General
-  const [platformName, setPlatformName] = useState('Saajan');
+  const [platformName, setPlatformName] = useState('Demo Store');
   const [platformUrl, setPlatformUrl] = useState('https://saajan.com.bd');
   const [supportEmail, setSupportEmail] = useState('support@saajan.com.bd');
   const [defaultTier, setDefaultTier] = useState('starter');
@@ -32,7 +32,7 @@ export default function PlatformSettingsPage() {
   const [smtpPort, setSmtpPort] = useState('587');
   const [smtpUser, setSmtpUser] = useState('');
   const [smtpPass, setSmtpPass] = useState('');
-  const [fromName, setFromName] = useState('Saajan Platform');
+  const [fromName, setFromName] = useState('Demo Store Platform');
   const [fromEmail, setFromEmail] = useState('noreply@saajan.com.bd');
 
   // Security

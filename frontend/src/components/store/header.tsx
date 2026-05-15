@@ -20,7 +20,7 @@ interface StoreHeaderProps {
   logoUrl?: string;
 }
 
-export default function StoreHeader({ storeName = 'Saajan', logoUrl }: StoreHeaderProps) {
+export default function StoreHeader({ storeName = 'Demo Store', logoUrl }: StoreHeaderProps) {
   const router = useRouter();
   const itemCount = useCartStore((s) => s.items.reduce((sum, i) => sum + i.quantity, 0));
   const wishlistCount = useWishlistStore((s) => s.items.length);

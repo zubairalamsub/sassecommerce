@@ -43,7 +43,7 @@ export default function PlatformSidebar() {
           <div className="h-8 w-8 rounded-lg bg-violet-600 flex items-center justify-center">
             <Shield className="h-4 w-4 text-white" />
           </div>
-          <span className="text-lg font-semibold text-text">Saajan Platform</span>
+          <span className="text-lg font-semibold text-text">Demo Store Platform</span>
         </div>
         <p className="mt-1 text-xs text-text-muted pl-10">Super Admin Console</p>
       </div>

@@ -448,7 +448,7 @@ services:
       dockerfile: services/order-service/Dockerfile
     container_name: order-service
     ports:
-      - "8080:8080"
+      - "8096:8080"
     environment:
       SERVER_PORT: 8080
       DB_HOST: postgres
@@ -756,6 +756,23 @@ services:
       MEDIA_STORAGE_PATH: /app/media
       NEXT_PUBLIC_MEDIA_URL: /api/media
       JWT_SECRET: your-secret-key-change-in-production-12345
+      TENANT_SERVICE_URL: http://tenant-service:8080
+      USER_SERVICE_URL: http://user-service:8082
+      PRODUCT_SERVICE_URL: http://product-service:8083
+      INVENTORY_SERVICE_URL: http://inventory-service:8084
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      SHIPPING_SERVICE_URL: http://shipping-service:8086
+      NOTIFICATION_SERVICE_URL: http://notification-service:8087
+      REVIEW_SERVICE_URL: http://review-service:8088
+      CART_SERVICE_URL: http://cart-service:8089
+      SEARCH_SERVICE_URL: http://search-service:8090
+      PROMOTION_SERVICE_URL: http://promotion-service:8091
+      VENDOR_SERVICE_URL: http://vendor-service:8092
+      ANALYTICS_SERVICE_URL: http://analytics-service:8093
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:8094
+      CONFIG_SERVICE_URL: http://config-service:8095
+      ORDER_SERVICE_URL: http://order-service:8080
+      PROMETHEUS_SERVICE_URL: http://ecommerce-prometheus:9090
     volumes:
       - media_data:/app/media
     networks:

@@ -76,7 +76,7 @@ const defaultConfig: StorefrontConfig = {
     {
       id: 'b1',
       image_url: '',
-      title: 'Welcome to Saajan',
+      title: 'Welcome to Demo Store',
       subtitle: 'Discover the finest collection of traditional and modern fashion',
       cta_text: 'Shop Now',
       cta_link: '/products',
@@ -107,10 +107,10 @@ const defaultConfig: StorefrontConfig = {
       { label: 'Shipping Info', href: '/shipping' },
       { label: 'Returns', href: '/returns' },
     ],
-    copyright_text: 'Saajan E-Commerce. All rights reserved.',
+    copyright_text: 'Demo Store E-Commerce. All rights reserved.',
   },
   about: {
-    title: 'About Saajan',
+    title: 'About Demo Store',
     content: 'We are dedicated to bringing you the best products from Bangladesh and beyond.',
     mission: 'To make quality products accessible to everyone.',
     vision: 'Becoming Bangladesh\'s most trusted e-commerce platform.',

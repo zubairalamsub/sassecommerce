@@ -13,12 +13,14 @@ import {
   Plug,
   FileText,
   Server,
+  BarChart3,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 
 const navItems = [
   { href: '/super-admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/super-admin/tenants', label: 'Tenants', icon: Building2 },
+  { href: '/super-admin/usage', label: 'Tenant Usage', icon: BarChart3 },
   { href: '/super-admin/plans', label: 'Plans & Billing', icon: CreditCard },
   { href: '/super-admin/users', label: 'Users & Roles', icon: Users },
   { href: '/super-admin/integrations', label: 'Integrations', icon: Plug },
@@ -43,7 +45,7 @@ export default function SuperAdminSidebar() {
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
           <span className="text-sm font-bold text-white">S</span>
         </div>
-        <span className="text-lg font-semibold text-gray-900">Saajan Platform</span>
+        <span className="text-lg font-semibold text-gray-900">Demo Store Platform</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

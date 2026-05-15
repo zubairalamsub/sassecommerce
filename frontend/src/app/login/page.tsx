@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { ApiError } from '@/lib/api';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 export default function LoginPage() {
   const router = useRouter();

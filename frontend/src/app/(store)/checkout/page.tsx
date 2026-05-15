@@ -18,6 +18,7 @@ import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
 import { formatCurrency } from '@/lib/utils';
 import { orderApi, promotionApi, paymentApi, type CouponValidateResponse, type ShippingRate } from '@/lib/api';
 import { Tag, X, Truck } from 'lucide-react';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 const DHAKA_ZONE = ['Dhaka', 'Gazipur', 'Narayanganj', 'Tongi', 'Savar'];
 
@@ -163,8 +164,6 @@ export default function CheckoutPage() {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
-
-  const TENANT_ID = 'tenant_saajan';
 
   async function handleApplyCoupon() {
     if (!couponCode.trim()) return;

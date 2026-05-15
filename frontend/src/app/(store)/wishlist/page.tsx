@@ -7,8 +7,7 @@ import { useWishlistStore } from '@/stores/wishlist';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 const gradients = [
   'from-rose-100 to-pink-200 dark:from-rose-900/40 dark:to-pink-900/40',

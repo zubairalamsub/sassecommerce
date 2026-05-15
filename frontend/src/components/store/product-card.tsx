@@ -18,9 +18,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useReviewStore } from '@/stores/reviews';
 import { toast } from '@/stores/toast';
-import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { formatCurrency, cn, mediaUrl, stripHtml } from '@/lib/utils';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 const NEW_DAYS = 14;
 
 const gradients = [
@@ -523,7 +522,7 @@ function QuickViewModal({
 
             {product.description && (
               <p className="mt-4 line-clamp-5 text-sm leading-relaxed text-text-secondary">
-                {product.description}
+                {stripHtml(product.description)}
               </p>
             )}
 

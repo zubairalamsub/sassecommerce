@@ -7,8 +7,7 @@ import AnnouncementPopup from '@/components/store/announcement-popup';
 import { tenantApi, type TenantConfig } from '@/lib/api';
 import { useStoreConfigStore } from '@/stores/store-config';
 import { useThemeStore } from '@/stores/theme';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 // Cache tenant info on `window` so the result survives Fast Refresh, Turbopack
 // module re-evaluation, and any layout remount in dev. Without this guard, each
@@ -43,7 +42,7 @@ function loadTenantOnce(): Promise<TenantValue> {
 }
 
 export default function StoreLayout({ children }: { children: React.ReactNode }) {
-  const [storeName, setStoreName] = useState('Saajan');
+  const [storeName, setStoreName] = useState('Demo Store');
   const [branding, setBranding] = useState<TenantConfig['branding'] | null>(null);
   const accent = useThemeStore((s) => s.accent);
 
@@ -52,7 +51,7 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
     loadTenantOnce()
       .then((tenant) => {
         if (cancelled) return;
-        setStoreName(tenant.name || 'Saajan');
+        setStoreName(tenant.name || 'Demo Store');
         if (tenant.config?.branding) {
           setBranding(tenant.config.branding);
         }

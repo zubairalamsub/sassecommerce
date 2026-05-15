@@ -27,8 +27,7 @@ import { productApi, type Product } from '@/lib/api';
 import { useProductStore } from '@/stores/products';
 import { useRecentSearchesStore } from '@/stores/recent-searches';
 import { cn, formatCurrency, mediaUrl } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 const DEBOUNCE_MS = 200;
 const MIN_QUERY_LEN = 2;
 const PREVIEW_LIMIT = 8;

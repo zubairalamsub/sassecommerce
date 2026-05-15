@@ -7,8 +7,7 @@ import { ArrowLeft, Loader2, Printer, Download, Package } from 'lucide-react';
 import Invoice from '@/components/invoice';
 import { orderApi, tenantApi, type Order, type Tenant } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 export default function CustomerInvoicePage({
   params,

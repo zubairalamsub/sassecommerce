@@ -36,7 +36,7 @@ function discountAmount(order: Order): number {
 export default function Invoice({ order, tenant, customer, payment }: InvoiceProps) {
   const branding = tenant?.config?.branding;
   const general = tenant?.config?.general;
-  const tenantName = tenant?.name || 'Saajan';
+  const tenantName = tenant?.name || 'Demo Store';
   const logoUrl = branding?.logo_url ? mediaUrl(branding.logo_url) : '';
 
   const paid = isPaid(order);

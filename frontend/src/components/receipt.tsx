@@ -23,7 +23,7 @@ interface ReceiptProps {
   tenantBranding?: TenantConfig['branding'];
   /** Tenant general info — address, phone, support URL. Optional. */
   tenantGeneral?: TenantConfig['general'];
-  /** Tenant display name — falls back to "Saajan". */
+  /** Tenant display name — falls back to "Demo Store". */
   tenantName?: string;
   /** Cashier name to print on the receipt; defaults to "—". */
   cashierName?: string;
@@ -83,7 +83,7 @@ export default function Receipt({
   customerLabel,
   className,
 }: ReceiptProps) {
-  const storeName = tenantName?.trim() || 'Saajan';
+  const storeName = tenantName?.trim() || 'Demo Store';
   const logoUrl = tenantBranding?.logo_url ? mediaUrl(tenantBranding.logo_url) : '';
   const phone = tenantGeneral?.contact_phone?.trim() || '';
   const supportUrl = tenantGeneral?.support_url?.trim() || '';

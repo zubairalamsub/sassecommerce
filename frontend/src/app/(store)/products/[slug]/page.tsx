@@ -18,11 +18,10 @@ import { useProductStore } from '@/stores/products';
 import { useReviewStore } from '@/stores/reviews';
 import { useAuthStore } from '@/stores/auth';
 import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
-import { formatCurrency, cn, mediaUrl } from '@/lib/utils';
+import { formatCurrency, cn, mediaUrl, sanitizeHtml } from '@/lib/utils';
 import { recommendationApi, productApi, type ProductRecommendation } from '@/lib/api';
 import type { StoreProduct } from '@/stores/products';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 
 const gradients = [
   'from-pink-200 to-rose-100',
@@ -213,9 +212,14 @@ export default function ProductDetailPage({
           </div>
 
           {/* Description */}
-          <p className="mt-6 leading-relaxed text-text-secondary">
-            {product.description || 'No description available.'}
-          </p>
+          {product.description ? (
+            <div
+              className="prose prose-sm mt-6 max-w-none leading-relaxed text-text-secondary [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-text [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-text [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_pre]:rounded-md [&_pre]:bg-gray-100 [&_pre]:px-3 [&_pre]:py-2 [&_a]:text-primary [&_a]:underline [&_img]:my-3 [&_img]:max-w-full [&_img]:rounded-md"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.description) }}
+            />
+          ) : (
+            <p className="mt-6 leading-relaxed text-text-secondary">No description available.</p>
+          )}
 
           {/* Variant selector */}
           {product.variants && product.variants.length > 0 && (

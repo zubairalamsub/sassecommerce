@@ -60,7 +60,7 @@ export default function AdminSidebar() {
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-white font-bold text-sm">S</span>
           </div>
-          <span className="text-lg font-semibold text-text">Saajan Admin</span>
+          <span className="text-lg font-semibold text-text">Demo Store Admin</span>
         </div>
         <p className="mt-1 truncate text-xs text-text-muted pl-10">
           {user?.tenant_id || 'My Store'}

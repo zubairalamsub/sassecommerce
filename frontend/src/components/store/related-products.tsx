@@ -7,8 +7,7 @@ import type { StoreProduct } from '@/stores/products';
 import { useProductStore } from '@/stores/products';
 import ProductCard, { ProductCardSkeleton } from '@/components/store/product-card';
 import { cn } from '@/lib/utils';
-
-const TENANT_ID = 'tenant_saajan';
+import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
 const TARGET = 6;
 
 interface RelatedProductsProps {

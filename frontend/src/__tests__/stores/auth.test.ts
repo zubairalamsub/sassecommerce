@@ -148,4 +148,13 @@ describe("demoLogin", () => {
     const result = await demoLogin("unknown@test.com", "password");
     expect(result).toBeNull();
   });
+
+  test("sends only credentials to the token route, never role or user_id", async () => {
+    await demoLogin("admin@fashion.com.bd", "admin123");
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ email: "admin@fashion.com.bd", password: "admin123" });
+    expect(body.role).toBeUndefined();
+    expect(body.user_id).toBeUndefined();
+  });
 });

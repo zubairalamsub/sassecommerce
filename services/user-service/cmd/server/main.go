@@ -213,7 +213,9 @@ func setupRouter(
 	// Global middleware
 	router.Use(gin.Recovery())
 	router.Use(metrics.Middleware("user-service"))
-	router.Use(corsMiddleware())
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
+		AllowCredentials: true,
+	}))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          logger,
 		LogRequestBody:  true,
@@ -293,22 +295,6 @@ func setupRouter(
 	}
 
 	return router
-}
-
-// corsMiddleware adds CORS headers
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
 }
 
 // requestLoggerMiddleware logs HTTP requests

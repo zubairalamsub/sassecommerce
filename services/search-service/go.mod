@@ -5,7 +5,6 @@ go 1.24
 require (
 	github.com/ecommerce/shared/go v0.1.0
 	github.com/elastic/go-elasticsearch/v8 v8.11.1
-	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sirupsen/logrus v1.9.3

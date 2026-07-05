@@ -22,7 +22,6 @@ import (
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -79,12 +78,11 @@ func main() {
 	}))
 
 	// Configure CORS
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-Id"},
+	// CORS: origins come from CORS_ALLOWED_ORIGINS (comma-separated) in
+	// production and fall back to localhost dev origins otherwise. Wildcards
+	// are rejected in production and credentials only sent to explicit origins.
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
 		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
 	}))
 
 	// Health check endpoint

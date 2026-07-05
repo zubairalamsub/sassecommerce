@@ -79,14 +79,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Configure CORS
+// Configure CORS. Origins come from CORS_ALLOWED_ORIGINS (comma-separated);
+// outside production an empty value falls back to the localhost dev origins.
+// Never AllowAnyOrigin: combined with credentials it permits cross-origin
+// reads of authenticated responses.
+var corsOrigins = (builder.Configuration["CORS_ALLOWED_ORIGINS"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+if (corsOrigins.Length == 0)
+{
+    if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException("CORS_ALLOWED_ORIGINS is required in production");
+    }
+    corsOrigins = new[] { "http://localhost:3000", "http://localhost:3001" };
+}
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(builder =>
+    options.AddDefaultPolicy(policy =>
     {
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
+        policy.WithOrigins(corsOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 

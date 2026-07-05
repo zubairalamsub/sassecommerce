@@ -40,6 +40,12 @@ func (r *Router) Setup() *gin.Engine {
 	router.Use(metrics.Middleware("order-service"))
 	router.Use(r.requestResponseLogger())
 
+	// CORS: origins come from CORS_ALLOWED_ORIGINS (comma-separated) in
+	// production and fall back to localhost dev origins otherwise.
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
+		AllowCredentials: true,
+	}))
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{

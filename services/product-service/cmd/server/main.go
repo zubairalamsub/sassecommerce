@@ -15,6 +15,7 @@ import (
 	"github.com/ecommerce/product-service/internal/messaging"
 	"github.com/ecommerce/product-service/internal/repository"
 	"github.com/ecommerce/product-service/internal/service"
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	sharedstorage "github.com/ecommerce/shared/go/pkg/storage"
@@ -143,7 +144,7 @@ func loadConfig() *Config {
 		Port:     getEnv("PORT", "8083"),
 		MongoURI: getEnv("MONGO_URI", "mongodb://mongodb:27017"),
 		DBName:   getEnv("DB_NAME", "product_db"),
-		JWTSecret: getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		JWTSecret: sharedconfig.MustGetJWTSecret(),
 	}
 }
 

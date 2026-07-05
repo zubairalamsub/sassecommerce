@@ -3,10 +3,10 @@ package api
 import (
 	"bytes"
 	"io"
-	"os"
 	"strings"
 	"time"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
@@ -58,10 +58,7 @@ func (r *Router) Setup() *gin.Engine {
 	}))
 
 	// JWT Auth config
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production-12345"
-	}
+	jwtSecret := sharedconfig.MustGetJWTSecret()
 	authMw := sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret})
 
 	// API routes

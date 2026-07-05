@@ -109,6 +109,21 @@ func MustGetEnv(key string) string {
 	return value
 }
 
+// MustGetJWTSecret returns the JWT_SECRET environment variable, panicking at
+// startup when it is unset or shorter than 32 bytes. Services must never fall
+// back to a baked-in signing secret: a known default in any one deployment
+// makes tokens forgeable for every service that shares it.
+func MustGetJWTSecret() string {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		panic("JWT_SECRET is required but not set — refusing to start without a token signing secret")
+	}
+	if len(secret) < 32 {
+		panic("JWT_SECRET must be at least 32 bytes")
+	}
+	return secret
+}
+
 // IsProduction checks if the environment is production
 func IsProduction() bool {
 	env := strings.ToLower(GetEnv("ENVIRONMENT", "development"))

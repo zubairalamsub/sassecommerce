@@ -59,7 +59,12 @@ builder.Services.AddHostedService<OrderEventConsumer>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 
 // Configure JWT Authentication
-var jwtSecret = builder.Configuration["JWT_SECRET"] ?? "your-secret-key-change-in-production-12345";
+var jwtSecret = builder.Configuration["JWT_SECRET"]
+    ?? throw new InvalidOperationException("JWT_SECRET is required but not set - refusing to start without a token signing secret");
+if (Encoding.UTF8.GetByteCount(jwtSecret) < 32)
+{
+    throw new InvalidOperationException("JWT_SECRET must be at least 32 bytes");
+}
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {

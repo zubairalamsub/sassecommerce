@@ -16,6 +16,7 @@ import (
 	"github.com/ecommerce/vendor-service/internal/repository"
 	"github.com/ecommerce/vendor-service/internal/service"
 	"github.com/ecommerce/vendor-service/pkg/logger"
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
@@ -109,10 +110,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	// JWT Auth middleware
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production-12345"
-	}
+	jwtSecret := sharedconfig.MustGetJWTSecret()
 	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 
 	api.RegisterRoutes(router, handler)

@@ -111,7 +111,7 @@ func (suite *E2ETestSuite) TestRegister_Success() {
 		TenantID:  uuid.New().String(),
 		Email:     "e2e@example.com",
 		Username:  "e2euser",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "E2E",
 		LastName:  "User",
 	}
@@ -139,7 +139,7 @@ func (suite *E2ETestSuite) TestRegister_DuplicateEmail() {
 		TenantID:  tenantID,
 		Email:     "duplicate@example.com",
 		Username:  "user1",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "User",
 		LastName:  "One",
 	}
@@ -174,7 +174,7 @@ func (suite *E2ETestSuite) TestLogin_Success() {
 		TenantID:  tenantID,
 		Email:     "login@example.com",
 		Username:  "loginuser",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "Login",
 		LastName:  "User",
 	}
@@ -190,7 +190,7 @@ func (suite *E2ETestSuite) TestLogin_Success() {
 	loginReq := models.LoginRequest{
 		TenantID: tenantID,
 		Email:    "login@example.com",
-		Password: "password123",
+		Password: "str0ng-Test-Passw0rd",
 	}
 
 	body, _ = json.Marshal(loginReq)
@@ -231,7 +231,7 @@ func (suite *E2ETestSuite) TestGetProfile_Success() {
 	tenantID := uuid.New().String()
 
 	// Register and login
-	token := suite.registerAndLogin(tenantID, "profile@example.com", "profileuser", "password123")
+	token := suite.registerAndLogin(tenantID, "profile@example.com", "profileuser", "str0ng-Test-Passw0rd")
 
 	// Get profile
 	req, _ := http.NewRequest("GET", "/api/v1/auth/profile", nil)
@@ -258,11 +258,11 @@ func (suite *E2ETestSuite) TestGetProfile_Unauthorized() {
 
 func (suite *E2ETestSuite) TestChangePassword_Success() {
 	tenantID := uuid.New().String()
-	token := suite.registerAndLogin(tenantID, "changepw@example.com", "changepwuser", "oldpassword123")
+	token := suite.registerAndLogin(tenantID, "changepw@example.com", "changepwuser", "old-Str0ng-Passw0rd!")
 
 	changeReq := models.ChangePasswordRequest{
-		OldPassword: "oldpassword123",
-		NewPassword: "newpassword123",
+		OldPassword: "old-Str0ng-Passw0rd!",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	body, _ := json.Marshal(changeReq)
@@ -283,11 +283,11 @@ func (suite *E2ETestSuite) TestListUsers_Success() {
 	for i := 0; i < 3; i++ {
 		email := "listuser" + uuid.New().String() + "@example.com"
 		username := "listuser" + uuid.New().String()
-		suite.registerAndLogin(tenantID, email, username, "password123")
+		suite.registerAndLogin(tenantID, email, username, "str0ng-Test-Passw0rd")
 	}
 
 	// Get token for one user
-	token := suite.registerAndLogin(tenantID, "listmain@example.com", "listmain", "password123")
+	token := suite.registerAndLogin(tenantID, "listmain@example.com", "listmain", "str0ng-Test-Passw0rd")
 
 	// List users
 	req, _ := http.NewRequest("GET", "/api/v1/users?page=1&page_size=10", nil)

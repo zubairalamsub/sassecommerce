@@ -53,7 +53,7 @@ func (suite *AuthServiceTestSuite) TestRegister_Success() {
 		TenantID:  tenantID,
 		Email:     "test@example.com",
 		Username:  "testuser",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "Test",
 		LastName:  "User",
 	}
@@ -84,7 +84,7 @@ func (suite *AuthServiceTestSuite) TestRegister_EmailExists() {
 		TenantID:  tenantID,
 		Email:     "existing@example.com",
 		Username:  "testuser",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "Test",
 		LastName:  "User",
 	}
@@ -107,7 +107,7 @@ func (suite *AuthServiceTestSuite) TestRegister_UsernameExists() {
 		TenantID:  tenantID,
 		Email:     "test@example.com",
 		Username:  "existinguser",
-		Password:  "password123",
+		Password:  "str0ng-Test-Passw0rd",
 		FirstName: "Test",
 		LastName:  "User",
 	}
@@ -129,7 +129,7 @@ func (suite *AuthServiceTestSuite) TestLogin_Success() {
 	userID := uuid.New().String()
 
 	// Create password hash
-	passwordHash, _ := hashPassword("password123")
+	passwordHash, _ := hashPassword("str0ng-Test-Passw0rd")
 
 	user := &models.User{
 		ID:           userID,
@@ -146,7 +146,7 @@ func (suite *AuthServiceTestSuite) TestLogin_Success() {
 	req := &models.LoginRequest{
 		TenantID: tenantID,
 		Email:    "test@example.com",
-		Password: "password123",
+		Password: "str0ng-Test-Passw0rd",
 	}
 
 	suite.mockRepo.On("GetByEmail", ctx, tenantID, req.Email).Return(user, nil)
@@ -168,7 +168,7 @@ func (suite *AuthServiceTestSuite) TestLogin_InvalidEmail() {
 	req := &models.LoginRequest{
 		TenantID: tenantID,
 		Email:    "nonexistent@example.com",
-		Password: "password123",
+		Password: "str0ng-Test-Passw0rd",
 	}
 
 	suite.mockRepo.On("GetByEmail", ctx, tenantID, req.Email).Return(nil, errors.New("user not found"))
@@ -216,7 +216,7 @@ func (suite *AuthServiceTestSuite) TestLogin_InactiveUser() {
 	ctx := context.Background()
 	tenantID := uuid.New().String()
 
-	passwordHash, _ := hashPassword("password123")
+	passwordHash, _ := hashPassword("str0ng-Test-Passw0rd")
 
 	user := &models.User{
 		ID:           uuid.New().String(),
@@ -230,7 +230,7 @@ func (suite *AuthServiceTestSuite) TestLogin_InactiveUser() {
 	req := &models.LoginRequest{
 		TenantID: tenantID,
 		Email:    "test@example.com",
-		Password: "password123",
+		Password: "str0ng-Test-Passw0rd",
 	}
 
 	suite.mockRepo.On("GetByEmail", ctx, tenantID, req.Email).Return(user, nil)
@@ -281,7 +281,7 @@ func (suite *AuthServiceTestSuite) TestChangePassword_Success() {
 	ctx := context.Background()
 	userID := uuid.New().String()
 
-	oldPasswordHash, _ := hashPassword("oldpassword123")
+	oldPasswordHash, _ := hashPassword("old-Str0ng-Passw0rd!")
 
 	user := &models.User{
 		ID:           userID,
@@ -289,8 +289,8 @@ func (suite *AuthServiceTestSuite) TestChangePassword_Success() {
 	}
 
 	req := &models.ChangePasswordRequest{
-		OldPassword: "oldpassword123",
-		NewPassword: "newpassword123",
+		OldPassword: "old-Str0ng-Passw0rd!",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	suite.mockRepo.On("GetByID", ctx, userID).Return(user, nil)
@@ -306,7 +306,7 @@ func (suite *AuthServiceTestSuite) TestChangePassword_IncorrectOldPassword() {
 	ctx := context.Background()
 	userID := uuid.New().String()
 
-	oldPasswordHash, _ := hashPassword("oldpassword123")
+	oldPasswordHash, _ := hashPassword("old-Str0ng-Passw0rd!")
 
 	user := &models.User{
 		ID:           userID,
@@ -315,7 +315,7 @@ func (suite *AuthServiceTestSuite) TestChangePassword_IncorrectOldPassword() {
 
 	req := &models.ChangePasswordRequest{
 		OldPassword: "wrongpassword",
-		NewPassword: "newpassword123",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	suite.mockRepo.On("GetByID", ctx, userID).Return(user, nil)
@@ -527,7 +527,7 @@ func (suite *AuthServiceTestSuite) TestResetPassword_Success() {
 
 	req := &models.ResetPasswordRequest{
 		Token:       tokenStr,
-		NewPassword: "newpassword123",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	err := suite.service.ResetPassword(ctx, req)
@@ -545,7 +545,7 @@ func (suite *AuthServiceTestSuite) TestResetPassword_InvalidToken() {
 
 	req := &models.ResetPasswordRequest{
 		Token:       tokenStr,
-		NewPassword: "newpassword123",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	err := suite.service.ResetPassword(ctx, req)
@@ -570,7 +570,7 @@ func (suite *AuthServiceTestSuite) TestResetPassword_ExpiredToken() {
 
 	req := &models.ResetPasswordRequest{
 		Token:       tokenStr,
-		NewPassword: "newpassword123",
+		NewPassword: "new-Str0ng-Passw0rd!",
 	}
 
 	err := suite.service.ResetPassword(ctx, req)

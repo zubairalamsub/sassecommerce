@@ -7,7 +7,7 @@ services:
     container_name: ecommerce-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       POSTGRES_DB: postgres
     ports:
       - "5432:5432"
@@ -42,7 +42,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ecommerce-redis
-    command: redis-server --requirepass redis123
+    command: redis-server --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
     ports:
       - "6379:6379"
     volumes:
@@ -127,12 +127,12 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: tenant_db
       DB_SSLMODE: disable
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: redis123
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
       KAFKA_BROKER: kafka:29092
     depends_on:
       postgres:
@@ -158,9 +158,9 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: user_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       ENVIRONMENT: development
       LOG_LEVEL: info
       LOG_FORMAT: json
@@ -186,7 +186,7 @@ services:
       PORT: 8083
       MONGO_URI: mongodb://mongodb:27017
       DB_NAME: product_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       GIN_MODE: release
       KAFKA_BROKERS: kafka:29092
     depends_on:
@@ -212,9 +212,9 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: inventory_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKERS: kafka:29092
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
     depends_on:
@@ -240,9 +240,9 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: payment_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKERS: kafka:29092
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
       # SSLCommerz - set store credentials to enable (leave empty for simulated gateway)
@@ -274,10 +274,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: shipping_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
@@ -301,7 +301,7 @@ services:
       ENVIRONMENT: development
       MONGO_URI: mongodb://mongodb:27017
       MONGO_DB_NAME: notification_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: notification-service
     depends_on:
@@ -326,7 +326,7 @@ services:
       ENVIRONMENT: development
       MONGO_URI: mongodb://mongodb:27017
       MONGO_DB_NAME: review_db
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: review-service
     depends_on:
@@ -351,8 +351,8 @@ services:
       ENVIRONMENT: development
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: redis123
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: cart-service
     depends_on:
@@ -377,7 +377,7 @@ services:
       ENVIRONMENT: development
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_INDEX: products
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: search-service
     depends_on:
@@ -403,10 +403,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: promotion_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: promotion-service
     depends_on:
@@ -432,10 +432,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: config_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -456,10 +456,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: order_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKERS: kafka:29092
       KAFKA_ENABLED: "true"
       INVENTORY_SERVICE_URL: http://inventory-service:8084
@@ -488,10 +488,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: analytics_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: analytics-service
     depends_on:
@@ -517,10 +517,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: recommendation_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: recommendation-service
     depends_on:
@@ -546,10 +546,10 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       DB_NAME: vendor_db
       DB_SSLMODE: disable
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: vendor-service
     depends_on:
@@ -587,8 +587,8 @@ services:
     image: grafana/grafana:10.4.0
     container_name: ecommerce-grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
       - "3001:3000"
@@ -655,7 +655,7 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: ecommerce-postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
     ports:
       - "9187:9187"
     depends_on:
@@ -688,7 +688,7 @@ services:
     container_name: ecommerce-redis-exporter
     environment:
       REDIS_ADDR: "redis://redis:6379"
-      REDIS_PASSWORD: "redis123"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
     ports:
       - "9121:9121"
     depends_on:
@@ -757,7 +757,7 @@ services:
       NEXT_PUBLIC_API_BASE: http://localhost
       MEDIA_STORAGE_PATH: /app/media
       NEXT_PUBLIC_MEDIA_URL: /api/media
-      JWT_SECRET: your-secret-key-change-in-production-12345
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       TENANT_SERVICE_URL: http://tenant-service:8080
       USER_SERVICE_URL: http://user-service:8082
       PRODUCT_SERVICE_URL: http://product-service:8083

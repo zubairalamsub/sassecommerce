@@ -9,6 +9,35 @@ scans (`govulncheck`, `npm audit`, `dotnet list package --vulnerable`).
 
 ---
 
+## Remediation Update — 2026-07-06
+
+The following findings were fixed on branch `claude/current-repo-review-2x6afd`
+(one commit per finding; see git log for details):
+
+| Finding | Status | Fix |
+| ------- | ------ | --- |
+| A01-1 demo-token auth bypass (CRITICAL) | **FIXED** | Route 404s in production; claims derived from a server-side allowlist, never the request body |
+| A02-1 hardcoded JWT_SECRET (CRITICAL) | **FIXED** | All 15 services fail fast when JWT_SECRET is unset or <32 bytes; no default shipped |
+| A05-1 wildcard CORS + credentials (CRITICAL) | **FIXED** | HardenedCORS everywhere (incl. order/user/product); .NET uses WithOrigins; gin-contrib/cors dependency removed entirely (also clears GO-2024-2955) |
+| A10-1 Next.js SSRF + 12 advisories (HIGH) | **FIXED** | Upgraded 16.2.4 → 16.2.10 + postcss override; npm audit clean |
+| A02-4 credentials in request/response logs (HIGH) | **FIXED** | Shared RequestLogger redacts sensitive JSON fields at any depth; non-JSON bodies omitted |
+| A04-1 no per-endpoint auth rate limits (HIGH) | **FIXED** | Per-IP and per-email/token limits on login, register, forgot/reset-password, verify-email |
+| A01-2 / A07-1 no refresh rotation or revocation (HIGH) | **FIXED** | Refresh tokens with rotation + reuse detection; all sessions revoked on password change/reset and 2FA changes |
+| A04-3 2FA not enforced at login (MEDIUM) | **FIXED** | Login returns a challenge for enrolled users; /auth/login/2fa completes it; enrollment endpoints wired |
+| A03-1 MongoDB regex injection (HIGH) | **FIXED** | regexp.QuoteMeta on the search query |
+| B01 unauthenticated /api/upload + traversal (HIGH) | **FIXED** | Staff JWT required; folder whitelist; MIME-derived extensions; SVG rejected |
+| B02 scriptable SVG from /api/media (MEDIUM) | **FIXED** | SVG no longer served as image/svg+xml; nosniff + attachment for unknown types |
+| A02-3 2FA secrets unencrypted fallback (HIGH) | **PARTIAL** | user-service now fatals in production without TWO_FACTOR_ENCRYPTION_KEY and warns in dev |
+| A07-2 no login brute-force protection (MEDIUM) | **FIXED** (prior work + this branch) | Lockout windows per email/IP plus the new per-endpoint limits |
+
+Still open: A01-3 (tenant-scope middleware), A02-2 (bcrypt cost), A02-5/A05-3
+(security headers everywhere), A04-2 (compose default DB passwords), A04-4
+(password min length), A05-4 (/metrics auth), A08-1/2/3 (event signing, image
+signing, CI), A09-1 (security alerts), B03 (JWT in localStorage), B04 (verbose
+validator errors), Go toolchain + pgx bump, .NET package upgrades.
+
+---
+
 ## Executive Summary
 
 The platform has a **solid security foundation** — bcrypt password hashing, TOTP

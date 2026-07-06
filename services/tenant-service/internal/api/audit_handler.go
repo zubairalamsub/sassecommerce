@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/tenant-service/internal/repository"
 	"github.com/ecommerce/tenant-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,22 @@ import (
 type AuditHandler struct {
 	service service.AuditService
 	logger  *logrus.Logger
+}
+
+// auditScopeTenant returns the tenant whose logs the caller may read. It is
+// always the JWT tenant, except a super_admin may target a specific tenant
+// via ?tenant_id (and an empty override means "all tenants" for them).
+func auditScopeTenant(c *gin.Context) string {
+	if sharedmiddleware.GetUserRole(c) == "super_admin" {
+		if override := c.Query("tenant_id"); override != "" {
+			return override
+		}
+		if override := c.GetHeader("X-Tenant-Id"); override != "" {
+			return override
+		}
+		return "" // super_admin, unscoped: all tenants
+	}
+	return sharedmiddleware.GetTenantID(c)
 }
 
 func NewAuditHandler(service service.AuditService, logger *logrus.Logger) *AuditHandler {
@@ -39,11 +56,9 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 		return
 	}
 
-	// Enforce tenant isolation — only return logs belonging to the requesting tenant
-	tenantID := c.Query("tenant_id")
-	if tenantID == "" {
-		tenantID = c.GetHeader("X-Tenant-Id")
-	}
+	// Enforce tenant isolation — the tenant comes from the JWT, not client
+	// input. A super_admin may inspect a specific tenant via ?tenant_id.
+	tenantID := auditScopeTenant(c)
 
 	log, err := h.service.GetAuditLog(c.Request.Context(), id, tenantID)
 	if err != nil {
@@ -74,13 +89,10 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /audit-logs [get]
 func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
-	if tenantID == "" {
-		// Also check header
-		tenantID = c.GetHeader("X-Tenant-Id")
-	}
-	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id is required"})
+	tenantID := auditScopeTenant(c)
+	// A non-super_admin with no tenant in their JWT cannot be scoped safely.
+	if tenantID == "" && sharedmiddleware.GetUserRole(c) != "super_admin" {
+		c.JSON(http.StatusForbidden, ErrorResponse{Error: "tenant context required"})
 		return
 	}
 
@@ -114,10 +126,10 @@ func (h *AuditHandler) ListAuditLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":       logs,
-		"total":      total,
-		"page":       page,
-		"page_size":  pageSize,
+		"data":        logs,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
 		"total_pages": (total + int64(pageSize) - 1) / int64(pageSize),
 	})
 }

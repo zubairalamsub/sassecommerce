@@ -20,6 +20,7 @@ import (
 	"github.com/ecommerce/tenant-service/pkg/kafka"
 	"github.com/ecommerce/tenant-service/pkg/logger"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
@@ -110,10 +111,16 @@ func main() {
 	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
 	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
 
-	// API v1 routes
+	// All /api/v1 routes require a valid JWT. This is the platform control
+	// plane, so it must never be reachable anonymously.
+	jwtSecret := sharedconfig.MustGetJWTSecret()
 	v1 := router.Group("/api/v1")
+	v1.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 	{
+		// Tenant lifecycle is a platform-operator (super_admin) concern:
+		// managing the set of tenants is inherently cross-tenant.
 		tenants := v1.Group("/tenants")
+		tenants.Use(sharedmiddleware.RequireRole("super_admin"))
 		{
 			tenants.POST("", tenantHandler.CreateTenant)
 			tenants.GET("", tenantHandler.ListTenants)
@@ -125,12 +132,18 @@ func main() {
 			tenants.DELETE("/:id", tenantHandler.DeleteTenant)
 		}
 
-		// Audit logs
-		v1.GET("/audit-logs", auditHandler.ListAuditLogs)
-		v1.GET("/audit-logs/:id", auditHandler.GetAuditLog)
+		// Audit logs: a tenant admin sees only their own tenant's logs
+		// (handler derives the tenant from the JWT); a super_admin may scope
+		// to any tenant. Requires at least admin.
+		auditLogs := v1.Group("/audit-logs")
+		auditLogs.Use(sharedmiddleware.RequireRole("admin", "super_admin"))
+		{
+			auditLogs.GET("", auditHandler.ListAuditLogs)
+			auditLogs.GET("/:id", auditHandler.GetAuditLog)
+		}
 
-		// Admin-only reports (super-admin layout gates this on the frontend).
-		v1.GET("/admin/usage", usageHandler.GetUsage)
+		// Cross-tenant usage report — super_admin only.
+		v1.GET("/admin/usage", sharedmiddleware.RequireRole("super_admin"), usageHandler.GetUsage)
 	}
 
 	// Create HTTP server

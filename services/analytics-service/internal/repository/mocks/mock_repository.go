@@ -61,8 +61,8 @@ func (m *MockAnalyticsRepository) CreateReport(ctx context.Context, report *mode
 	return args.Error(0)
 }
 
-func (m *MockAnalyticsRepository) GetReport(ctx context.Context, id string) (*models.CustomReport, error) {
-	args := m.Called(ctx, id)
+func (m *MockAnalyticsRepository) GetReport(ctx context.Context, id, tenantID string) (*models.CustomReport, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

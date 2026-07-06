@@ -21,7 +21,7 @@ type AnalyticsService interface {
 
 	// Custom reports
 	CreateReport(ctx context.Context, req *models.CreateReportRequest) (*models.CustomReportResponse, error)
-	GetReport(ctx context.Context, id string) (*models.CustomReportResponse, error)
+	GetReport(ctx context.Context, id, tenantID string) (*models.CustomReportResponse, error)
 	ListReports(ctx context.Context, tenantID string, page, pageSize int) ([]models.CustomReportResponse, int64, error)
 
 	// Event ingestion (from Kafka)
@@ -171,8 +171,8 @@ func (s *analyticsService) generateReport(ctx context.Context, report *models.Cu
 	s.repo.UpdateReport(ctx, report)
 }
 
-func (s *analyticsService) GetReport(ctx context.Context, id string) (*models.CustomReportResponse, error) {
-	report, err := s.repo.GetReport(ctx, id)
+func (s *analyticsService) GetReport(ctx context.Context, id, tenantID string) (*models.CustomReportResponse, error) {
+	report, err := s.repo.GetReport(ctx, id, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("report not found")
 	}

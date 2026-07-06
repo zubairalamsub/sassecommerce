@@ -41,36 +41,36 @@ type ProductEvent struct {
 }
 
 type CustomReport struct {
-	ID          string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	TenantID    string    `json:"tenant_id" gorm:"type:varchar(36);index"`
-	Name        string    `json:"name" gorm:"type:varchar(200)"`
-	ReportType  string    `json:"report_type" gorm:"type:varchar(50)"`
-	DateFrom    time.Time `json:"date_from"`
-	DateTo      time.Time `json:"date_to"`
-	Filters     string    `json:"filters" gorm:"type:text"`
-	ResultData  string    `json:"result_data" gorm:"type:text"`
-	Status      string    `json:"status" gorm:"type:varchar(20);default:'pending'"`
-	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+	ID          string     `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	TenantID    string     `json:"tenant_id" gorm:"type:varchar(36);index"`
+	Name        string     `json:"name" gorm:"type:varchar(200)"`
+	ReportType  string     `json:"report_type" gorm:"type:varchar(50)"`
+	DateFrom    time.Time  `json:"date_from"`
+	DateTo      time.Time  `json:"date_to"`
+	Filters     string     `json:"filters" gorm:"type:text"`
+	ResultData  string     `json:"result_data" gorm:"type:text"`
+	Status      string     `json:"status" gorm:"type:varchar(20);default:'pending'"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	CompletedAt *time.Time `json:"completed_at"`
 }
 
 // === Response DTOs ===
 
 type SalesReportResponse struct {
-	TenantID       string              `json:"tenant_id"`
-	Period         string              `json:"period"`
-	TotalRevenue   float64             `json:"total_revenue"`
-	TotalOrders    int64               `json:"total_orders"`
-	AverageOrder   float64             `json:"average_order_value"`
-	TopProducts    []ProductSalesSummary `json:"top_products,omitempty"`
-	DailySales     []DailySales        `json:"daily_sales,omitempty"`
-	RevenueByChannel map[string]float64 `json:"revenue_by_channel,omitempty"`
+	TenantID         string                `json:"tenant_id"`
+	Period           string                `json:"period"`
+	TotalRevenue     float64               `json:"total_revenue"`
+	TotalOrders      int64                 `json:"total_orders"`
+	AverageOrder     float64               `json:"average_order_value"`
+	TopProducts      []ProductSalesSummary `json:"top_products,omitempty"`
+	DailySales       []DailySales          `json:"daily_sales,omitempty"`
+	RevenueByChannel map[string]float64    `json:"revenue_by_channel,omitempty"`
 }
 
 type DailySales struct {
-	Date     string  `json:"date"`
-	Revenue  float64 `json:"revenue"`
-	Orders   int64   `json:"orders"`
+	Date    string  `json:"date"`
+	Revenue float64 `json:"revenue"`
+	Orders  int64   `json:"orders"`
 }
 
 type ProductSalesSummary struct {
@@ -80,13 +80,13 @@ type ProductSalesSummary struct {
 }
 
 type CustomerInsightsResponse struct {
-	TenantID          string             `json:"tenant_id"`
-	TotalCustomers    int64              `json:"total_customers"`
-	NewCustomers      int64              `json:"new_customers"`
+	TenantID           string            `json:"tenant_id"`
+	TotalCustomers     int64             `json:"total_customers"`
+	NewCustomers       int64             `json:"new_customers"`
 	ReturningCustomers int64             `json:"returning_customers"`
-	AverageOrderValue float64            `json:"average_order_value"`
-	TopCustomers      []CustomerSummary  `json:"top_customers,omitempty"`
-	CustomerSegments  []CustomerSegment  `json:"customer_segments,omitempty"`
+	AverageOrderValue  float64           `json:"average_order_value"`
+	TopCustomers       []CustomerSummary `json:"top_customers,omitempty"`
+	CustomerSegments   []CustomerSegment `json:"customer_segments,omitempty"`
 }
 
 type CustomerSummary struct {
@@ -96,16 +96,16 @@ type CustomerSummary struct {
 }
 
 type CustomerSegment struct {
-	Segment   string `json:"segment"`
-	Count     int64  `json:"count"`
+	Segment    string  `json:"segment"`
+	Count      int64   `json:"count"`
 	Percentage float64 `json:"percentage"`
 }
 
 type ProductPerformanceResponse struct {
-	TenantID      string                  `json:"tenant_id"`
-	TotalProducts int64                   `json:"total_products"`
-	TopSelling    []ProductPerformance    `json:"top_selling"`
-	LowPerforming []ProductPerformance    `json:"low_performing,omitempty"`
+	TenantID          string                `json:"tenant_id"`
+	TotalProducts     int64                 `json:"total_products"`
+	TopSelling        []ProductPerformance  `json:"top_selling"`
+	LowPerforming     []ProductPerformance  `json:"low_performing,omitempty"`
 	CategoryBreakdown []CategoryPerformance `json:"category_breakdown,omitempty"`
 }
 
@@ -145,7 +145,7 @@ type ProductPerformanceRequest struct {
 }
 
 type CreateReportRequest struct {
-	TenantID   string            `json:"tenant_id" binding:"required"`
+	TenantID   string            `json:"-"`
 	Name       string            `json:"name" binding:"required"`
 	ReportType string            `json:"report_type" binding:"required"`
 	DateFrom   string            `json:"date_from" binding:"required"`
@@ -173,9 +173,9 @@ type EventEnvelope struct {
 	EventID   string          `json:"event_id"`
 	EventType string          `json:"event_type"`
 	Timestamp time.Time       `json:"timestamp"`
-	Source    string           `json:"source"`
-	Payload  json.RawMessage  `json:"payload,omitempty"`
-	Data     json.RawMessage  `json:"data,omitempty"`
+	Source    string          `json:"source"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
 }
 
 func (e *EventEnvelope) GetPayload() map[string]interface{} {

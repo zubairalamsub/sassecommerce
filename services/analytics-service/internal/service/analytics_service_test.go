@@ -108,11 +108,11 @@ func TestGetCustomerInsights_Success(t *testing.T) {
 	ctx := context.Background()
 
 	insights := &models.CustomerInsightsResponse{
-		TenantID:          "tenant-1",
-		TotalCustomers:    500,
-		NewCustomers:      50,
+		TenantID:           "tenant-1",
+		TotalCustomers:     500,
+		NewCustomers:       50,
 		ReturningCustomers: 450,
-		AverageOrderValue: 75.5,
+		AverageOrderValue:  75.5,
 	}
 	mockRepo.On("GetCustomerInsights", ctx, "tenant-1", mock.Anything, mock.Anything).Return(insights, nil)
 
@@ -416,9 +416,9 @@ func TestGetReport_Success(t *testing.T) {
 		ResultData:  `{"total_revenue":5000}`,
 		CompletedAt: &now,
 	}
-	mockRepo.On("GetReport", ctx, "report-1").Return(report, nil)
+	mockRepo.On("GetReport", ctx, "report-1", "tenant-1").Return(report, nil)
 
-	result, err := svc.GetReport(ctx, "report-1")
+	result, err := svc.GetReport(ctx, "report-1", "tenant-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Monthly Sales", result.Name)
@@ -430,9 +430,9 @@ func TestGetReport_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetReport", ctx, "bad").Return(nil, errors.New("record not found"))
+	mockRepo.On("GetReport", ctx, "bad", "tenant-1").Return(nil, errors.New("record not found"))
 
-	result, err := svc.GetReport(ctx, "bad")
+	result, err := svc.GetReport(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

@@ -16,9 +16,13 @@ import (
 	"github.com/ecommerce/notification-service/internal/repository"
 	"github.com/ecommerce/notification-service/internal/service"
 	"github.com/ecommerce/notification-service/internal/templates"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // EventConsumer consumes events from Kafka and triggers notifications
 type EventConsumer struct {
@@ -103,7 +107,14 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 				continue
 			}
 
-			if err := c.processMessage(ctx, msg); err != nil {
+			// Reject events that fail HMAC verification (spoofed/tampered);
+			// still committed below so the poison message is not redelivered.
+			if err := eventSigner.Verify(msg); err != nil {
+				c.logger.WithError(err).WithFields(logrus.Fields{
+					"topic":  topic,
+					"offset": msg.Offset,
+				}).Warn("Dropping Kafka message that failed signature verification")
+			} else if err := c.processMessage(ctx, msg); err != nil {
 				c.logger.WithError(err).WithFields(logrus.Fields{
 					"topic":  topic,
 					"offset": msg.Offset,

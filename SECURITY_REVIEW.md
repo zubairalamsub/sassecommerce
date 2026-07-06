@@ -45,11 +45,20 @@ Second remediation pass on branch `claude/remaining-tasks-x3aeu2`
 | A06 Go pgx + stdlib advisories | **FIXED** | pgx v5.5.1 → v5.10.0 in all 8 services pinning it; builder image golang:1.24-alpine → 1.25-alpine. gin-contrib/cors already removed in pass 1 |
 | A06 .NET vulnerable packages | **FIXED** | AutoMapper 13.0.1, Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5 (not compile-verified — no dotnet SDK in the fix environment) |
 
-Still open: A02-3 remains PARTIAL (secrets stored before the encryption key
-existed are still plaintext — needs a re-encryption migration), A08-1/2/3
-(event signing, image signing, CI), A09-1 (security alerts), B03 (JWT in
-localStorage), plus the audit follow-ups (tenant-isolation cross-check,
-git-history secrets scan, CI/CD review).
+Third remediation pass on the same branch (one commit per finding):
+
+| Finding | Status | Fix |
+| ------- | ------ | --- |
+| A02-3 legacy plaintext 2FA secrets (HIGH, was PARTIAL) | **FIXED** | Idempotent startup migration in user-service re-encrypts pre-key rows (identified by failed GCM open) under the current key |
+| A08-1 no Kafka event signing (MEDIUM) | **FIXED** | Shared EventSigner (HMAC-SHA256, x-event-signature header) keyed by EVENT_SIGNING_KEY; all Go + .NET producers sign, all consumers drop unsigned/tampered events (committed as poison so not redelivered); disabled when key unset for producer-first rollout |
+| A09-1 no security alerts (MEDIUM) | **FIXED** | 'security' Prometheus alert group: failed-login spikes, per-service 401/403 spikes, forgot-password surges, 429 spikes, registration surges |
+| Git-history secrets scan (follow-up) | **PASS** | All 40 commits scanned for AWS keys, private keys, GitHub/Slack/Stripe/Google tokens, JWTs, and generic credential assignments — only demo seeds, doc placeholders, and test fixtures found |
+
+| A08-2 no container image signing (MEDIUM) | **FIXED** | deploy.yml cosign-signs every pushed image by digest (keyless/OIDC, Rekor-logged); cluster-side verifyImages policy still recommended |
+
+Still open: A08-3 (broader CI integrity review — e.g. pinning actions by
+SHA), B03 (JWT in localStorage — needs a Next.js BFF/HttpOnly-cookie
+refactor), and the tenant-isolation cross-check follow-up.
 
 ---
 

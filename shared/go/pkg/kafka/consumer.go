@@ -38,6 +38,7 @@ func DefaultConsumerConfig(brokers []string, topic, groupID string) ConsumerConf
 type Consumer struct {
 	reader *kafka.Reader
 	logger *logrus.Logger
+	signer *EventSigner
 }
 
 // MessageHandler is a function that processes a Kafka message
@@ -58,6 +59,7 @@ func NewConsumer(config ConsumerConfig, logger *logrus.Logger) *Consumer {
 	return &Consumer{
 		reader: reader,
 		logger: logger,
+		signer: NewEventSignerFromEnv(),
 	}
 }
 
@@ -83,6 +85,15 @@ func (c *Consumer) Consume(ctx context.Context, handler MessageHandler) error {
 				"offset":    msg.Offset,
 				"key":       string(msg.Key),
 			}).Info("Received message")
+
+			// Reject events that fail HMAC verification (spoofed/tampered)
+			if err := c.signer.Verify(msg); err != nil {
+				c.logger.WithError(err).WithFields(logrus.Fields{
+					"topic":  msg.Topic,
+					"offset": msg.Offset,
+				}).Warn("Dropping Kafka message that failed signature verification")
+				continue
+			}
 
 			// Handle message
 			if err := handler(ctx, msg); err != nil {

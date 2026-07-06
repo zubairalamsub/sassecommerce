@@ -6,9 +6,13 @@ import (
 
 	"github.com/ecommerce/cart-service/internal/models"
 	"github.com/ecommerce/cart-service/internal/service"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 type EventConsumer struct {
 	readers     []*kafka.Reader
@@ -58,6 +62,12 @@ func (c *EventConsumer) consume(ctx context.Context, reader *kafka.Reader) {
 				return
 			}
 			c.logger.WithError(err).Error("Failed to read Kafka message")
+			continue
+		}
+
+		// Reject events that fail HMAC verification (spoofed/tampered)
+		if err := eventSigner.Verify(msg); err != nil {
+			c.logger.WithError(err).WithField("topic", msg.Topic).Warn("Dropping Kafka message that failed signature verification")
 			continue
 		}
 

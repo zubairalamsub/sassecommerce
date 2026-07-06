@@ -51,3 +51,8 @@ func (m *MockTwoFactorRepository) ListUnusedBackupCodes(ctx context.Context, use
 func (m *MockTwoFactorRepository) MarkBackupCodeUsed(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }
+
+func (m *MockTwoFactorRepository) MigrateLegacyPlaintextSecrets(ctx context.Context) (int, error) {
+	args := m.Called(ctx)
+	return args.Int(0), args.Error(1)
+}

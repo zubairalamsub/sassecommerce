@@ -9,10 +9,14 @@ import (
 
 	"github.com/ecommerce/review-service/internal/models"
 	"github.com/ecommerce/review-service/internal/repository"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 type ReviewService interface {
 	CreateReview(ctx context.Context, req *models.CreateReviewRequest) (*models.ReviewResponse, error)
@@ -264,6 +268,7 @@ func (s *reviewService) publishEvent(ctx context.Context, eventType string, revi
 		Key:   []byte(review.ID),
 		Value: data,
 	}
+	eventSigner.Sign(&msg)
 
 	if err := s.writer.WriteMessages(ctx, msg); err != nil {
 		s.logger.WithError(err).Warn("Failed to publish review event")

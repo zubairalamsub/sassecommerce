@@ -73,6 +73,14 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to initialize 2FA repository")
 	}
+	// Re-encrypt any 2FA secrets that were stored as base64 plaintext before
+	// the encryption key existed. Non-fatal: a failure leaves those users on
+	// their legacy rows (they can re-enroll) but must not block startup.
+	if migrated, err := twoFactorRepo.MigrateLegacyPlaintextSecrets(context.Background()); err != nil {
+		log.WithError(err).Error("Failed to re-encrypt legacy 2FA secrets")
+	} else if migrated > 0 {
+		log.WithField("rows", migrated).Info("Re-encrypted legacy plaintext 2FA secrets")
+	}
 
 	// Initialize services
 	tokenConfig := models.TokenConfig{

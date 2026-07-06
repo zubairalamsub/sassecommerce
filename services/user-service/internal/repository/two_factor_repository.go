@@ -26,6 +26,11 @@ type TwoFactorRepository interface {
 	DeleteBackupCodes(ctx context.Context, userID string) error
 	ListUnusedBackupCodes(ctx context.Context, userID string) ([]models.TwoFactorBackupCode, error)
 	MarkBackupCodeUsed(ctx context.Context, id string) error
+
+	// MigrateLegacyPlaintextSecrets re-encrypts rows written before an
+	// encryption key was configured (base64-encoded plaintext) using the
+	// current key. Returns the number of rows migrated. No-op without a key.
+	MigrateLegacyPlaintextSecrets(ctx context.Context) (int, error)
 }
 
 type twoFactorRepository struct {
@@ -94,6 +99,72 @@ func (r *twoFactorRepository) decrypt(stored string) (string, error) {
 		return "", err
 	}
 	return string(plaintext), nil
+}
+
+// reencryptLegacy returns the re-encrypted form of a stored value that
+// predates the encryption key, or ("", false) when the value is empty or
+// already GCM ciphertext. Legacy rows are base64(plaintext); GCM-opening
+// them fails, which is what identifies them (a forged 16-byte tag passing
+// authentication is cryptographically negligible). Note this assumes the
+// key was never rotated: values sealed under a previous key also fail to
+// open and would be wrapped as-is — recoverable, but those users must
+// re-enroll. Key rotation needs a dedicated migration with both keys.
+func (r *twoFactorRepository) reencryptLegacy(stored string) (string, bool, error) {
+	if stored == "" {
+		return "", false, nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(stored)
+	if err != nil {
+		return "", false, err
+	}
+	if ns := r.gcm.NonceSize(); len(raw) >= ns {
+		if _, err := r.gcm.Open(nil, raw[:ns], raw[ns:], nil); err == nil {
+			return "", false, nil // already encrypted with the current key
+		}
+	}
+	enc, err := r.encrypt(string(raw))
+	if err != nil {
+		return "", false, err
+	}
+	return enc, true, nil
+}
+
+func (r *twoFactorRepository) MigrateLegacyPlaintextSecrets(ctx context.Context) (int, error) {
+	if r.noEnc {
+		return 0, nil
+	}
+
+	migrated := 0
+	var rows []models.TwoFactorSecret
+	err := r.db.WithContext(ctx).FindInBatches(&rows, 100, func(tx *gorm.DB, _ int) error {
+		for i := range rows {
+			updates := map[string]interface{}{}
+
+			if enc, legacy, err := r.reencryptLegacy(rows[i].Secret); err != nil {
+				return err
+			} else if legacy {
+				updates["secret"] = enc
+			}
+			if enc, legacy, err := r.reencryptLegacy(rows[i].Pending); err != nil {
+				return err
+			} else if legacy {
+				updates["pending"] = enc
+			}
+
+			if len(updates) == 0 {
+				continue
+			}
+			if err := tx.Model(&models.TwoFactorSecret{}).
+				Where("id = ?", rows[i].ID).
+				Updates(updates).Error; err != nil {
+				return err
+			}
+			migrated++
+		}
+		return nil
+	}).Error
+
+	return migrated, err
 }
 
 func (r *twoFactorRepository) GetByUserID(ctx context.Context, userID string) (*models.TwoFactorSecret, error) {

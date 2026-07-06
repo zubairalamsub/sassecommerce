@@ -9,10 +9,14 @@ import (
 
 	"github.com/ecommerce/promotion-service/internal/models"
 	"github.com/ecommerce/promotion-service/internal/repository"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // PromotionService defines the interface for promotion business logic
 type PromotionService interface {
@@ -84,10 +88,10 @@ func (s *promotionService) CreatePromotion(ctx context.Context, req *models.Crea
 	}
 
 	s.publishEvent("PromotionCreated", promotion.TenantID, map[string]interface{}{
-		"promotion_id":  promotion.ID,
-		"tenant_id":     promotion.TenantID,
-		"name":          promotion.Name,
-		"discount_type": promotion.DiscountType,
+		"promotion_id":   promotion.ID,
+		"tenant_id":      promotion.TenantID,
+		"name":           promotion.Name,
+		"discount_type":  promotion.DiscountType,
 		"discount_value": promotion.DiscountValue,
 	})
 
@@ -462,11 +466,13 @@ func (s *promotionService) publishEvent(eventType, tenantID string, payload inte
 		return
 	}
 
-	err = s.writer.WriteMessages(context.Background(), kafka.Message{
+	msg := kafka.Message{
 		Topic: "promotion-events",
 		Key:   []byte(tenantID),
 		Value: data,
-	})
+	}
+	eventSigner.Sign(&msg)
+	err = s.writer.WriteMessages(context.Background(), msg)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to publish promotion event")
 	}

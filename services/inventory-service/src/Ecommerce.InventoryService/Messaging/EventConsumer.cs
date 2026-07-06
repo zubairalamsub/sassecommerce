@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Ecommerce.InventoryService.DTOs;
@@ -12,6 +14,11 @@ public class OrderEventConsumer : BackgroundService
     private readonly IConsumer<string, string> _consumer;
     private const string Topic = "order-events";
     private const string GroupId = "inventory-service";
+    private readonly byte[]? _signingKey;
+    // Mirrors the shared Go EventSigner: HMAC-SHA256 of the message value,
+    // lowercase hex, in this header. Verification is skipped when
+    // EVENT_SIGNING_KEY is unset.
+    private const string SignatureHeader = "x-event-signature";
 
     public OrderEventConsumer(IConfiguration configuration, IServiceScopeFactory scopeFactory, ILogger<OrderEventConsumer> logger)
     {
@@ -19,6 +26,8 @@ public class OrderEventConsumer : BackgroundService
         _logger = logger;
 
         var brokers = configuration["KAFKA_BROKERS"] ?? "kafka:9092";
+        var signingKey = configuration["EVENT_SIGNING_KEY"];
+        _signingKey = string.IsNullOrEmpty(signingKey) ? null : Encoding.UTF8.GetBytes(signingKey);
         var config = new ConsumerConfig
         {
             BootstrapServers = brokers,
@@ -50,6 +59,13 @@ public class OrderEventConsumer : BackgroundService
                     var result = _consumer.Consume(stoppingToken);
                     if (result?.Message?.Value == null) continue;
 
+                    // Reject events that fail HMAC verification (spoofed/tampered)
+                    if (!VerifySignature(result.Message))
+                    {
+                        _logger.LogWarning("Dropping Kafka message that failed signature verification (topic {Topic}, offset {Offset})", Topic, result.Offset);
+                        continue;
+                    }
+
                     ProcessMessage(result.Message.Value, stoppingToken).GetAwaiter().GetResult();
                 }
                 catch (ConsumeException ex)
@@ -66,6 +82,23 @@ public class OrderEventConsumer : BackgroundService
         {
             _consumer.Close();
         }
+    }
+
+    private bool VerifySignature(Message<string, string> message)
+    {
+        if (_signingKey is null) return true;
+        if (message.Headers is null || !message.Headers.TryGetLastBytes(SignatureHeader, out var signatureHex)) return false;
+        byte[] actual;
+        try
+        {
+            actual = Convert.FromHexString(Encoding.UTF8.GetString(signatureHex));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+        var expected = HMACSHA256.HashData(_signingKey, Encoding.UTF8.GetBytes(message.Value));
+        return CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 
     private async Task ProcessMessage(string messageValue, CancellationToken cancellationToken)

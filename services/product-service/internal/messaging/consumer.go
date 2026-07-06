@@ -73,6 +73,12 @@ func (c *EventConsumer) consume(ctx context.Context) {
 			continue
 		}
 
+		// Reject events that fail HMAC verification (spoofed/tampered)
+		if err := eventSigner.Verify(msg); err != nil {
+			c.logger.WithError(err).WithField("topic", msg.Topic).Warn("Dropping Kafka message that failed signature verification")
+			continue
+		}
+
 		c.handleMessage(ctx, msg)
 	}
 }

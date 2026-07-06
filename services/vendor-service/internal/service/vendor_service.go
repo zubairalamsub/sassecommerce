@@ -7,12 +7,16 @@ import (
 	"strings"
 	"time"
 
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/ecommerce/vendor-service/internal/models"
 	"github.com/ecommerce/vendor-service/internal/repository"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // VendorService defines the interface for vendor business logic
 type VendorService interface {
@@ -325,11 +329,13 @@ func (s *vendorService) publishEvent(eventType, tenantID string, payload interfa
 		return
 	}
 
-	err = s.writer.WriteMessages(context.Background(), kafka.Message{
+	msg := kafka.Message{
 		Topic: "vendor-events",
 		Key:   []byte(tenantID),
 		Value: data,
-	})
+	}
+	eventSigner.Sign(&msg)
+	err = s.writer.WriteMessages(context.Background(), msg)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to publish vendor event")
 	}

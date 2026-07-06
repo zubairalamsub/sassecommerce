@@ -1,4 +1,6 @@
 using Confluent.Kafka;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Ecommerce.InventoryService.Messaging;
@@ -12,11 +14,18 @@ public class KafkaEventPublisher : IEventPublisher, IDisposable
 {
     private readonly IProducer<string, string> _producer;
     private readonly ILogger<KafkaEventPublisher> _logger;
+    private readonly byte[]? _signingKey;
     private const string Topic = "inventory-events";
+    // Mirrors the shared Go EventSigner: HMAC-SHA256 of the message value,
+    // lowercase hex, in this header. Signing is skipped when
+    // EVENT_SIGNING_KEY is unset.
+    private const string SignatureHeader = "x-event-signature";
 
     public KafkaEventPublisher(IConfiguration configuration, ILogger<KafkaEventPublisher> logger)
     {
         var brokers = configuration["KAFKA_BROKERS"] ?? "kafka:9092";
+        var signingKey = configuration["EVENT_SIGNING_KEY"];
+        _signingKey = string.IsNullOrEmpty(signingKey) ? null : Encoding.UTF8.GetBytes(signingKey);
 
         var config = new ProducerConfig
         {
@@ -48,6 +57,15 @@ public class KafkaEventPublisher : IEventPublisher, IDisposable
         {
             var json = JsonSerializer.Serialize(envelope);
             var message = new Message<string, string> { Key = eventId, Value = json };
+            if (_signingKey is not null)
+            {
+                var signature = Convert.ToHexString(
+                    HMACSHA256.HashData(_signingKey, Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
+                message.Headers = new Headers
+                {
+                    { SignatureHeader, Encoding.UTF8.GetBytes(signature) }
+                };
+            }
 
             await _producer.ProduceAsync(Topic, message, cancellationToken);
 

@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"strings"
 
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/ecommerce/tenant-service/internal/models"
 	"github.com/ecommerce/tenant-service/internal/service"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // ServiceEvent is the common envelope used by all services when publishing Kafka events.
 // Version can be a string ("1.0.0") or a number (1) depending on the service.
@@ -77,21 +81,21 @@ func eventTypeToAction(eventType string) models.AuditAction {
 // can filter by prefix (e.g. "user.login.*" → all login activity).
 var securityEventActions = map[string]string{
 	// user-service auth events
-	"LoginSucceeded":            "user.login.succeeded",
-	"LoginFailed":               "user.login.failed",
-	"PasswordChanged":           "user.password.changed",
-	"PasswordReset":             "user.password.reset",
-	"PasswordResetRequested":    "user.password.reset_requested",
+	"LoginSucceeded":             "user.login.succeeded",
+	"LoginFailed":                "user.login.failed",
+	"PasswordChanged":            "user.password.changed",
+	"PasswordReset":              "user.password.reset",
+	"PasswordResetRequested":     "user.password.reset_requested",
 	"EmailVerificationRequested": "user.email.verification_requested",
-	"EmailVerified":             "user.email.verified",
-	"TwoFactorEnabled":          "user.2fa.enabled",
-	"TwoFactorDisabled":         "user.2fa.disabled",
-	"UserRoleChanged":           "user.role.changed",
-	"UserSuspended":             "user.suspended.changed",
-	"UserReactivated":           "user.reactivated.changed",
-	"UserStatusChanged":         "user.status.changed",
-	"SessionRevoked":            "user.session.revoked",
-	"AllSessionsRevoked":        "user.session.revoked_all",
+	"EmailVerified":              "user.email.verified",
+	"TwoFactorEnabled":           "user.2fa.enabled",
+	"TwoFactorDisabled":          "user.2fa.disabled",
+	"UserRoleChanged":            "user.role.changed",
+	"UserSuspended":              "user.suspended.changed",
+	"UserReactivated":            "user.reactivated.changed",
+	"UserStatusChanged":          "user.status.changed",
+	"SessionRevoked":             "user.session.revoked",
+	"AllSessionsRevoked":         "user.session.revoked_all",
 	// tenant-service events
 	"TenantSuspended":     "tenant.suspended.changed",
 	"TenantReactivated":   "tenant.reactivated.changed",
@@ -161,7 +165,13 @@ func (c *AuditEventConsumer) consume(ctx context.Context, reader *kafka.Reader) 
 			continue
 		}
 
-		c.handleMessage(ctx, topic, msg)
+		// Reject events that fail HMAC verification (spoofed/tampered);
+		// still committed below so the poison message is not redelivered.
+		if err := eventSigner.Verify(msg); err != nil {
+			c.logger.WithError(err).WithField("topic", topic).Warn("Dropping Kafka message that failed signature verification")
+		} else {
+			c.handleMessage(ctx, topic, msg)
+		}
 
 		if err := reader.CommitMessages(ctx, msg); err != nil {
 			c.logger.WithError(err).WithField("topic", topic).Warn("Failed to commit Kafka message")

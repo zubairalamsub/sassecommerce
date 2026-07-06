@@ -8,10 +8,14 @@ import (
 
 	"github.com/ecommerce/cart-service/internal/models"
 	"github.com/ecommerce/cart-service/internal/repository"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // CartService defines the interface for cart business logic
 type CartService interface {
@@ -275,11 +279,13 @@ func (s *cartService) publishCartUpdated(cart *models.Cart) {
 		return
 	}
 
-	err = s.writer.WriteMessages(context.Background(), kafka.Message{
+	msg := kafka.Message{
 		Topic: "cart-events",
 		Key:   []byte(fmt.Sprintf("%s:%s", cart.TenantID, cart.UserID)),
 		Value: data,
-	})
+	}
+	eventSigner.Sign(&msg)
+	err = s.writer.WriteMessages(context.Background(), msg)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to publish cart event")
 	}

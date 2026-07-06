@@ -100,7 +100,16 @@ func (c *ExternalEventConsumer) consumeLoop(ctx context.Context, reader *kafka.R
 				continue
 			}
 
-			c.handleMessage(ctx, topic, message)
+			// Reject events that fail HMAC verification (spoofed/tampered);
+			// still committed below so the poison message is not redelivered.
+			if err := eventSigner.Verify(message); err != nil {
+				c.logger.Warn("Dropping Kafka message that failed signature verification",
+					zap.String("topic", topic),
+					zap.Error(err),
+				)
+			} else {
+				c.handleMessage(ctx, topic, message)
+			}
 
 			if err := reader.CommitMessages(ctx, message); err != nil {
 				c.logger.Error("Failed to commit message", zap.Error(err))

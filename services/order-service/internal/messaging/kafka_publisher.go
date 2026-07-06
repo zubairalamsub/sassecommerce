@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/events"
 	"go.uber.org/zap"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // EventPublisher publishes domain events to Kafka
 type EventPublisher interface {
@@ -94,6 +98,7 @@ func (p *KafkaEventPublisher) PublishBatch(ctx context.Context, eventsToPublish 
 			Time: event.GetTimestamp(),
 		}
 
+		eventSigner.Sign(&message)
 		messages = append(messages, message)
 	}
 

@@ -114,7 +114,14 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 				time.Sleep(time.Second)
 				continue
 			}
-			if err := c.processMessage(ctx, msg.Value); err != nil {
+			// Reject events that fail HMAC verification (spoofed/tampered);
+			// still committed below so the poison message is not redelivered.
+			if err := eventSigner.Verify(msg); err != nil {
+				c.logger.WithError(err).WithFields(logrus.Fields{
+					"topic":  topic,
+					"offset": msg.Offset,
+				}).Warn("Dropping Kafka message that failed signature verification")
+			} else if err := c.processMessage(ctx, msg.Value); err != nil {
 				c.logger.WithError(err).WithFields(logrus.Fields{
 					"topic":  topic,
 					"offset": msg.Offset,

@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// eventSigner HMAC-signs outgoing Kafka events when EVENT_SIGNING_KEY is set.
+var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 type Producer struct {
 	writer *kafka.Writer
@@ -33,6 +37,7 @@ func (p *Producer) Publish(ctx context.Context, topic, key string, value []byte)
 		Key:   []byte(key),
 		Value: value,
 	}
+	eventSigner.Sign(&msg)
 
 	err := p.writer.WriteMessages(ctx, msg)
 	if err != nil {

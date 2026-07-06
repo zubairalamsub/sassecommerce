@@ -32,6 +32,7 @@ func DefaultProducerConfig(brokers []string, topic string) ProducerConfig {
 // Producer wraps kafka.Writer
 type Producer struct {
 	writer *kafka.Writer
+	signer *EventSigner
 }
 
 // NewProducer creates a new Kafka producer
@@ -46,7 +47,7 @@ func NewProducer(config ProducerConfig) *Producer {
 		BatchTimeout: 10 * time.Millisecond,
 	}
 
-	return &Producer{writer: writer}
+	return &Producer{writer: writer, signer: NewEventSignerFromEnv()}
 }
 
 // Publish sends a message to Kafka
@@ -63,6 +64,7 @@ func (p *Producer) Publish(ctx context.Context, key string, value interface{}) e
 		Value: valueBytes,
 		Time:  time.Now(),
 	}
+	p.signer.Sign(&msg)
 
 	// Write message
 	if err := p.writer.WriteMessages(ctx, msg); err != nil {
@@ -96,6 +98,7 @@ func (p *Producer) PublishWithHeaders(ctx context.Context, key string, value int
 		Headers: kafkaHeaders,
 		Time:    time.Now(),
 	}
+	p.signer.Sign(&msg)
 
 	// Write message
 	if err := p.writer.WriteMessages(ctx, msg); err != nil {

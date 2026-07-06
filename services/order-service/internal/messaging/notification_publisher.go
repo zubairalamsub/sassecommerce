@@ -32,20 +32,20 @@ type NotificationPublisher interface {
 // optional except TenantID and OrderID. Currency defaults to BDT in the
 // consumer.
 type ReceiptRequestedPayload struct {
-	TenantID      string                  `json:"tenant_id"`
-	OrderID       string                  `json:"order_id"`
-	CustomerID    string                  `json:"customer_id,omitempty"`
-	CustomerEmail string                  `json:"customer_email,omitempty"`
-	CustomerName  string                  `json:"customer_name,omitempty"`
-	StoreName     string                  `json:"store_name,omitempty"`
-	PaymentMethod string                  `json:"payment_method,omitempty"`
-	Currency      string                  `json:"currency,omitempty"`
-	Subtotal      float64                 `json:"subtotal,omitempty"`
-	Discount      float64                 `json:"discount,omitempty"`
-	Tax           float64                 `json:"tax,omitempty"`
-	ShippingCost  float64                 `json:"shipping_cost,omitempty"`
-	Total         float64                 `json:"total,omitempty"`
-	Items         []ReceiptRequestedItem  `json:"items,omitempty"`
+	TenantID      string                 `json:"tenant_id"`
+	OrderID       string                 `json:"order_id"`
+	CustomerID    string                 `json:"customer_id,omitempty"`
+	CustomerEmail string                 `json:"customer_email,omitempty"`
+	CustomerName  string                 `json:"customer_name,omitempty"`
+	StoreName     string                 `json:"store_name,omitempty"`
+	PaymentMethod string                 `json:"payment_method,omitempty"`
+	Currency      string                 `json:"currency,omitempty"`
+	Subtotal      float64                `json:"subtotal,omitempty"`
+	Discount      float64                `json:"discount,omitempty"`
+	Tax           float64                `json:"tax,omitempty"`
+	ShippingCost  float64                `json:"shipping_cost,omitempty"`
+	Total         float64                `json:"total,omitempty"`
+	Items         []ReceiptRequestedItem `json:"items,omitempty"`
 }
 
 // ReceiptRequestedItem is a single line item carried in the payload.
@@ -120,6 +120,7 @@ func (p *KafkaNotificationPublisher) PublishReceiptRequested(ctx context.Context
 		},
 		Time: envelope.Timestamp,
 	}
+	eventSigner.Sign(&msg)
 
 	if err := p.writer.WriteMessages(ctx, msg); err != nil {
 		p.logger.Error("Failed to publish ReceiptRequested",

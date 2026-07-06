@@ -205,3 +205,57 @@ groups:
         annotations:
           summary: "Elasticsearch disk usage above 85%"
           description: "Elasticsearch node has less than 15% disk space remaining."
+
+  # ── Security ────────────────────────────────────────────────
+  # Paths are gin route templates (c.FullPath()), not raw URLs.
+  - name: security
+    rules:
+      - alert: HighAuthFailureRate
+        expr: |
+          sum(rate(http_requests_total{path=~"/api/v1/auth/login(/2fa)?", status="401"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spike in failed logins"
+          description: "More than 5 failed logins/sec for 2 minutes — possible credential stuffing ({{ $value | humanize }} req/s)."
+
+      - alert: AccessDeniedSpike
+        expr: |
+          sum(rate(http_requests_total{status=~"401|403"}[5m])) by (service) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "401/403 spike on {{ $labels.service }}"
+          description: "{{ $labels.service }} is rejecting {{ $value | humanize }} req/s with 401/403 — possible token replay or scanning."
+
+      - alert: PasswordResetSurge
+        expr: |
+          sum(rate(http_requests_total{path="/api/v1/auth/forgot-password"}[15m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Surge in password reset requests"
+          description: "Sustained /forgot-password traffic ({{ $value | humanize }} req/s over 15m) — possible account-enumeration or reset-spam campaign."
+
+      - alert: RateLimitTripsSpike
+        expr: |
+          sum(rate(http_requests_total{status="429"}[5m])) by (service) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate limiter tripping heavily on {{ $labels.service }}"
+          description: "{{ $labels.service }} is returning {{ $value | humanize }} 429/s — an aggressive client or distributed abuse."
+
+      - alert: RegistrationSurge
+        expr: |
+          sum(rate(http_requests_total{path="/api/v1/auth/register", status=~"2.."}[15m])) > 2
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Unusual account registration volume"
+          description: "Sustained registrations ({{ $value | humanize }}/s over 15m) — verify it's a campaign, not bot signups."

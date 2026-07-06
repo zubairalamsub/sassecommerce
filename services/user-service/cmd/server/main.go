@@ -253,12 +253,29 @@ func setupRouter(
 			Window: time.Minute,
 		}))
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
-			auth.POST("/verify-email", authHandler.VerifyEmail)
-			auth.POST("/forgot-password", authHandler.ForgotPassword)
-			auth.POST("/reset-password", authHandler.ResetPassword)
-			auth.POST("/resend-verification", authHandler.ResendVerification)
+			// Per-route limits on top of the group limit. IP-keyed limits
+			// slow single-source brute force; body-field-keyed limits (email,
+			// token) throttle attacks distributed across many IPs against a
+			// single account, and cap reset/verification email spam per target.
+			auth.POST("/register",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 3, Window: time.Hour}),
+				authHandler.Register)
+			auth.POST("/login",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 5, Window: time.Minute}),
+				sharedmiddleware.RateLimitByBodyField(20, time.Hour, "email"),
+				authHandler.Login)
+			auth.POST("/verify-email",
+				sharedmiddleware.RateLimitByBodyField(5, time.Hour, "token"),
+				authHandler.VerifyEmail)
+			auth.POST("/forgot-password",
+				sharedmiddleware.RateLimitByBodyField(3, time.Hour, "email"),
+				authHandler.ForgotPassword)
+			auth.POST("/reset-password",
+				sharedmiddleware.RateLimitByBodyField(5, time.Hour, "token"),
+				authHandler.ResetPassword)
+			auth.POST("/resend-verification",
+				sharedmiddleware.RateLimitByBodyField(3, time.Hour, "email"),
+				authHandler.ResendVerification)
 		}
 
 		// Protected authentication routes

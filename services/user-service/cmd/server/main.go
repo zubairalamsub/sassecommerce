@@ -57,6 +57,22 @@ func main() {
 	tokenRepo := repository.NewTokenRepository(db)
 	wishlistRepo := repository.NewWishlistRepository(db)
 	loginAttemptRepo := repository.NewLoginAttemptRepository(db)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+
+	// 2FA TOTP secrets are encrypted at rest with TWO_FACTOR_ENCRYPTION_KEY
+	// (16/24/32 raw bytes). Running without it stores secrets base64-only,
+	// acceptable for local development but never in production.
+	twoFactorKey := []byte(os.Getenv("TWO_FACTOR_ENCRYPTION_KEY"))
+	if len(twoFactorKey) == 0 {
+		if sharedconfig.IsProduction() {
+			log.Fatal("TWO_FACTOR_ENCRYPTION_KEY is required in production")
+		}
+		log.Warn("TWO_FACTOR_ENCRYPTION_KEY is not set — 2FA secrets will be stored unencrypted (dev only)")
+	}
+	twoFactorRepo, err := repository.NewTwoFactorRepository(db, twoFactorKey)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to initialize 2FA repository")
+	}
 
 	// Initialize services
 	tokenConfig := models.TokenConfig{
@@ -64,6 +80,8 @@ func main() {
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "user-service",
 	}
+	twoFactorService := service.NewTwoFactorService(twoFactorRepo, log,
+		service.WithTwoFactorKafkaPublisher(kafkaProducer))
 	authService := service.NewAuthServiceWithOptions(
 		userRepo,
 		tokenConfig,
@@ -72,16 +90,19 @@ func main() {
 		service.WithTokenRepository(tokenRepo),
 		service.WithLoginAttemptRepository(loginAttemptRepo),
 		service.WithLockoutConfig(service.LockoutConfigFromEnv()),
+		service.WithRefreshTokenRepository(refreshTokenRepo),
+		service.WithTwoFactorService(twoFactorService),
 	)
 	userService := service.NewUserService(userRepo, kafkaProducer, log)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService, log)
+	twoFactorHandler := api.NewTwoFactorHandler(twoFactorService, authService, log)
 	userHandler := api.NewUserHandler(userService, log)
 	wishlistHandler := api.NewWishlistHandler(wishlistRepo, log)
 
 	// Setup router
-	router := setupRouter(authHandler, userHandler, wishlistHandler, authService, log)
+	router := setupRouter(authHandler, twoFactorHandler, userHandler, wishlistHandler, authService, log)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -200,6 +221,7 @@ func runMigrations(db *gorm.DB) error {
 // setupRouter sets up the Gin router with all routes and middleware
 func setupRouter(
 	authHandler *api.AuthHandler,
+	twoFactorHandler *api.TwoFactorHandler,
 	userHandler *api.UserHandler,
 	wishlistHandler *api.WishlistHandler,
 	authService service.AuthService,
@@ -276,6 +298,16 @@ func setupRouter(
 			auth.POST("/resend-verification",
 				sharedmiddleware.RateLimitByBodyField(3, time.Hour, "email"),
 				authHandler.ResendVerification)
+			// Complete a 2FA-gated login. Limited per challenge token so a
+			// TOTP code cannot be brute-forced within the challenge TTL.
+			auth.POST("/login/2fa",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 10, Window: time.Minute}),
+				sharedmiddleware.RateLimitByBodyField(5, 5*time.Minute, "challenge_token"),
+				authHandler.VerifyTwoFactor)
+			// Rotate a refresh token for a new access+refresh pair.
+			auth.POST("/refresh",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 30, Window: time.Minute}),
+				authHandler.Refresh)
 		}
 
 		// Protected authentication routes
@@ -284,6 +316,16 @@ func setupRouter(
 		{
 			authProtected.GET("/profile", authHandler.GetProfile)
 			authProtected.POST("/change-password", authHandler.ChangePassword)
+			authProtected.POST("/logout", authHandler.Logout)
+			authProtected.POST("/logout-all", authHandler.LogoutAll)
+			authProtected.GET("/sessions", authHandler.ListSessions)
+			authProtected.DELETE("/sessions/:id", authHandler.RevokeSession)
+
+			// TOTP two-factor enrollment management
+			authProtected.GET("/2fa", twoFactorHandler.Status)
+			authProtected.POST("/2fa/setup", twoFactorHandler.BeginSetup)
+			authProtected.POST("/2fa/confirm", twoFactorHandler.ConfirmSetup)
+			authProtected.POST("/2fa/disable", twoFactorHandler.Disable)
 		}
 
 		// Protected user routes

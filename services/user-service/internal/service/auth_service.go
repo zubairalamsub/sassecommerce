@@ -81,7 +81,15 @@ type KafkaPublisher interface {
 type AuthService interface {
 	Register(ctx context.Context, req *models.RegisterRequest) (*models.UserResponse, error)
 	Login(ctx context.Context, req *models.LoginRequest) (*models.LoginResponse, error)
+	LoginWithSession(ctx context.Context, req *models.LoginRequest, sctx SessionContext) (*models.LoginResponse, error)
+	VerifyTwoFactorChallenge(ctx context.Context, req *models.TwoFactorVerifyRequest, sctx SessionContext) (*models.LoginResponse, error)
+	RefreshAccessToken(ctx context.Context, req *models.RefreshTokenRequest, sctx SessionContext) (*models.LoginResponse, error)
+	Logout(ctx context.Context, refreshToken string) error
+	LogoutAll(ctx context.Context, userID string) error
+	ListSessions(ctx context.Context, userID, currentRefreshToken string) ([]models.SessionResponse, error)
+	RevokeSession(ctx context.Context, userID, sessionID string) error
 	VerifyToken(ctx context.Context, tokenString string) (*models.TokenClaims, error)
+	VerifyUserPassword(ctx context.Context, userID, password string) error
 	ChangePassword(ctx context.Context, userID string, req *models.ChangePasswordRequest) error
 	RequestEmailVerification(ctx context.Context, userID, tenantID, email string) (string, error)
 	ResendEmailVerification(ctx context.Context, req *models.ResendVerificationRequest) error
@@ -94,6 +102,9 @@ type authService struct {
 	userRepo         repository.UserRepository
 	tokenRepo        repository.TokenRepository
 	loginAttemptRepo repository.LoginAttemptRepository
+	refreshTokenRepo repository.RefreshTokenRepository
+	refreshTokenTTL  time.Duration
+	twoFactor        TwoFactorService
 	lockout          LockoutConfig
 	tokenConfig      models.TokenConfig
 	kafkaProducer    KafkaPublisher
@@ -117,6 +128,23 @@ func WithLockoutConfig(cfg LockoutConfig) AuthServiceOption {
 // WithTokenRepository attaches the verification/password-reset token repo.
 func WithTokenRepository(repo repository.TokenRepository) AuthServiceOption {
 	return func(s *authService) { s.tokenRepo = repo }
+}
+
+// WithRefreshTokenRepository enables refresh-token sessions: login issues a
+// refresh token, /refresh rotates it, and password changes revoke them all.
+func WithRefreshTokenRepository(repo repository.RefreshTokenRepository) AuthServiceOption {
+	return func(s *authService) { s.refreshTokenRepo = repo }
+}
+
+// WithRefreshTokenTTL overrides how long refresh tokens live (default 30 days).
+func WithRefreshTokenTTL(ttl time.Duration) AuthServiceOption {
+	return func(s *authService) { s.refreshTokenTTL = ttl }
+}
+
+// WithTwoFactorService enables the 2FA gate in the login flow: users with 2FA
+// enrolled receive a challenge instead of tokens until they present a code.
+func WithTwoFactorService(tf TwoFactorService) AuthServiceOption {
+	return func(s *authService) { s.twoFactor = tf }
 }
 
 // NewAuthService creates a new authentication service.
@@ -250,6 +278,33 @@ func (s *authService) Register(ctx context.Context, req *models.RegisterRequest)
 // The lockout error never reveals whether the email belongs to a real
 // account — it is the same shape for an unknown email and a real one.
 func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*models.LoginResponse, error) {
+	user, err := s.authenticate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Generate JWT token
+	token, expiresAt, err := s.generateToken(user)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to generate token")
+		return nil, errors.New("failed to generate authentication token")
+	}
+
+	// 6-7. Update last-login, clear failure counters, audit, publish.
+	s.finishLogin(ctx, user, req.Email, req.IPAddress, req.UserAgent)
+
+	return &models.LoginResponse{
+		User:      user.ToResponse(),
+		Token:     token,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+// authenticate runs the credential checks shared by Login and
+// LoginWithSession: lockout windows, user lookup, active check, and password
+// verification. Failures are recorded and published; the returned errors are
+// deliberately generic to prevent account enumeration.
+func (s *authService) authenticate(ctx context.Context, req *models.LoginRequest) (*models.User, error) {
 	emailKey := strings.ToLower(strings.TrimSpace(req.Email))
 
 	// 1. Pre-check lockout windows (per-email and per-IP).
@@ -284,26 +339,25 @@ func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		return nil, errors.New("invalid email or password")
 	}
 
-	// 5. Generate JWT token
-	token, expiresAt, err := s.generateToken(user)
-	if err != nil {
-		s.logger.WithError(err).Error("Failed to generate token")
-		return nil, errors.New("failed to generate authentication token")
-	}
+	return user, nil
+}
 
-	// 6. Update last login timestamp
+// finishLogin performs the post-authentication bookkeeping for a completed
+// login: last-login timestamp, failure-counter reset, audit row, and the
+// LoginSucceeded event. Best-effort: none of these block the login.
+func (s *authService) finishLogin(ctx context.Context, user *models.User, email, ip, userAgent string) {
+	emailKey := strings.ToLower(strings.TrimSpace(email))
+
 	if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
 		s.logger.WithError(err).Warn("Failed to update last login timestamp")
 	}
 
-	// 7. Clear the failed-attempt counter and record an audit row for the
-	//    successful login. Best-effort: failures don't block login.
 	if s.loginAttemptRepo != nil {
 		if err := s.loginAttemptRepo.MarkSuccess(ctx, emailKey); err != nil {
 			s.logger.WithError(err).Warn("Failed to clear failed login attempts")
 		}
 	}
-	s.recordAttempt(ctx, user.TenantID, user.ID, emailKey, req.IPAddress, req.UserAgent, true, models.LoginAttemptReasonSuccess)
+	s.recordAttempt(ctx, user.TenantID, user.ID, emailKey, ip, userAgent, true, models.LoginAttemptReasonSuccess)
 
 	s.logger.WithFields(logrus.Fields{
 		"user_id":   user.ID,
@@ -318,15 +372,9 @@ func (s *authService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		"user_id":    user.ID,
 		"email":      user.Email,
 		"role":       user.Role,
-		"ip_address": req.IPAddress,
-		"user_agent": req.UserAgent,
+		"ip_address": ip,
+		"user_agent": userAgent,
 	})
-
-	return &models.LoginResponse{
-		User:      user.ToResponse(),
-		Token:     token,
-		ExpiresAt: expiresAt,
-	}, nil
 }
 
 // publishLoginFailed emits a LoginFailed event for the centralised audit log.
@@ -514,6 +562,10 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, req *mo
 	}
 
 	s.logger.WithField("user_id", userID).Info("Password changed successfully")
+
+	// Revoke every live session: a stolen refresh token must not survive a
+	// password change.
+	s.revokeAllSessions(ctx, userID)
 
 	// Publish PasswordChanged so the audit log records the change. The
 	// "changed_by" is the user themselves (self-service flow); admin-initiated
@@ -750,6 +802,10 @@ func (s *authService) ResetPassword(ctx context.Context, req *models.ResetPasswo
 	if err := s.tokenRepo.InvalidatePasswordResetTokens(ctx, prt.UserID); err != nil {
 		s.logger.WithError(err).Warn("Failed to invalidate remaining reset tokens")
 	}
+
+	// Revoke every live session: whoever reset the password (typically after
+	// a compromise) must be the only one left logged in.
+	s.revokeAllSessions(ctx, prt.UserID)
 
 	s.logger.WithFields(logrus.Fields{
 		"user_id":   prt.UserID,

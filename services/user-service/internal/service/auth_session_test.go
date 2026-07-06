@@ -1,14 +1,6 @@
-//go:build session_login_pending
-// +build session_login_pending
-
-// This file contains tests for the session-based login flow
-// (LoginWithSession, RefreshAccessToken, 2FA challenge, etc.) that are
-// pending implementation. It is excluded from the default build via the
-// session_login_pending build tag so that the rest of the test suite
-// continues to compile.
-//
-// To work on this flow, build/test with:
-//   go test -tags=session_login_pending ./internal/service/...
+// Tests for the session-based login flow: LoginWithSession,
+// RefreshAccessToken (rotation + reuse detection), logout, session listing
+// and revocation, and the 2FA login challenge.
 
 package service
 

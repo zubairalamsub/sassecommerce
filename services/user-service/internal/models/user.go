@@ -181,11 +181,15 @@ type UserResponse struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
-// LoginResponse represents a login response
+// LoginResponse represents a login response. When two-factor auth is
+// required, Token/RefreshToken are empty and TwoFactor carries the
+// challenge the client must answer via POST /auth/login/2fa.
 type LoginResponse struct {
-	User  *UserResponse `json:"user"`
-	Token string        `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
+	User         *UserResponse       `json:"user,omitempty"`
+	Token        string              `json:"token,omitempty"`
+	RefreshToken string              `json:"refresh_token,omitempty"`
+	ExpiresAt    time.Time           `json:"expires_at"`
+	TwoFactor    *TwoFactorChallenge `json:"two_factor,omitempty"`
 }
 
 // ToResponse converts User to UserResponse

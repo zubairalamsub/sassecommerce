@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ecommerce/search-service/internal/models"
+	"github.com/ecommerce/search-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -64,17 +66,41 @@ func setupRouter(mockService *MockSearchService) *gin.Engine {
 	return router
 }
 
+// setupRouterWithAuth builds a router with a middleware that injects the
+// authenticated user's role and tenant into the context, simulating what the
+// shared Auth middleware does after validating a JWT. This lets us exercise
+// the RequireRole guard and the JWT-derived tenant on protected routes.
+func setupRouterWithAuth(mockService *MockSearchService, role, tenantID string) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	logger := logrus.New()
+	logger.SetLevel(logrus.PanicLevel)
+
+	handler := NewSearchHandler(mockService, logger)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if role != "" {
+			c.Set(sharedmiddleware.AuthUserRoleKey, role)
+		}
+		if tenantID != "" {
+			c.Set(sharedmiddleware.TenantIDKey, tenantID)
+		}
+		c.Next()
+	})
+	RegisterRoutes(router, handler)
+	return router
+}
+
 func createTestSearchResponse() *models.SearchResponse {
 	return &models.SearchResponse{
 		Products: []models.ProductHit{
 			{
 				ProductDocument: models.ProductDocument{
-					ID:       "product-1",
-					TenantID: "tenant-1",
-					Name:     "Premium Widget",
-					Price:    49.99,
-					Status:   "active",
-					InStock:  true,
+					ID:        "product-1",
+					TenantID:  "tenant-1",
+					Name:      "Premium Widget",
+					Price:     49.99,
+					Status:    "active",
+					InStock:   true,
 					CreatedAt: time.Now().UTC(),
 					UpdatedAt: time.Now().UTC(),
 				},
@@ -240,13 +266,17 @@ func TestHandler_Autocomplete_ServiceError(t *testing.T) {
 
 func TestHandler_ReindexProduct_Success(t *testing.T) {
 	mockService := new(MockSearchService)
-	router := setupRouter(mockService)
+	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
 
-	mockService.On("IndexProduct", mock.Anything, mock.AnythingOfType("*models.ProductDocument")).Return(nil)
+	// The indexed doc must carry the JWT tenant, not any body-supplied value.
+	mockService.On("IndexProduct", mock.Anything, mock.MatchedBy(func(p *models.ProductDocument) bool {
+		return p.TenantID == "tenant-1" && p.ID == "product-1"
+	})).Return(nil)
 
+	// Body tries to smuggle a different tenant; it must be ignored.
 	body := `{
 		"id": "product-1",
-		"tenant_id": "tenant-1",
+		"tenant_id": "attacker-tenant",
 		"name": "Premium Widget",
 		"price": 49.99,
 		"status": "active"
@@ -258,13 +288,45 @@ func TestHandler_ReindexProduct_Success(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	mockService.AssertExpectations(t)
+}
+
+func TestHandler_ReindexProduct_Forbidden(t *testing.T) {
+	mockService := new(MockSearchService)
+	// A non-staff role must be rejected by RequireRole before reaching the handler.
+	router := setupRouterWithAuth(mockService, "customer", "tenant-1")
+
+	body := `{"id": "product-1", "name": "Widget"}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockService.AssertNotCalled(t, "IndexProduct", mock.Anything, mock.Anything)
+}
+
+func TestHandler_ReindexProduct_NoRole(t *testing.T) {
+	mockService := new(MockSearchService)
+	// No role in context (unauthenticated) must be forbidden.
+	router := setupRouterWithAuth(mockService, "", "tenant-1")
+
+	body := `{"id": "product-1", "name": "Widget"}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestHandler_ReindexProduct_MissingID(t *testing.T) {
 	mockService := new(MockSearchService)
-	router := setupRouter(mockService)
+	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
 
-	body := `{"tenant_id": "tenant-1", "name": "Widget"}`
+	body := `{"name": "Widget"}`
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
@@ -276,7 +338,8 @@ func TestHandler_ReindexProduct_MissingID(t *testing.T) {
 
 func TestHandler_ReindexProduct_MissingTenantID(t *testing.T) {
 	mockService := new(MockSearchService)
-	router := setupRouter(mockService)
+	// Staff role present but no tenant in the token → 401.
+	router := setupRouterWithAuth(mockService, "admin", "")
 
 	body := `{"id": "product-1", "name": "Widget"}`
 
@@ -285,12 +348,12 @@ func TestHandler_ReindexProduct_MissingTenantID(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_ReindexProduct_InvalidJSON(t *testing.T) {
 	mockService := new(MockSearchService)
-	router := setupRouter(mockService)
+	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString("not json"))
@@ -300,14 +363,32 @@ func TestHandler_ReindexProduct_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_ReindexProduct_TenantMismatch(t *testing.T) {
+	mockService := new(MockSearchService)
+	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
+
+	// Service reports the existing doc belongs to another tenant → 404.
+	mockService.On("IndexProduct", mock.Anything, mock.AnythingOfType("*models.ProductDocument")).
+		Return(service.ErrTenantMismatch)
+
+	body := `{"id": "product-1", "name": "Widget"}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestHandler_ReindexProduct_ServiceError(t *testing.T) {
 	mockService := new(MockSearchService)
-	router := setupRouter(mockService)
+	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
 
 	mockService.On("IndexProduct", mock.Anything, mock.AnythingOfType("*models.ProductDocument")).
 		Return(errors.New("es error"))
 
-	body := `{"id": "product-1", "tenant_id": "tenant-1", "name": "Widget"}`
+	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))

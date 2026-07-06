@@ -21,6 +21,14 @@ func (m *MockSearchRepository) IndexProduct(ctx context.Context, product *models
 	return args.Error(0)
 }
 
+func (m *MockSearchRepository) GetProductByID(ctx context.Context, productID string) (*models.ProductDocument, error) {
+	args := m.Called(ctx, productID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ProductDocument), args.Error(1)
+}
+
 func (m *MockSearchRepository) DeleteProduct(ctx context.Context, productID string) error {
 	args := m.Called(ctx, productID)
 	return args.Error(0)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/ecommerce/search-service/internal/repository"
 	"github.com/sirupsen/logrus"
 )
+
+// ErrTenantMismatch is returned when a reindex would overwrite an existing
+// document that belongs to a different tenant.
+var ErrTenantMismatch = errors.New("product belongs to another tenant")
 
 // SearchService defines the interface for search business logic
 type SearchService interface {
@@ -73,6 +78,17 @@ func (s *searchService) IndexProduct(ctx context.Context, product *models.Produc
 	}
 	if product.TenantID == "" {
 		return fmt.Errorf("tenant ID is required")
+	}
+
+	// Ownership guard: if a document with this ID already exists under a
+	// different tenant, refuse to overwrite it. This prevents a caller from
+	// clobbering another tenant's search document by reusing its product ID.
+	existing, err := s.repo.GetProductByID(ctx, product.ID)
+	if err != nil {
+		return fmt.Errorf("failed to verify product ownership: %w", err)
+	}
+	if existing != nil && existing.TenantID != product.TenantID {
+		return ErrTenantMismatch
 	}
 
 	if product.Status == "" {

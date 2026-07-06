@@ -28,20 +28,20 @@ func newTestService() (*searchService, *repoMocks.MockSearchRepository) {
 
 func createTestProduct() *models.ProductDocument {
 	return &models.ProductDocument{
-		ID:          "product-1",
-		TenantID:    "tenant-1",
-		SKU:         "SKU-001",
-		Name:        "Premium Widget",
-		Description: "A high-quality widget for all your needs",
-		Brand:       "WidgetCo",
-		CategoryID:  "cat-1",
-		Price:       49.99,
-		Tags:        []string{"premium", "widget", "new"},
-		Status:      "active",
-		InStock:     true,
+		ID:            "product-1",
+		TenantID:      "tenant-1",
+		SKU:           "SKU-001",
+		Name:          "Premium Widget",
+		Description:   "A high-quality widget for all your needs",
+		Brand:         "WidgetCo",
+		CategoryID:    "cat-1",
+		Price:         49.99,
+		Tags:          []string{"premium", "widget", "new"},
+		Status:        "active",
+		InStock:       true,
 		StockQuantity: 100,
-		CreatedAt:   time.Now().UTC(),
-		UpdatedAt:   time.Now().UTC(),
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
 	}
 }
 
@@ -99,8 +99,8 @@ func TestSearch_DefaultPagination(t *testing.T) {
 	req := &models.SearchRequest{
 		Query:    "widget",
 		TenantID: "tenant-1",
-		Page:     0,  // should default to 1
-		PageSize: 0,  // should default to 20
+		Page:     0, // should default to 1
+		PageSize: 0, // should default to 20
 	}
 
 	result, err := svc.Search(ctx, req)
@@ -287,12 +287,58 @@ func TestIndexProduct_Success(t *testing.T) {
 	ctx := context.Background()
 
 	product := createTestProduct()
+	// New product: no existing doc under this ID.
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(nil, nil)
 	mockRepo.On("IndexProduct", ctx, mock.AnythingOfType("*models.ProductDocument")).Return(nil)
 
 	err := svc.IndexProduct(ctx, product)
 
 	assert.NoError(t, err)
 	mockRepo.AssertCalled(t, "IndexProduct", ctx, product)
+}
+
+func TestIndexProduct_SameTenantUpdate(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	product := createTestProduct()
+	existing := createTestProduct() // same tenant-1
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(existing, nil)
+	mockRepo.On("IndexProduct", ctx, mock.AnythingOfType("*models.ProductDocument")).Return(nil)
+
+	err := svc.IndexProduct(ctx, product)
+
+	assert.NoError(t, err)
+	mockRepo.AssertCalled(t, "IndexProduct", ctx, product)
+}
+
+func TestIndexProduct_TenantMismatch(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	product := createTestProduct() // tenant-1
+	existing := createTestProduct()
+	existing.TenantID = "tenant-2" // doc already owned by another tenant
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(existing, nil)
+
+	err := svc.IndexProduct(ctx, product)
+
+	assert.ErrorIs(t, err, ErrTenantMismatch)
+	mockRepo.AssertNotCalled(t, "IndexProduct", mock.Anything, mock.Anything)
+}
+
+func TestIndexProduct_OwnershipCheckFailure(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	product := createTestProduct()
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(nil, errors.New("es error"))
+
+	err := svc.IndexProduct(ctx, product)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify product ownership")
+	mockRepo.AssertNotCalled(t, "IndexProduct", mock.Anything, mock.Anything)
 }
 
 func TestIndexProduct_MissingID(t *testing.T) {
@@ -327,6 +373,7 @@ func TestIndexProduct_DefaultStatus(t *testing.T) {
 
 	product := createTestProduct()
 	product.Status = ""
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(nil, nil)
 	mockRepo.On("IndexProduct", ctx, mock.AnythingOfType("*models.ProductDocument")).Return(nil)
 
 	err := svc.IndexProduct(ctx, product)
@@ -340,6 +387,7 @@ func TestIndexProduct_RepoFailure(t *testing.T) {
 	ctx := context.Background()
 
 	product := createTestProduct()
+	mockRepo.On("GetProductByID", ctx, "product-1").Return(nil, nil)
 	mockRepo.On("IndexProduct", ctx, mock.AnythingOfType("*models.ProductDocument")).
 		Return(errors.New("es error"))
 

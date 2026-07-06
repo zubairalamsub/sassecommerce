@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/shipping-service/internal/models"
 	"github.com/ecommerce/shipping-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -23,11 +24,19 @@ func NewShippingHandler(service service.ShippingService, logger *logrus.Logger) 
 }
 
 func (h *ShippingHandler) CreateShipment(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
 	var req models.CreateShipmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	// Tenant is derived from the authenticated JWT, never from client input.
+	req.TenantID = tenantID
 
 	shipment, err := h.service.CreateShipment(c.Request.Context(), &req)
 	if err != nil {
@@ -40,9 +49,15 @@ func (h *ShippingHandler) CreateShipment(c *gin.Context) {
 }
 
 func (h *ShippingHandler) GetShipment(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
-	shipment, err := h.service.GetShipment(c.Request.Context(), id)
+	shipment, err := h.service.GetShipment(c.Request.Context(), tenantID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
@@ -52,9 +67,15 @@ func (h *ShippingHandler) GetShipment(c *gin.Context) {
 }
 
 func (h *ShippingHandler) GetShipmentByTracking(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
 	trackingNumber := c.Param("trackingNumber")
 
-	shipment, err := h.service.GetShipmentByTracking(c.Request.Context(), trackingNumber)
+	shipment, err := h.service.GetShipmentByTracking(c.Request.Context(), tenantID, trackingNumber)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
@@ -64,12 +85,13 @@ func (h *ShippingHandler) GetShipmentByTracking(c *gin.Context) {
 }
 
 func (h *ShippingHandler) GetShipmentByOrderID(c *gin.Context) {
-	orderID := c.Param("orderId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
+
+	orderID := c.Param("orderId")
 
 	shipment, err := h.service.GetShipmentByOrderID(c.Request.Context(), tenantID, orderID)
 	if err != nil {
@@ -81,9 +103,9 @@ func (h *ShippingHandler) GetShipmentByOrderID(c *gin.Context) {
 }
 
 func (h *ShippingHandler) ListShipments(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 
@@ -117,6 +139,12 @@ func (h *ShippingHandler) ListShipments(c *gin.Context) {
 }
 
 func (h *ShippingHandler) UpdateStatus(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
 	var req models.UpdateStatusRequest
@@ -125,7 +153,7 @@ func (h *ShippingHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	shipment, err := h.service.UpdateStatus(c.Request.Context(), id, &req)
+	shipment, err := h.service.UpdateStatus(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to update shipment status")
 		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
@@ -136,9 +164,15 @@ func (h *ShippingHandler) UpdateStatus(c *gin.Context) {
 }
 
 func (h *ShippingHandler) CancelShipment(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
-	shipment, err := h.service.CancelShipment(c.Request.Context(), id)
+	shipment, err := h.service.CancelShipment(c.Request.Context(), tenantID, id)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to cancel shipment")
 		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})

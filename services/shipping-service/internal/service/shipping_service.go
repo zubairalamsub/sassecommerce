@@ -20,12 +20,12 @@ type KafkaPublisher interface {
 
 type ShippingService interface {
 	CreateShipment(ctx context.Context, req *models.CreateShipmentRequest) (*models.ShipmentResponse, error)
-	GetShipment(ctx context.Context, id string) (*models.ShipmentResponse, error)
-	GetShipmentByTracking(ctx context.Context, trackingNumber string) (*models.ShipmentResponse, error)
+	GetShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error)
+	GetShipmentByTracking(ctx context.Context, tenantID, trackingNumber string) (*models.ShipmentResponse, error)
 	GetShipmentByOrderID(ctx context.Context, tenantID, orderID string) (*models.ShipmentResponse, error)
 	ListShipments(ctx context.Context, tenantID string, page, pageSize int, status string) ([]models.ShipmentResponse, int64, error)
-	UpdateStatus(ctx context.Context, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error)
-	CancelShipment(ctx context.Context, id string) (*models.ShipmentResponse, error)
+	UpdateStatus(ctx context.Context, tenantID, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error)
+	CancelShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error)
 	CalculateRates(ctx context.Context, req *models.CalculateRateRequest) (*models.RateCalculationResponse, error)
 }
 
@@ -131,27 +131,27 @@ func (s *shippingService) CreateShipment(ctx context.Context, req *models.Create
 
 	// Publish ShipmentCreated event
 	s.publishEvent(ctx, "ShipmentCreated", map[string]interface{}{
-		"tenant_id":        shipment.TenantID,
-		"shipment_id":      shipment.ID,
-		"order_id":         shipment.OrderID,
-		"tracking_number":  shipment.TrackingNumber,
-		"carrier":          shipment.Carrier,
-		"status":           shipment.Status,
+		"tenant_id":       shipment.TenantID,
+		"shipment_id":     shipment.ID,
+		"order_id":        shipment.OrderID,
+		"tracking_number": shipment.TrackingNumber,
+		"carrier":         shipment.Carrier,
+		"status":          shipment.Status,
 	})
 
 	return toShipmentResponse(shipment), nil
 }
 
-func (s *shippingService) GetShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
-	shipment, err := s.repo.GetByIDWithDetails(ctx, id)
+func (s *shippingService) GetShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
+	shipment, err := s.repo.GetByIDWithDetails(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
 	return toShipmentResponse(shipment), nil
 }
 
-func (s *shippingService) GetShipmentByTracking(ctx context.Context, trackingNumber string) (*models.ShipmentResponse, error) {
-	shipment, err := s.repo.GetByTrackingNumber(ctx, trackingNumber)
+func (s *shippingService) GetShipmentByTracking(ctx context.Context, tenantID, trackingNumber string) (*models.ShipmentResponse, error) {
+	shipment, err := s.repo.GetByTrackingNumber(ctx, tenantID, trackingNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +180,8 @@ func (s *shippingService) ListShipments(ctx context.Context, tenantID string, pa
 	return responses, total, nil
 }
 
-func (s *shippingService) UpdateStatus(ctx context.Context, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
-	shipment, err := s.repo.GetByIDWithDetails(ctx, id)
+func (s *shippingService) UpdateStatus(ctx context.Context, tenantID, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
+	shipment, err := s.repo.GetByIDWithDetails(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -240,24 +240,24 @@ func (s *shippingService) UpdateStatus(ctx context.Context, id string, req *mode
 		eventType = "ShipmentDelivered"
 	}
 	s.publishEvent(ctx, eventType, map[string]interface{}{
-		"tenant_id":        shipment.TenantID,
-		"shipment_id":      shipment.ID,
-		"order_id":         shipment.OrderID,
-		"tracking_number":  shipment.TrackingNumber,
-		"carrier":          shipment.Carrier,
-		"status":           string(newStatus),
+		"tenant_id":       shipment.TenantID,
+		"shipment_id":     shipment.ID,
+		"order_id":        shipment.OrderID,
+		"tracking_number": shipment.TrackingNumber,
+		"carrier":         shipment.Carrier,
+		"status":          string(newStatus),
 	})
 
 	// Reload with details
-	updated, err := s.repo.GetByIDWithDetails(ctx, id)
+	updated, err := s.repo.GetByIDWithDetails(ctx, tenantID, id)
 	if err != nil {
 		return toShipmentResponse(shipment), nil
 	}
 	return toShipmentResponse(updated), nil
 }
 
-func (s *shippingService) CancelShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
-	shipment, err := s.repo.GetByID(ctx, id)
+func (s *shippingService) CancelShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
+	shipment, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}

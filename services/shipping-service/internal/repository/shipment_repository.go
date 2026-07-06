@@ -10,9 +10,9 @@ import (
 
 type ShipmentRepository interface {
 	Create(ctx context.Context, shipment *models.Shipment) error
-	GetByID(ctx context.Context, id string) (*models.Shipment, error)
-	GetByIDWithDetails(ctx context.Context, id string) (*models.Shipment, error)
-	GetByTrackingNumber(ctx context.Context, trackingNumber string) (*models.Shipment, error)
+	GetByID(ctx context.Context, tenantID, id string) (*models.Shipment, error)
+	GetByIDWithDetails(ctx context.Context, tenantID, id string) (*models.Shipment, error)
+	GetByTrackingNumber(ctx context.Context, tenantID, trackingNumber string) (*models.Shipment, error)
 	GetByOrderID(ctx context.Context, tenantID, orderID string) (*models.Shipment, error)
 	List(ctx context.Context, tenantID string, page, pageSize int, status string) ([]models.Shipment, int64, error)
 	Update(ctx context.Context, shipment *models.Shipment) error
@@ -32,9 +32,9 @@ func (r *shipmentRepository) Create(ctx context.Context, shipment *models.Shipme
 	return r.db.WithContext(ctx).Create(shipment).Error
 }
 
-func (r *shipmentRepository) GetByID(ctx context.Context, id string) (*models.Shipment, error) {
+func (r *shipmentRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Shipment, error) {
 	var shipment models.Shipment
-	err := r.db.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", id).First(&shipment).Error
+	err := r.db.WithContext(ctx).Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", id, tenantID).First(&shipment).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("shipment not found")
@@ -44,14 +44,14 @@ func (r *shipmentRepository) GetByID(ctx context.Context, id string) (*models.Sh
 	return &shipment, nil
 }
 
-func (r *shipmentRepository) GetByIDWithDetails(ctx context.Context, id string) (*models.Shipment, error) {
+func (r *shipmentRepository) GetByIDWithDetails(ctx context.Context, tenantID, id string) (*models.Shipment, error) {
 	var shipment models.Shipment
 	err := r.db.WithContext(ctx).
 		Preload("Items").
 		Preload("Events", func(db *gorm.DB) *gorm.DB {
 			return db.Order("occurred_at DESC")
 		}).
-		Where("id = ? AND deleted_at IS NULL", id).
+		Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", id, tenantID).
 		First(&shipment).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -62,14 +62,14 @@ func (r *shipmentRepository) GetByIDWithDetails(ctx context.Context, id string) 
 	return &shipment, nil
 }
 
-func (r *shipmentRepository) GetByTrackingNumber(ctx context.Context, trackingNumber string) (*models.Shipment, error) {
+func (r *shipmentRepository) GetByTrackingNumber(ctx context.Context, tenantID, trackingNumber string) (*models.Shipment, error) {
 	var shipment models.Shipment
 	err := r.db.WithContext(ctx).
 		Preload("Items").
 		Preload("Events", func(db *gorm.DB) *gorm.DB {
 			return db.Order("occurred_at DESC")
 		}).
-		Where("tracking_number = ? AND deleted_at IS NULL", trackingNumber).
+		Where("tracking_number = ? AND tenant_id = ? AND deleted_at IS NULL", trackingNumber, tenantID).
 		First(&shipment).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

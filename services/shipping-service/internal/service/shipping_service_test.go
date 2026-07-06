@@ -267,9 +267,9 @@ func TestGetShipment_Success(t *testing.T) {
 	ctx := context.Background()
 	shipment := createTestShipment()
 
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
-	result, err := svc.GetShipment(ctx, "shipment-1")
+	result, err := svc.GetShipment(ctx, "tenant-1", "shipment-1")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -283,9 +283,9 @@ func TestGetShipment_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByIDWithDetails", ctx, "nonexistent").Return(nil, errors.New("shipment not found"))
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("shipment not found"))
 
-	result, err := svc.GetShipment(ctx, "nonexistent")
+	result, err := svc.GetShipment(ctx, "tenant-1", "nonexistent")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -296,9 +296,9 @@ func TestGetShipmentByTracking_Success(t *testing.T) {
 	ctx := context.Background()
 	shipment := createTestShipment()
 
-	mockRepo.On("GetByTrackingNumber", ctx, "PA1234567890").Return(shipment, nil)
+	mockRepo.On("GetByTrackingNumber", ctx, "tenant-1", "PA1234567890").Return(shipment, nil)
 
-	result, err := svc.GetShipmentByTracking(ctx, "PA1234567890")
+	result, err := svc.GetShipmentByTracking(ctx, "tenant-1", "PA1234567890")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "PA1234567890", result.TrackingNumber)
@@ -308,9 +308,9 @@ func TestGetShipmentByTracking_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByTrackingNumber", ctx, "INVALID").Return(nil, errors.New("shipment not found"))
+	mockRepo.On("GetByTrackingNumber", ctx, "tenant-1", "INVALID").Return(nil, errors.New("shipment not found"))
 
-	result, err := svc.GetShipmentByTracking(ctx, "INVALID")
+	result, err := svc.GetShipmentByTracking(ctx, "tenant-1", "INVALID")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -393,10 +393,10 @@ func TestUpdateStatus_PickedUp(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusLabelCreated
 
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil).Once()
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil).Once()
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Shipment")).Return(nil)
 	mockRepo.On("CreateEvent", ctx, mock.AnythingOfType("*models.ShipmentEvent")).Return(nil)
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
 	req := &models.UpdateStatusRequest{
 		Status:      "picked_up",
@@ -404,7 +404,7 @@ func TestUpdateStatus_PickedUp(t *testing.T) {
 		Description: "Package picked up by carrier",
 	}
 
-	result, err := svc.UpdateStatus(ctx, "shipment-1", req)
+	result, err := svc.UpdateStatus(ctx, "tenant-1", "shipment-1", req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -418,10 +418,10 @@ func TestUpdateStatus_Delivered(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusOutForDelivery
 
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil).Once()
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil).Once()
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Shipment")).Return(nil)
 	mockRepo.On("CreateEvent", ctx, mock.AnythingOfType("*models.ShipmentEvent")).Return(nil)
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
 	req := &models.UpdateStatusRequest{
 		Status:      "delivered",
@@ -430,7 +430,7 @@ func TestUpdateStatus_Delivered(t *testing.T) {
 		SignedBy:    "John Doe",
 	}
 
-	result, err := svc.UpdateStatus(ctx, "shipment-1", req)
+	result, err := svc.UpdateStatus(ctx, "tenant-1", "shipment-1", req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -445,13 +445,13 @@ func TestUpdateStatus_InvalidTransition(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusPending
 
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
 	req := &models.UpdateStatusRequest{
 		Status: "delivered",
 	}
 
-	result, err := svc.UpdateStatus(ctx, "shipment-1", req)
+	result, err := svc.UpdateStatus(ctx, "tenant-1", "shipment-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -462,11 +462,11 @@ func TestUpdateStatus_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByIDWithDetails", ctx, "nonexistent").Return(nil, errors.New("shipment not found"))
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("shipment not found"))
 
 	req := &models.UpdateStatusRequest{Status: "in_transit"}
 
-	result, err := svc.UpdateStatus(ctx, "nonexistent", req)
+	result, err := svc.UpdateStatus(ctx, "tenant-1", "nonexistent", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -479,17 +479,17 @@ func TestUpdateStatus_Failed(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusInTransit
 
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil).Once()
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil).Once()
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Shipment")).Return(nil)
 	mockRepo.On("CreateEvent", ctx, mock.AnythingOfType("*models.ShipmentEvent")).Return(nil)
-	mockRepo.On("GetByIDWithDetails", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByIDWithDetails", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
 	req := &models.UpdateStatusRequest{
 		Status:      "failed",
 		Description: "Delivery attempt failed - no one home",
 	}
 
-	result, err := svc.UpdateStatus(ctx, "shipment-1", req)
+	result, err := svc.UpdateStatus(ctx, "tenant-1", "shipment-1", req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -505,11 +505,11 @@ func TestCancelShipment_Pending(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusPending
 
-	mockRepo.On("GetByID", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Shipment")).Return(nil)
 	mockRepo.On("CreateEvent", ctx, mock.AnythingOfType("*models.ShipmentEvent")).Return(nil)
 
-	result, err := svc.CancelShipment(ctx, "shipment-1")
+	result, err := svc.CancelShipment(ctx, "tenant-1", "shipment-1")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -523,11 +523,11 @@ func TestCancelShipment_LabelCreated(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusLabelCreated
 
-	mockRepo.On("GetByID", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Shipment")).Return(nil)
 	mockRepo.On("CreateEvent", ctx, mock.AnythingOfType("*models.ShipmentEvent")).Return(nil)
 
-	result, err := svc.CancelShipment(ctx, "shipment-1")
+	result, err := svc.CancelShipment(ctx, "tenant-1", "shipment-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusCancelled, result.Status)
@@ -540,9 +540,9 @@ func TestCancelShipment_AlreadyInTransit(t *testing.T) {
 	shipment := createTestShipment()
 	shipment.Status = models.StatusInTransit
 
-	mockRepo.On("GetByID", ctx, "shipment-1").Return(shipment, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "shipment-1").Return(shipment, nil)
 
-	result, err := svc.CancelShipment(ctx, "shipment-1")
+	result, err := svc.CancelShipment(ctx, "tenant-1", "shipment-1")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -553,9 +553,9 @@ func TestCancelShipment_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("shipment not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("shipment not found"))
 
-	result, err := svc.CancelShipment(ctx, "nonexistent")
+	result, err := svc.CancelShipment(ctx, "tenant-1", "nonexistent")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

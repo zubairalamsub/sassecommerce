@@ -16,24 +16,24 @@ func (m *MockShipmentRepository) Create(ctx context.Context, shipment *models.Sh
 	return args.Error(0)
 }
 
-func (m *MockShipmentRepository) GetByID(ctx context.Context, id string) (*models.Shipment, error) {
-	args := m.Called(ctx, id)
+func (m *MockShipmentRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Shipment, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.Shipment), args.Error(1)
 }
 
-func (m *MockShipmentRepository) GetByIDWithDetails(ctx context.Context, id string) (*models.Shipment, error) {
-	args := m.Called(ctx, id)
+func (m *MockShipmentRepository) GetByIDWithDetails(ctx context.Context, tenantID, id string) (*models.Shipment, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.Shipment), args.Error(1)
 }
 
-func (m *MockShipmentRepository) GetByTrackingNumber(ctx context.Context, trackingNumber string) (*models.Shipment, error) {
-	args := m.Called(ctx, trackingNumber)
+func (m *MockShipmentRepository) GetByTrackingNumber(ctx context.Context, tenantID, trackingNumber string) (*models.Shipment, error) {
+	args := m.Called(ctx, tenantID, trackingNumber)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

@@ -255,7 +255,7 @@ func (c *EventConsumer) handleOrderCancelled(ctx context.Context, payload map[st
 	case string(models.StatusInTransit), string(models.StatusDelivered), string(models.StatusCancelled):
 		return nil
 	}
-	if _, err := c.service.CancelShipment(ctx, shipment.ID); err != nil {
+	if _, err := c.service.CancelShipment(ctx, tenantID, shipment.ID); err != nil {
 		c.logger.WithError(err).WithField("shipment_id", shipment.ID).
 			Error("Failed to cancel shipment for cancelled order")
 		return err

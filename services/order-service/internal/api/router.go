@@ -137,6 +137,8 @@ func (r *Router) requestResponseLogger() gin.HandlerFunc {
 		"x-api-key":     true,
 	}
 
+	sensitiveFields := sharedmiddleware.SensitiveFieldSet(sharedmiddleware.DefaultSensitiveJSONFields)
+
 	return func(c *gin.Context) {
 		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/ready" || c.Request.URL.Path == "/metrics" {
 			c.Next()
@@ -186,8 +188,8 @@ func (r *Router) requestResponseLogger() gin.HandlerFunc {
 			zap.Int64("duration_ms", duration.Milliseconds()),
 			zap.String("client_ip", c.ClientIP()),
 			zap.Any("req_headers", headers),
-			zap.String("req_body", reqBody),
-			zap.String("resp_body", respWriter.body.String()),
+			zap.String("req_body", sharedmiddleware.RedactJSONBody(reqBody, sensitiveFields)),
+			zap.String("resp_body", sharedmiddleware.RedactJSONBody(respWriter.body.String(), sensitiveFields)),
 			zap.Int("resp_size", c.Writer.Size()),
 		}
 

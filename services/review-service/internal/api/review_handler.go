@@ -6,9 +6,23 @@ import (
 
 	"github.com/ecommerce/review-service/internal/models"
 	"github.com/ecommerce/review-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
+
+// staffRoles are the roles permitted to perform moderation, seller responses,
+// and cross-user (admin) deletes. Roles mirror frontend/src/stores/auth.ts.
+var staffRoles = []string{"super_admin", "admin", "moderator"}
+
+func isStaffRole(role string) bool {
+	for _, r := range staffRoles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
 
 type ReviewHandler struct {
 	service service.ReviewService
@@ -23,13 +37,20 @@ func NewReviewHandler(service service.ReviewService, logger *logrus.Logger) *Rev
 }
 
 func (h *ReviewHandler) CreateReview(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
+
 	var req models.CreateReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	review, err := h.service.CreateReview(c.Request.Context(), &req)
+	review, err := h.service.CreateReview(c.Request.Context(), tenantID, userID, &req)
 	if err != nil {
 		if err.Error() == "user has already reviewed this product" {
 			c.JSON(http.StatusConflict, ErrorResponse{Error: err.Error()})
@@ -45,8 +66,13 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 
 func (h *ReviewHandler) GetReview(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
 
-	review, err := h.service.GetReview(c.Request.Context(), id)
+	review, err := h.service.GetReview(c.Request.Context(), tenantID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
@@ -127,9 +153,10 @@ func (h *ReviewHandler) GetUserReviews(c *gin.Context) {
 
 func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.Query("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "user_id query parameter is required"})
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 
@@ -139,7 +166,7 @@ func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 		return
 	}
 
-	review, err := h.service.UpdateReview(c.Request.Context(), id, userID, &req)
+	review, err := h.service.UpdateReview(c.Request.Context(), tenantID, userID, id, &req)
 	if err != nil {
 		if err.Error() == "review not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
@@ -158,9 +185,15 @@ func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 
 func (h *ReviewHandler) DeleteReview(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.Query("user_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
+	isStaff := isStaffRole(sharedmiddleware.GetUserRole(c))
 
-	if err := h.service.DeleteReview(c.Request.Context(), id, userID); err != nil {
+	if err := h.service.DeleteReview(c.Request.Context(), tenantID, userID, id, isStaff); err != nil {
 		if err.Error() == "review not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 			return
@@ -178,6 +211,11 @@ func (h *ReviewHandler) DeleteReview(c *gin.Context) {
 
 func (h *ReviewHandler) ModerateReview(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
 
 	var req models.ModerateReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -185,7 +223,7 @@ func (h *ReviewHandler) ModerateReview(c *gin.Context) {
 		return
 	}
 
-	review, err := h.service.ModerateReview(c.Request.Context(), id, &req)
+	review, err := h.service.ModerateReview(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		if err.Error() == "review not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
@@ -200,6 +238,11 @@ func (h *ReviewHandler) ModerateReview(c *gin.Context) {
 
 func (h *ReviewHandler) AddHelpfulVote(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
 
 	var req models.HelpfulVoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -207,7 +250,7 @@ func (h *ReviewHandler) AddHelpfulVote(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.AddHelpfulVote(c.Request.Context(), id, &req); err != nil {
+	if err := h.service.AddHelpfulVote(c.Request.Context(), tenantID, id, &req); err != nil {
 		if err.Error() == "review not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 			return
@@ -221,6 +264,11 @@ func (h *ReviewHandler) AddHelpfulVote(c *gin.Context) {
 
 func (h *ReviewHandler) RespondToReview(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
 
 	var req models.SellerResponseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,7 +276,7 @@ func (h *ReviewHandler) RespondToReview(c *gin.Context) {
 		return
 	}
 
-	review, err := h.service.RespondToReview(c.Request.Context(), id, &req)
+	review, err := h.service.RespondToReview(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		if err.Error() == "review not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
@@ -269,8 +317,11 @@ func RegisterRoutes(router *gin.Engine, handler *ReviewHandler) {
 			reviews.PUT("/:id", handler.UpdateReview)
 			reviews.DELETE("/:id", handler.DeleteReview)
 			reviews.POST("/:id/helpful", handler.AddHelpfulVote)
-			reviews.POST("/:id/moderate", handler.ModerateReview)
-			reviews.POST("/:id/respond", handler.RespondToReview)
+			// Staff-only actions: moderation and seller responses. There is no
+			// vendor role in the platform (see frontend auth store), so seller
+			// responses are gated on the same staff roles as moderation.
+			reviews.POST("/:id/moderate", sharedmiddleware.RequireRole(staffRoles...), handler.ModerateReview)
+			reviews.POST("/:id/respond", sharedmiddleware.RequireRole(staffRoles...), handler.RespondToReview)
 			reviews.GET("/product/:productId", handler.GetProductReviews)
 			reviews.GET("/product/:productId/summary", handler.GetProductSummary)
 			reviews.GET("/user/:userId", handler.GetUserReviews)

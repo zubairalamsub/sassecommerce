@@ -16,11 +16,11 @@ const (
 
 // Review represents a product review
 type Review struct {
-	ID        string       `bson:"_id,omitempty" json:"id"`
-	TenantID  string       `bson:"tenant_id" json:"tenant_id"`
-	ProductID string       `bson:"product_id" json:"product_id"`
-	UserID    string       `bson:"user_id" json:"user_id"`
-	OrderID   string       `bson:"order_id,omitempty" json:"order_id,omitempty"`
+	ID        string `bson:"_id,omitempty" json:"id"`
+	TenantID  string `bson:"tenant_id" json:"tenant_id"`
+	ProductID string `bson:"product_id" json:"product_id"`
+	UserID    string `bson:"user_id" json:"user_id"`
+	OrderID   string `bson:"order_id,omitempty" json:"order_id,omitempty"`
 
 	// Review content
 	Rating  int    `bson:"rating" json:"rating"` // 1-5
@@ -43,7 +43,7 @@ type Review struct {
 	VerifiedPurchase bool `bson:"verified_purchase" json:"verified_purchase"`
 
 	// Seller response
-	SellerResponse   string     `bson:"seller_response,omitempty" json:"seller_response,omitempty"`
+	SellerResponse    string     `bson:"seller_response,omitempty" json:"seller_response,omitempty"`
 	SellerRespondedAt *time.Time `bson:"seller_responded_at,omitempty" json:"seller_responded_at,omitempty"`
 
 	// Timestamps
@@ -54,19 +54,20 @@ type Review struct {
 
 // ReviewSummary holds aggregated rating data for a product
 type ReviewSummary struct {
-	ProductID    string             `bson:"_id" json:"product_id"`
-	TenantID     string             `bson:"tenant_id" json:"tenant_id"`
-	AverageRating float64           `bson:"average_rating" json:"average_rating"`
-	TotalReviews int               `bson:"total_reviews" json:"total_reviews"`
-	Distribution map[string]int    `bson:"distribution" json:"distribution"` // "1":5, "2":3, etc.
+	ProductID     string         `bson:"_id" json:"product_id"`
+	TenantID      string         `bson:"tenant_id" json:"tenant_id"`
+	AverageRating float64        `bson:"average_rating" json:"average_rating"`
+	TotalReviews  int            `bson:"total_reviews" json:"total_reviews"`
+	Distribution  map[string]int `bson:"distribution" json:"distribution"` // "1":5, "2":3, etc.
 }
 
 // === Request DTOs ===
 
 type CreateReviewRequest struct {
-	TenantID  string   `json:"tenant_id" binding:"required"`
+	// TenantID and UserID are populated from the verified JWT, never the body.
+	TenantID  string   `json:"-"`
 	ProductID string   `json:"product_id" binding:"required"`
-	UserID    string   `json:"user_id" binding:"required"`
+	UserID    string   `json:"-"`
 	OrderID   string   `json:"order_id,omitempty"`
 	Rating    int      `json:"rating" binding:"required,min=1,max=5"`
 	Title     string   `json:"title" binding:"required"`
@@ -98,27 +99,27 @@ type HelpfulVoteRequest struct {
 // === Response DTOs ===
 
 type ReviewResponse struct {
-	ID               string       `json:"id"`
-	TenantID         string       `json:"tenant_id"`
-	ProductID        string       `json:"product_id"`
-	UserID           string       `json:"user_id"`
-	OrderID          string       `json:"order_id,omitempty"`
-	Rating           int          `json:"rating"`
-	Title            string       `json:"title"`
-	Comment          string       `json:"comment"`
-	Images           []string     `json:"images,omitempty"`
-	Status           ReviewStatus `json:"status"`
-	HelpfulCount     int          `json:"helpful_count"`
-	UnhelpfulCount   int          `json:"unhelpful_count"`
-	VerifiedPurchase bool         `json:"verified_purchase"`
-	SellerResponse   string       `json:"seller_response,omitempty"`
-	SellerRespondedAt *time.Time  `json:"seller_responded_at,omitempty"`
-	CreatedAt        time.Time    `json:"created_at"`
-	UpdatedAt        time.Time    `json:"updated_at"`
+	ID                string       `json:"id"`
+	TenantID          string       `json:"tenant_id"`
+	ProductID         string       `json:"product_id"`
+	UserID            string       `json:"user_id"`
+	OrderID           string       `json:"order_id,omitempty"`
+	Rating            int          `json:"rating"`
+	Title             string       `json:"title"`
+	Comment           string       `json:"comment"`
+	Images            []string     `json:"images,omitempty"`
+	Status            ReviewStatus `json:"status"`
+	HelpfulCount      int          `json:"helpful_count"`
+	UnhelpfulCount    int          `json:"unhelpful_count"`
+	VerifiedPurchase  bool         `json:"verified_purchase"`
+	SellerResponse    string       `json:"seller_response,omitempty"`
+	SellerRespondedAt *time.Time   `json:"seller_responded_at,omitempty"`
+	CreatedAt         time.Time    `json:"created_at"`
+	UpdatedAt         time.Time    `json:"updated_at"`
 }
 
 type ReviewSummaryResponse struct {
-	ProductID     string          `json:"product_id"`
+	ProductID     string         `json:"product_id"`
 	AverageRating float64        `json:"average_rating"`
 	TotalReviews  int            `json:"total_reviews"`
 	Distribution  map[string]int `json:"distribution"`

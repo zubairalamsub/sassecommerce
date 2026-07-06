@@ -51,6 +51,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Required for cosign keyless signing (OIDC identity token)
+      id-token: write
 
     strategy:
       matrix:
@@ -80,6 +82,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: services/${{ matrix.service }}
@@ -88,3 +91,16 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing: the signature is bound to this workflow's OIDC
+      # identity and recorded in the Rekor transparency log. Enforce at
+      # deploy time with a Kyverno/OPA verifyImages policy pinned to
+      # this repository's workflow identity.
+      - name: Sign image with cosign
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

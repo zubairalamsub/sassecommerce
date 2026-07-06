@@ -54,10 +54,11 @@ Third remediation pass on the same branch (one commit per finding):
 | A09-1 no security alerts (MEDIUM) | **FIXED** | 'security' Prometheus alert group: failed-login spikes, per-service 401/403 spikes, forgot-password surges, 429 spikes, registration surges |
 | Git-history secrets scan (follow-up) | **PASS** | All 40 commits scanned for AWS keys, private keys, GitHub/Slack/Stripe/Google tokens, JWTs, and generic credential assignments — only demo seeds, doc placeholders, and test fixtures found |
 
-Still open: A08-2/3 (image signing + CI integrity — no CI pipeline exists in
-the repo yet to attach cosign to), B03 (JWT in localStorage — needs a
-Next.js BFF/HttpOnly-cookie refactor), and the tenant-isolation
-cross-check + CI/CD review follow-ups.
+| A08-2 no container image signing (MEDIUM) | **FIXED** | deploy.yml cosign-signs every pushed image by digest (keyless/OIDC, Rekor-logged); cluster-side verifyImages policy still recommended |
+
+Still open: A08-3 (broader CI integrity review — e.g. pinning actions by
+SHA), B03 (JWT in localStorage — needs a Next.js BFF/HttpOnly-cookie
+refactor), and the tenant-isolation cross-check follow-up.
 
 ---
 

@@ -293,7 +293,7 @@ func (suite *CategoryRepositoryTestSuite) TestUpdate() {
 	category.Name = "Updated Name"
 	category.Slug = "updated-slug"
 	category.SortOrder = 2
-	err = suite.repository.Update(suite.ctx, category.ID.Hex(), category)
+	err = suite.repository.Update(suite.ctx, "tenant-1", category.ID.Hex(), category)
 	suite.NoError(err)
 
 	// Verify update
@@ -318,7 +318,7 @@ func (suite *CategoryRepositoryTestSuite) TestDelete() {
 	suite.NoError(err)
 
 	// Delete the category
-	err = suite.repository.Delete(suite.ctx, category.ID.Hex())
+	err = suite.repository.Delete(suite.ctx, "tenant-1", category.ID.Hex())
 	suite.NoError(err)
 
 	// Verify deletion (soft delete)
@@ -341,7 +341,7 @@ func (suite *CategoryRepositoryTestSuite) TestUpdateStatus() {
 	suite.NoError(err)
 
 	// Update status
-	err = suite.repository.UpdateStatus(suite.ctx, category.ID.Hex(), models.CategoryStatusInactive)
+	err = suite.repository.UpdateStatus(suite.ctx, "tenant-1", category.ID.Hex(), models.CategoryStatusInactive)
 	suite.NoError(err)
 
 	// Verify status update

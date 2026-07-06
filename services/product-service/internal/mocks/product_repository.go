@@ -56,13 +56,13 @@ func (m *MockProductRepository) Search(ctx context.Context, tenantID, query stri
 	return args.Get(0).([]models.Product), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockProductRepository) Update(ctx context.Context, id string, product *models.Product) error {
-	args := m.Called(ctx, id, product)
+func (m *MockProductRepository) Update(ctx context.Context, tenantID, id string, product *models.Product) error {
+	args := m.Called(ctx, tenantID, id, product)
 	return args.Error(0)
 }
 
-func (m *MockProductRepository) Delete(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockProductRepository) Delete(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
@@ -71,8 +71,8 @@ func (m *MockProductRepository) SKUExists(ctx context.Context, tenantID, sku str
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockProductRepository) UpdateStatus(ctx context.Context, id string, status models.ProductStatus) error {
-	args := m.Called(ctx, id, status)
+func (m *MockProductRepository) UpdateStatus(ctx context.Context, tenantID, id string, status models.ProductStatus) error {
+	args := m.Called(ctx, tenantID, id, status)
 	return args.Error(0)
 }
 

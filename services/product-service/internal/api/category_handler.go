@@ -35,12 +35,21 @@ func NewCategoryHandler(categoryService service.CategoryService, logger *logrus.
 // @Failure 500 {object} map[string]string
 // @Router /categories [post]
 func (h *CategoryHandler) CreateCategory(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
+
 	var req models.CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.WithError(err).Error("Invalid request body")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
+
+	// Tenant is always taken from the authenticated JWT, never the request body.
+	req.TenantID = tenantID
 
 	category, err := h.categoryService.CreateCategory(c.Request.Context(), &req)
 	if err != nil {
@@ -62,8 +71,13 @@ func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 // @Router /categories/{id} [get]
 func (h *CategoryHandler) GetCategory(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
-	category, err := h.categoryService.GetCategoryByID(c.Request.Context(), id)
+	category, err := h.categoryService.GetCategoryByID(c.Request.Context(), tenantID, id)
 	if err != nil {
 		h.logger.WithError(err).WithField("category_id", id).Error("Failed to get category")
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
@@ -204,6 +218,11 @@ func (h *CategoryHandler) ListCategoriesByParent(c *gin.Context) {
 // @Router /categories/{id} [put]
 func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
 	var req models.UpdateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -212,7 +231,7 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	category, err := h.categoryService.UpdateCategory(c.Request.Context(), id, &req)
+	category, err := h.categoryService.UpdateCategory(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		h.logger.WithError(err).WithField("category_id", id).Error("Failed to update category")
 		if err.Error() == "category not found" {
@@ -235,8 +254,13 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 // @Router /categories/{id} [delete]
 func (h *CategoryHandler) DeleteCategory(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
-	if err := h.categoryService.DeleteCategory(c.Request.Context(), id); err != nil {
+	if err := h.categoryService.DeleteCategory(c.Request.Context(), tenantID, id); err != nil {
 		h.logger.WithError(err).WithField("category_id", id).Error("Failed to delete category")
 		if err.Error() == "failed to delete category" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
@@ -262,6 +286,11 @@ func (h *CategoryHandler) DeleteCategory(c *gin.Context) {
 // @Router /categories/{id}/status [patch]
 func (h *CategoryHandler) UpdateCategoryStatus(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
 	var req struct {
 		Status models.CategoryStatus `json:"status" binding:"required"`
@@ -290,7 +319,7 @@ func (h *CategoryHandler) UpdateCategoryStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.categoryService.UpdateCategoryStatus(c.Request.Context(), id, req.Status); err != nil {
+	if err := h.categoryService.UpdateCategoryStatus(c.Request.Context(), tenantID, id, req.Status); err != nil {
 		h.logger.WithError(err).WithField("category_id", id).Error("Failed to update category status")
 		if err.Error() == "failed to update category status" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})

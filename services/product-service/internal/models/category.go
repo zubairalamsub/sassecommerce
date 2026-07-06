@@ -35,15 +35,18 @@ const (
 
 // CreateCategoryRequest represents a category creation request
 type CreateCategoryRequest struct {
-	TenantID    string `json:"tenant_id" binding:"required"`
-	Name        string `json:"name" binding:"required"`
-	Slug        string `json:"slug" binding:"required"`
-	Description string `json:"description"`
+	// TenantID is never bound from the request body; it is set by the handler
+	// from the authenticated JWT (sharedmiddleware.GetTenantID). Tagging it
+	// json:"-" prevents a client from spoofing another tenant via the body.
+	TenantID    string  `json:"-"`
+	Name        string  `json:"name" binding:"required"`
+	Slug        string  `json:"slug" binding:"required"`
+	Description string  `json:"description"`
 	ParentID    *string `json:"parent_id"`
-	Image       string `json:"image"`
-	Icon        string `json:"icon"`
-	SortOrder   int    `json:"sort_order"`
-	CreatedBy   string `json:"created_by" binding:"required"`
+	Image       string  `json:"image"`
+	Icon        string  `json:"icon"`
+	SortOrder   int     `json:"sort_order"`
+	CreatedBy   string  `json:"created_by" binding:"required"`
 }
 
 // UpdateCategoryRequest represents a category update request

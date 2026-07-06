@@ -35,12 +35,21 @@ func NewProductHandler(productService service.ProductService, logger *logrus.Log
 // @Failure 500 {object} map[string]string
 // @Router /products [post]
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
+
 	var req models.CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.WithError(err).Error("Invalid request body")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
+
+	// Tenant is always taken from the authenticated JWT, never the request body.
+	req.TenantID = tenantID
 
 	product, err := h.productService.CreateProduct(c.Request.Context(), &req)
 	if err != nil {
@@ -62,8 +71,13 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 // @Router /products/{id} [get]
 func (h *ProductHandler) GetProduct(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
-	product, err := h.productService.GetProductByID(c.Request.Context(), id)
+	product, err := h.productService.GetProductByID(c.Request.Context(), tenantID, id)
 	if err != nil {
 		h.logger.WithError(err).WithField("product_id", id).Error("Failed to get product")
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
@@ -249,6 +263,11 @@ func (h *ProductHandler) SearchProducts(c *gin.Context) {
 // @Router /products/{id} [put]
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
 	var req models.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -257,7 +276,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	product, err := h.productService.UpdateProduct(c.Request.Context(), id, &req)
+	product, err := h.productService.UpdateProduct(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		h.logger.WithError(err).WithField("product_id", id).Error("Failed to update product")
 		if err.Error() == "product not found" {
@@ -280,8 +299,13 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 // @Router /products/{id} [delete]
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
-	if err := h.productService.DeleteProduct(c.Request.Context(), id); err != nil {
+	if err := h.productService.DeleteProduct(c.Request.Context(), tenantID, id); err != nil {
 		h.logger.WithError(err).WithField("product_id", id).Error("Failed to delete product")
 		if err.Error() == "failed to delete product" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
@@ -307,6 +331,11 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 // @Router /products/{id}/status [patch]
 func (h *ProductHandler) UpdateProductStatus(c *gin.Context) {
 	id := c.Param("id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant ID not found in context"})
+		return
+	}
 
 	var req struct {
 		Status models.ProductStatus `json:"status" binding:"required"`
@@ -337,7 +366,7 @@ func (h *ProductHandler) UpdateProductStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.productService.UpdateProductStatus(c.Request.Context(), id, req.Status); err != nil {
+	if err := h.productService.UpdateProductStatus(c.Request.Context(), tenantID, id, req.Status); err != nil {
 		h.logger.WithError(err).WithField("product_id", id).Error("Failed to update product status")
 		if err.Error() == "failed to update product status" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})

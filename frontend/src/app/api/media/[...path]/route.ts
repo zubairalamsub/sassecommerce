@@ -4,13 +4,16 @@ import path from 'path';
 
 const STORAGE_PATH = process.env.MEDIA_STORAGE_PATH || path.join(process.cwd(), 'media');
 
+// SVG is deliberately excluded: served as image/svg+xml it can execute
+// embedded scripts in this origin if opened directly. Any legacy .svg file
+// on disk falls through to application/octet-stream with the no-sniff and
+// attachment headers below, which browsers will not render.
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
   '.avif': 'image/avif',
 };
 
@@ -35,17 +38,22 @@ export async function GET(
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const contentType = MIME_TYPES[ext];
 
     const buffer = await readFile(filePath);
 
-    return new Response(buffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Content-Length': String(buffer.length),
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': contentType || 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Length': String(buffer.length),
+    };
+    if (!contentType) {
+      // Unknown types download instead of rendering in this origin.
+      headers['Content-Disposition'] = 'attachment';
+    }
+
+    return new Response(buffer, { headers });
   } catch {
     return new Response('Internal server error', { status: 500 });
   }

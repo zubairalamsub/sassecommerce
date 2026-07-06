@@ -3,10 +3,10 @@ package api
 import (
 	"bytes"
 	"io"
-	"os"
 	"strings"
 	"time"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
@@ -40,6 +40,12 @@ func (r *Router) Setup() *gin.Engine {
 	router.Use(metrics.Middleware("order-service"))
 	router.Use(r.requestResponseLogger())
 
+	// CORS: origins come from CORS_ALLOWED_ORIGINS (comma-separated) in
+	// production and fall back to localhost dev origins otherwise.
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
+		AllowCredentials: true,
+	}))
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -58,10 +64,7 @@ func (r *Router) Setup() *gin.Engine {
 	}))
 
 	// JWT Auth config
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production-12345"
-	}
+	jwtSecret := sharedconfig.MustGetJWTSecret()
 	authMw := sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret})
 
 	// API routes
@@ -134,6 +137,8 @@ func (r *Router) requestResponseLogger() gin.HandlerFunc {
 		"x-api-key":     true,
 	}
 
+	sensitiveFields := sharedmiddleware.SensitiveFieldSet(sharedmiddleware.DefaultSensitiveJSONFields)
+
 	return func(c *gin.Context) {
 		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/ready" || c.Request.URL.Path == "/metrics" {
 			c.Next()
@@ -183,8 +188,8 @@ func (r *Router) requestResponseLogger() gin.HandlerFunc {
 			zap.Int64("duration_ms", duration.Milliseconds()),
 			zap.String("client_ip", c.ClientIP()),
 			zap.Any("req_headers", headers),
-			zap.String("req_body", reqBody),
-			zap.String("resp_body", respWriter.body.String()),
+			zap.String("req_body", sharedmiddleware.RedactJSONBody(reqBody, sensitiveFields)),
+			zap.String("resp_body", sharedmiddleware.RedactJSONBody(respWriter.body.String(), sensitiveFields)),
 			zap.Int("resp_size", c.Writer.Size()),
 		}
 

@@ -97,7 +97,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	req.IPAddress = c.ClientIP()
 	req.UserAgent = c.Request.UserAgent()
 
-	loginResp, err := h.authService.Login(c.Request.Context(), &req)
+	loginResp, err := h.authService.LoginWithSession(c.Request.Context(), &req, sessionContext(c))
 	if err != nil {
 		// 429 for lockout-class errors so clients can react sensibly; the
 		// message itself never reveals whether the account exists.

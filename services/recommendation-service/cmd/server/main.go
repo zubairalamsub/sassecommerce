@@ -16,10 +16,10 @@ import (
 	"github.com/ecommerce/recommendation-service/internal/repository"
 	"github.com/ecommerce/recommendation-service/internal/service"
 	"github.com/ecommerce/recommendation-service/pkg/logger"
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/segmentio/kafka-go"
 	"gorm.io/driver/postgres"
@@ -90,12 +90,11 @@ func main() {
 		SkipPaths:       []string{"/health", "/ready", "/metrics"},
 	}))
 
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-Id"},
+	// CORS: origins come from CORS_ALLOWED_ORIGINS (comma-separated) in
+	// production and fall back to localhost dev origins otherwise. Wildcards
+	// are rejected in production and credentials only sent to explicit origins.
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
 		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
 	}))
 
 	router.GET("/health", func(c *gin.Context) {
@@ -110,10 +109,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(metrics.Handler()))
 
 	// JWT Auth middleware
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production-12345"
-	}
+	jwtSecret := sharedconfig.MustGetJWTSecret()
 	router.Use(sharedmiddleware.Auth(sharedmiddleware.AuthConfig{SecretKey: jwtSecret}))
 
 	api.RegisterRoutes(router, handler)

@@ -24,14 +24,36 @@ type TokenConfig struct {
 	Issuer         string
 }
 
-// RefreshToken represents a refresh token
+// RefreshToken represents a refresh token. One row is one live session:
+// the device metadata (user agent, IP) lets users review and revoke
+// individual sessions.
 type RefreshToken struct {
-	ID        string    `gorm:"primaryKey" json:"id"`
-	UserID    string    `gorm:"index;not null" json:"user_id"`
-	Token     string    `gorm:"uniqueIndex;not null" json:"token"`
-	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID         string     `gorm:"primaryKey" json:"id"`
+	UserID     string     `gorm:"index;not null" json:"user_id"`
+	TenantID   string     `gorm:"index" json:"tenant_id"`
+	Token      string     `gorm:"uniqueIndex;not null" json:"token"`
+	UserAgent  string     `json:"user_agent"`
+	IPAddress  string     `json:"ip_address"`
+	ExpiresAt  time.Time  `gorm:"not null" json:"expires_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt time.Time  `json:"last_used_at"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// RefreshTokenRequest is the body for POST /auth/refresh.
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// SessionResponse is the public shape of a login session. The refresh token
+// string itself is never included.
+type SessionResponse struct {
+	ID         string    `json:"id"`
+	UserAgent  string    `json:"user_agent"`
+	IPAddress  string    `json:"ip_address"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastUsedAt time.Time `json:"last_used_at"`
+	Current    bool      `json:"current"`
 }
 
 // TableName specifies the table name for RefreshToken

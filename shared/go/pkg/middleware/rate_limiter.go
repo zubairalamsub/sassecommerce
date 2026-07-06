@@ -1,8 +1,12 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -163,6 +167,37 @@ func RateLimitByUser(rate int, window time.Duration) gin.HandlerFunc {
 			userID := GetUserID(c)
 			if userID != "" {
 				return "user:" + userID
+			}
+			return "ip:" + c.ClientIP()
+		},
+	})
+}
+
+// rateLimitBodyPeekLimit bounds how much of a request body the body-field
+// limiter reads. Auth payloads are tiny; anything larger falls back to IP.
+const rateLimitBodyPeekLimit = 64 * 1024
+
+// RateLimitByBodyField returns a rate limiter keyed by a string field in the
+// JSON request body — e.g. "email" on /login and /forgot-password (throttling
+// attacks distributed across IPs against a single account), or "token" on
+// /reset-password. The body is restored for downstream handlers. Falls back
+// to client IP when the field is absent or the body is not JSON.
+func RateLimitByBodyField(rate int, window time.Duration, field string) gin.HandlerFunc {
+	return RateLimit(RateLimitConfig{
+		Rate:   rate,
+		Window: window,
+		KeyFunc: func(c *gin.Context) string {
+			if c.Request.Body != nil && c.Request.ContentLength > 0 && c.Request.ContentLength <= rateLimitBodyPeekLimit {
+				b, err := io.ReadAll(io.LimitReader(c.Request.Body, rateLimitBodyPeekLimit))
+				if err == nil {
+					c.Request.Body = io.NopCloser(bytes.NewReader(b))
+					var m map[string]any
+					if json.Unmarshal(b, &m) == nil {
+						if v, ok := m[field].(string); ok && v != "" {
+							return field + ":" + strings.ToLower(strings.TrimSpace(v))
+						}
+					}
+				}
 			}
 			return "ip:" + c.ClientIP()
 		},

@@ -238,15 +238,13 @@ export async function demoLogin(email: string, password: string): Promise<{ user
   const entry = DEMO_USERS[email];
   if (!entry || entry.password !== password) return null;
 
+  // The server route re-validates the credentials against its own allowlist
+  // and derives the JWT claims (user id, tenant, role) server-side; it is
+  // disabled entirely in production builds.
   const res = await fetch('/api/auth/demo-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      user_id: entry.user.id,
-      tenant_id: entry.user.tenant_id || '',
-      email: entry.user.email,
-      role: entry.user.role,
-    }),
+    body: JSON.stringify({ email, password }),
   });
   if (!res.ok) return null;
   const data = await res.json();

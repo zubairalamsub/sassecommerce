@@ -53,13 +53,32 @@ async function request<T>(
   return res.json();
 }
 
-// Image Upload (Next.js API route)
+// Reads the JWT persisted by the zustand auth store. Direct localStorage
+// access (rather than importing the store) avoids a circular import:
+// stores/auth.ts already imports from this module.
+function getStoredAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('auth-storage');
+    if (!raw) return null;
+    return JSON.parse(raw)?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Image Upload (Next.js API route, staff-only — requires a valid session)
 // Returns relative paths like "products/abc123.jpg" — use mediaUrl() to build display URLs
 export async function uploadImages(files: File[], folder = 'products'): Promise<string[]> {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file));
   formData.append('folder', folder);
-  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const token = getStoredAuthToken();
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Upload failed' }));
     throw new Error(err.error || 'Upload failed');

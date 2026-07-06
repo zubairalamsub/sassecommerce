@@ -17,6 +17,7 @@ import (
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
 	"github.com/ecommerce/user-service/internal/service"
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
@@ -56,6 +57,22 @@ func main() {
 	tokenRepo := repository.NewTokenRepository(db)
 	wishlistRepo := repository.NewWishlistRepository(db)
 	loginAttemptRepo := repository.NewLoginAttemptRepository(db)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+
+	// 2FA TOTP secrets are encrypted at rest with TWO_FACTOR_ENCRYPTION_KEY
+	// (16/24/32 raw bytes). Running without it stores secrets base64-only,
+	// acceptable for local development but never in production.
+	twoFactorKey := []byte(os.Getenv("TWO_FACTOR_ENCRYPTION_KEY"))
+	if len(twoFactorKey) == 0 {
+		if sharedconfig.IsProduction() {
+			log.Fatal("TWO_FACTOR_ENCRYPTION_KEY is required in production")
+		}
+		log.Warn("TWO_FACTOR_ENCRYPTION_KEY is not set — 2FA secrets will be stored unencrypted (dev only)")
+	}
+	twoFactorRepo, err := repository.NewTwoFactorRepository(db, twoFactorKey)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to initialize 2FA repository")
+	}
 
 	// Initialize services
 	tokenConfig := models.TokenConfig{
@@ -63,6 +80,8 @@ func main() {
 		ExpirationTime: 24 * time.Hour,
 		Issuer:         "user-service",
 	}
+	twoFactorService := service.NewTwoFactorService(twoFactorRepo, log,
+		service.WithTwoFactorKafkaPublisher(kafkaProducer))
 	authService := service.NewAuthServiceWithOptions(
 		userRepo,
 		tokenConfig,
@@ -71,16 +90,19 @@ func main() {
 		service.WithTokenRepository(tokenRepo),
 		service.WithLoginAttemptRepository(loginAttemptRepo),
 		service.WithLockoutConfig(service.LockoutConfigFromEnv()),
+		service.WithRefreshTokenRepository(refreshTokenRepo),
+		service.WithTwoFactorService(twoFactorService),
 	)
 	userService := service.NewUserService(userRepo, kafkaProducer, log)
 
 	// Initialize handlers
 	authHandler := api.NewAuthHandler(authService, log)
+	twoFactorHandler := api.NewTwoFactorHandler(twoFactorService, authService, log)
 	userHandler := api.NewUserHandler(userService, log)
 	wishlistHandler := api.NewWishlistHandler(wishlistRepo, log)
 
 	// Setup router
-	router := setupRouter(authHandler, userHandler, wishlistHandler, authService, log)
+	router := setupRouter(authHandler, twoFactorHandler, userHandler, wishlistHandler, authService, log)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -137,7 +159,7 @@ func loadConfig() Config {
 		DBUser:     getEnv("DB_USER", "postgres"),
 		DBPassword: getEnv("DB_PASSWORD", "postgres"),
 		DBName:     getEnv("DB_NAME", "user_db"),
-		JWTSecret:  getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		JWTSecret:  sharedconfig.MustGetJWTSecret(),
 	}
 }
 
@@ -199,6 +221,7 @@ func runMigrations(db *gorm.DB) error {
 // setupRouter sets up the Gin router with all routes and middleware
 func setupRouter(
 	authHandler *api.AuthHandler,
+	twoFactorHandler *api.TwoFactorHandler,
 	userHandler *api.UserHandler,
 	wishlistHandler *api.WishlistHandler,
 	authService service.AuthService,
@@ -212,7 +235,9 @@ func setupRouter(
 	// Global middleware
 	router.Use(gin.Recovery())
 	router.Use(metrics.Middleware("user-service"))
-	router.Use(corsMiddleware())
+	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
+		AllowCredentials: true,
+	}))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          logger,
 		LogRequestBody:  true,
@@ -250,12 +275,39 @@ func setupRouter(
 			Window: time.Minute,
 		}))
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
-			auth.POST("/verify-email", authHandler.VerifyEmail)
-			auth.POST("/forgot-password", authHandler.ForgotPassword)
-			auth.POST("/reset-password", authHandler.ResetPassword)
-			auth.POST("/resend-verification", authHandler.ResendVerification)
+			// Per-route limits on top of the group limit. IP-keyed limits
+			// slow single-source brute force; body-field-keyed limits (email,
+			// token) throttle attacks distributed across many IPs against a
+			// single account, and cap reset/verification email spam per target.
+			auth.POST("/register",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 3, Window: time.Hour}),
+				authHandler.Register)
+			auth.POST("/login",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 5, Window: time.Minute}),
+				sharedmiddleware.RateLimitByBodyField(20, time.Hour, "email"),
+				authHandler.Login)
+			auth.POST("/verify-email",
+				sharedmiddleware.RateLimitByBodyField(5, time.Hour, "token"),
+				authHandler.VerifyEmail)
+			auth.POST("/forgot-password",
+				sharedmiddleware.RateLimitByBodyField(3, time.Hour, "email"),
+				authHandler.ForgotPassword)
+			auth.POST("/reset-password",
+				sharedmiddleware.RateLimitByBodyField(5, time.Hour, "token"),
+				authHandler.ResetPassword)
+			auth.POST("/resend-verification",
+				sharedmiddleware.RateLimitByBodyField(3, time.Hour, "email"),
+				authHandler.ResendVerification)
+			// Complete a 2FA-gated login. Limited per challenge token so a
+			// TOTP code cannot be brute-forced within the challenge TTL.
+			auth.POST("/login/2fa",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 10, Window: time.Minute}),
+				sharedmiddleware.RateLimitByBodyField(5, 5*time.Minute, "challenge_token"),
+				authHandler.VerifyTwoFactor)
+			// Rotate a refresh token for a new access+refresh pair.
+			auth.POST("/refresh",
+				sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{Rate: 30, Window: time.Minute}),
+				authHandler.Refresh)
 		}
 
 		// Protected authentication routes
@@ -264,6 +316,16 @@ func setupRouter(
 		{
 			authProtected.GET("/profile", authHandler.GetProfile)
 			authProtected.POST("/change-password", authHandler.ChangePassword)
+			authProtected.POST("/logout", authHandler.Logout)
+			authProtected.POST("/logout-all", authHandler.LogoutAll)
+			authProtected.GET("/sessions", authHandler.ListSessions)
+			authProtected.DELETE("/sessions/:id", authHandler.RevokeSession)
+
+			// TOTP two-factor enrollment management
+			authProtected.GET("/2fa", twoFactorHandler.Status)
+			authProtected.POST("/2fa/setup", twoFactorHandler.BeginSetup)
+			authProtected.POST("/2fa/confirm", twoFactorHandler.ConfirmSetup)
+			authProtected.POST("/2fa/disable", twoFactorHandler.Disable)
 		}
 
 		// Protected user routes
@@ -292,22 +354,6 @@ func setupRouter(
 	}
 
 	return router
-}
-
-// corsMiddleware adds CORS headers
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
 }
 
 // requestLoggerMiddleware logs HTTP requests

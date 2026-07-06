@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/ecommerce/product-service/internal/models"
@@ -167,12 +168,16 @@ func (r *productRepository) ListByCategory(ctx context.Context, tenantID, catego
 
 // Search searches products by name, description, or tags
 func (r *productRepository) Search(ctx context.Context, tenantID, query string, offset, limit int) ([]models.Product, int64, error) {
+	// The query is user input: escape regex metacharacters so it is matched
+	// literally. Unescaped input allows catastrophic-backtracking ReDoS and
+	// result-broadening via patterns like ".*".
+	escaped := regexp.QuoteMeta(query)
 	filter := bson.M{
 		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 		"$or": []bson.M{
-			{"name": bson.M{"$regex": query, "$options": "i"}},
-			{"description": bson.M{"$regex": query, "$options": "i"}},
+			{"name": bson.M{"$regex": escaped, "$options": "i"}},
+			{"description": bson.M{"$regex": escaped, "$options": "i"}},
 			{"tags": bson.M{"$in": []string{query}}},
 		},
 	}

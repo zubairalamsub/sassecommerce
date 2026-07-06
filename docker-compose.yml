@@ -216,6 +216,7 @@ services:
       DB_NAME: inventory_db
       JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
     depends_on:
       postgres:
         condition: service_healthy
@@ -243,6 +244,7 @@ services:
       DB_NAME: payment_db
       JWT_SECRET: your-secret-key-change-in-production-12345
       KAFKA_BROKERS: kafka:29092
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
       # SSLCommerz - set store credentials to enable (leave empty for simulated gateway)
       SSLCOMMERZ_STORE_ID: ""
       SSLCOMMERZ_STORE_PASSWORD: ""

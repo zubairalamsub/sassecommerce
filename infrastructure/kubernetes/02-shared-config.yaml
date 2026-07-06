@@ -14,6 +14,11 @@ data:
   ELASTICSEARCH_URL: http://elasticsearch:9200
   ENVIRONMENT: production
   LOG_LEVEL: info
+  # Comma-separated list of browser origins allowed to call the APIs.
+  # Required in production: with ENVIRONMENT=production the services refuse
+  # wildcard origins and allow nothing when this is empty. Replace with the
+  # real storefront/admin hostnames.
+  CORS_ALLOWED_ORIGINS: https://REPLACE_ME.example.com
   DEFAULT_CURRENCY: BDT
   DEFAULT_TIMEZONE: Asia/Dhaka
   DEFAULT_COUNTRY: BD

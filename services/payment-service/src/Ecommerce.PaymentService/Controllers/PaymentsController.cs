@@ -19,6 +19,12 @@ public class PaymentsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// The verified tenant, taken exclusively from the "tenant_id" JWT claim
+    /// (minted by user-service). NEVER trust tenant from query/body/header.
+    /// </summary>
+    private string TenantId => User.FindFirst("tenant_id")?.Value ?? string.Empty;
+
     #region Payment Endpoints
 
     /// <summary>
@@ -27,6 +33,14 @@ public class PaymentsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PaymentResponse>> ProcessPayment([FromBody] CreatePaymentRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        // Tenant is derived from the JWT, never from the request body.
+        request.TenantId = TenantId;
+
         try
         {
             var result = await _paymentService.ProcessPaymentAsync(request, cancellationToken);
@@ -57,7 +71,12 @@ public class PaymentsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<PaymentDetailResponse>> GetPayment(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _paymentService.GetPaymentByIdAsync(id, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        var result = await _paymentService.GetPaymentByIdAsync(id, TenantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
@@ -67,15 +86,14 @@ public class PaymentsController : ControllerBase
     [HttpGet("order/{orderId}")]
     public async Task<ActionResult<PaymentDetailResponse>> GetPaymentByOrder(
         string orderId,
-        [FromQuery] string tenantId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized(new { error = "Tenant claim missing from token" });
         }
 
-        var result = await _paymentService.GetPaymentByOrderIdAsync(tenantId, orderId, cancellationToken);
+        var result = await _paymentService.GetPaymentByOrderIdAsync(TenantId, orderId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
@@ -84,18 +102,17 @@ public class PaymentsController : ControllerBase
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<object>> GetPayments(
-        [FromQuery] string tenantId,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20,
         [FromQuery] string? status = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized(new { error = "Tenant claim missing from token" });
         }
 
-        var (items, total) = await _paymentService.GetPaymentsPagedAsync(tenantId, offset, limit, status, cancellationToken);
+        var (items, total) = await _paymentService.GetPaymentsPagedAsync(TenantId, offset, limit, status, cancellationToken);
         return Ok(new { data = items, total, offset, limit });
     }
 
@@ -105,15 +122,14 @@ public class PaymentsController : ControllerBase
     [HttpGet("customer/{customerId}")]
     public async Task<ActionResult<List<PaymentResponse>>> GetPaymentsByCustomer(
         string customerId,
-        [FromQuery] string tenantId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized(new { error = "Tenant claim missing from token" });
         }
 
-        var result = await _paymentService.GetPaymentsByCustomerAsync(tenantId, customerId, cancellationToken);
+        var result = await _paymentService.GetPaymentsByCustomerAsync(TenantId, customerId, cancellationToken);
         return Ok(result);
     }
 
@@ -123,9 +139,14 @@ public class PaymentsController : ControllerBase
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<PaymentResponse>> CancelPayment(Guid id, [FromBody] CancelPaymentRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
         try
         {
-            var result = await _paymentService.CancelPaymentAsync(id, request, cancellationToken);
+            var result = await _paymentService.CancelPaymentAsync(id, TenantId, request, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -148,9 +169,14 @@ public class PaymentsController : ControllerBase
     [HttpPost("{id:guid}/refund")]
     public async Task<ActionResult<RefundResponse>> RefundPayment(Guid id, [FromBody] RefundPaymentRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
         try
         {
-            var result = await _paymentService.RefundPaymentAsync(id, request, cancellationToken);
+            var result = await _paymentService.RefundPaymentAsync(id, TenantId, request, cancellationToken);
 
             if (result.Status == "Failed")
             {
@@ -175,7 +201,12 @@ public class PaymentsController : ControllerBase
     [HttpGet("refunds/{refundId:guid}")]
     public async Task<ActionResult<RefundResponse>> GetRefund(Guid refundId, CancellationToken cancellationToken)
     {
-        var result = await _paymentService.GetRefundByIdAsync(refundId, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        var result = await _paymentService.GetRefundByIdAsync(refundId, TenantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
@@ -185,7 +216,12 @@ public class PaymentsController : ControllerBase
     [HttpGet("{id:guid}/refunds")]
     public async Task<ActionResult<List<RefundResponse>>> GetRefundsByPayment(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _paymentService.GetRefundsByPaymentAsync(id, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        var result = await _paymentService.GetRefundsByPaymentAsync(id, TenantId, cancellationToken);
         return Ok(result);
     }
 
@@ -199,6 +235,14 @@ public class PaymentsController : ControllerBase
     [HttpPost("methods")]
     public async Task<ActionResult<PaymentMethodResponse>> CreatePaymentMethod([FromBody] CreatePaymentMethodRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        // Tenant is derived from the JWT, never from the request body.
+        request.TenantId = TenantId;
+
         try
         {
             var result = await _paymentService.CreatePaymentMethodAsync(request, cancellationToken);
@@ -216,7 +260,12 @@ public class PaymentsController : ControllerBase
     [HttpGet("methods/{methodId:guid}")]
     public async Task<ActionResult<PaymentMethodResponse>> GetPaymentMethod(Guid methodId, CancellationToken cancellationToken)
     {
-        var result = await _paymentService.GetPaymentMethodByIdAsync(methodId, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        var result = await _paymentService.GetPaymentMethodByIdAsync(methodId, TenantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
@@ -225,16 +274,20 @@ public class PaymentsController : ControllerBase
     /// </summary>
     [HttpGet("methods")]
     public async Task<ActionResult<List<PaymentMethodResponse>>> GetPaymentMethods(
-        [FromQuery] string tenantId,
         [FromQuery] string customerId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(customerId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId and CustomerId are required" });
+            return Unauthorized(new { error = "Tenant claim missing from token" });
         }
 
-        var result = await _paymentService.GetPaymentMethodsByCustomerAsync(tenantId, customerId, cancellationToken);
+        if (string.IsNullOrEmpty(customerId))
+        {
+            return BadRequest(new { error = "CustomerId is required" });
+        }
+
+        var result = await _paymentService.GetPaymentMethodsByCustomerAsync(TenantId, customerId, cancellationToken);
         return Ok(result);
     }
 
@@ -244,9 +297,14 @@ public class PaymentsController : ControllerBase
     [HttpPut("methods/{methodId:guid}")]
     public async Task<ActionResult<PaymentMethodResponse>> UpdatePaymentMethod(Guid methodId, [FromBody] UpdatePaymentMethodRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
         try
         {
-            var result = await _paymentService.UpdatePaymentMethodAsync(methodId, request, cancellationToken);
+            var result = await _paymentService.UpdatePaymentMethodAsync(methodId, TenantId, request, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -261,7 +319,12 @@ public class PaymentsController : ControllerBase
     [HttpDelete("methods/{methodId:guid}")]
     public async Task<IActionResult> DeletePaymentMethod(Guid methodId, CancellationToken cancellationToken)
     {
-        await _paymentService.DeletePaymentMethodAsync(methodId, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized(new { error = "Tenant claim missing from token" });
+        }
+
+        await _paymentService.DeletePaymentMethodAsync(methodId, TenantId, cancellationToken);
         return NoContent();
     }
 

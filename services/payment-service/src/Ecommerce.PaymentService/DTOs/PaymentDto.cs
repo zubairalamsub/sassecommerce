@@ -4,6 +4,9 @@ namespace Ecommerce.PaymentService.DTOs;
 
 public class CreatePaymentRequest
 {
+    // Server-set only: the authenticated controller overwrites this from the JWT
+    // "tenant_id" claim, and the (signature-verified) Kafka OrderEventConsumer sets it
+    // from the trusted event payload. Any value sent by an API client is ignored.
     public string TenantId { get; set; } = string.Empty;
     public string CustomerId { get; set; } = string.Empty;
     public string OrderId { get; set; } = string.Empty;

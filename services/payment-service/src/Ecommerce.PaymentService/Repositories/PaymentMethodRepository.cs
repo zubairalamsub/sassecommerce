@@ -13,10 +13,10 @@ public class PaymentMethodRepository : IPaymentMethodRepository
         _context = context;
     }
 
-    public async Task<PaymentMethod?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<PaymentMethod?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.PaymentMethods
-            .FirstOrDefaultAsync(pm => pm.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(pm => pm.Id == id && pm.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<List<PaymentMethod>> GetByCustomerAsync(string tenantId, string customerId, CancellationToken cancellationToken = default)
@@ -53,9 +53,9 @@ public class PaymentMethodRepository : IPaymentMethodRepository
         return paymentMethod;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var method = await GetByIdAsync(id, cancellationToken);
+        var method = await GetByIdAsync(id, tenantId, cancellationToken);
         if (method != null)
         {
             method.DeletedAt = DateTime.UtcNow;

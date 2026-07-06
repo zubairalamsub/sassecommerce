@@ -44,7 +44,7 @@ public class PaymentService : IPaymentService
         // Idempotency check
         if (!string.IsNullOrEmpty(request.IdempotencyKey))
         {
-            var existing = await _paymentRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
+            var existing = await _paymentRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, request.TenantId, cancellationToken);
             if (existing != null)
             {
                 _logger.LogInformation("Returning existing payment for idempotency key: {Key}", request.IdempotencyKey);
@@ -83,7 +83,7 @@ public class PaymentService : IPaymentService
         string? token = null;
         if (request.PaymentMethodId.HasValue)
         {
-            var paymentMethod = await _paymentMethodRepository.GetByIdAsync(request.PaymentMethodId.Value, cancellationToken);
+            var paymentMethod = await _paymentMethodRepository.GetByIdAsync(request.PaymentMethodId.Value, request.TenantId, cancellationToken);
             token = paymentMethod?.Token;
         }
 
@@ -191,9 +191,9 @@ public class PaymentService : IPaymentService
         return response;
     }
 
-    public async Task<PaymentDetailResponse?> GetPaymentByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<PaymentDetailResponse?> GetPaymentByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var payment = await _paymentRepository.GetByIdWithDetailsAsync(id, cancellationToken);
+        var payment = await _paymentRepository.GetByIdWithDetailsAsync(id, tenantId, cancellationToken);
         return payment == null ? null : MapToDetailResponse(payment);
     }
 
@@ -221,9 +221,9 @@ public class PaymentService : IPaymentService
         return _mapper.Map<List<PaymentResponse>>(payments);
     }
 
-    public async Task<PaymentResponse> CancelPaymentAsync(Guid id, CancelPaymentRequest request, CancellationToken cancellationToken = default)
+    public async Task<PaymentResponse> CancelPaymentAsync(Guid id, string tenantId, CancelPaymentRequest request, CancellationToken cancellationToken = default)
     {
-        var payment = await _paymentRepository.GetByIdAsync(id, cancellationToken)
+        var payment = await _paymentRepository.GetByIdAsync(id, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Payment {id} not found");
 
         if (payment.Status != PaymentStatus.Pending && payment.Status != PaymentStatus.Processing)
@@ -385,9 +385,9 @@ public class PaymentService : IPaymentService
 
     #region Refund Operations
 
-    public async Task<RefundResponse> RefundPaymentAsync(Guid paymentId, RefundPaymentRequest request, CancellationToken cancellationToken = default)
+    public async Task<RefundResponse> RefundPaymentAsync(Guid paymentId, string tenantId, RefundPaymentRequest request, CancellationToken cancellationToken = default)
     {
-        var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId, cancellationToken)
+        var payment = await _paymentRepository.GetByIdWithDetailsAsync(paymentId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Payment {paymentId} not found");
 
         if (payment.Status != PaymentStatus.Completed && payment.Status != PaymentStatus.PartiallyRefunded)
@@ -494,15 +494,15 @@ public class PaymentService : IPaymentService
         return _mapper.Map<RefundResponse>(refund);
     }
 
-    public async Task<RefundResponse?> GetRefundByIdAsync(Guid refundId, CancellationToken cancellationToken = default)
+    public async Task<RefundResponse?> GetRefundByIdAsync(Guid refundId, string tenantId, CancellationToken cancellationToken = default)
     {
-        var refund = await _refundRepository.GetByIdAsync(refundId, cancellationToken);
+        var refund = await _refundRepository.GetByIdAsync(refundId, tenantId, cancellationToken);
         return refund == null ? null : _mapper.Map<RefundResponse>(refund);
     }
 
-    public async Task<List<RefundResponse>> GetRefundsByPaymentAsync(Guid paymentId, CancellationToken cancellationToken = default)
+    public async Task<List<RefundResponse>> GetRefundsByPaymentAsync(Guid paymentId, string tenantId, CancellationToken cancellationToken = default)
     {
-        var refunds = await _refundRepository.GetByPaymentIdAsync(paymentId, cancellationToken);
+        var refunds = await _refundRepository.GetByPaymentIdAsync(paymentId, tenantId, cancellationToken);
         return _mapper.Map<List<RefundResponse>>(refunds);
     }
 
@@ -593,9 +593,9 @@ public class PaymentService : IPaymentService
         return _mapper.Map<PaymentMethodResponse>(paymentMethod);
     }
 
-    public async Task<PaymentMethodResponse> UpdatePaymentMethodAsync(Guid id, UpdatePaymentMethodRequest request, CancellationToken cancellationToken = default)
+    public async Task<PaymentMethodResponse> UpdatePaymentMethodAsync(Guid id, string tenantId, UpdatePaymentMethodRequest request, CancellationToken cancellationToken = default)
     {
-        var paymentMethod = await _paymentMethodRepository.GetByIdAsync(id, cancellationToken)
+        var paymentMethod = await _paymentMethodRepository.GetByIdAsync(id, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Payment method {id} not found");
 
         if (request.ExpiryMonth.HasValue) paymentMethod.ExpiryMonth = request.ExpiryMonth;
@@ -627,9 +627,9 @@ public class PaymentService : IPaymentService
         return _mapper.Map<PaymentMethodResponse>(paymentMethod);
     }
 
-    public async Task<PaymentMethodResponse?> GetPaymentMethodByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<PaymentMethodResponse?> GetPaymentMethodByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var paymentMethod = await _paymentMethodRepository.GetByIdAsync(id, cancellationToken);
+        var paymentMethod = await _paymentMethodRepository.GetByIdAsync(id, tenantId, cancellationToken);
         return paymentMethod == null ? null : _mapper.Map<PaymentMethodResponse>(paymentMethod);
     }
 
@@ -639,9 +639,9 @@ public class PaymentService : IPaymentService
         return _mapper.Map<List<PaymentMethodResponse>>(methods);
     }
 
-    public async Task DeletePaymentMethodAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeletePaymentMethodAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        await _paymentMethodRepository.DeleteAsync(id, cancellationToken);
+        await _paymentMethodRepository.DeleteAsync(id, tenantId, cancellationToken);
         _logger.LogInformation("Payment method deleted: {PaymentMethodId}", id);
     }
 

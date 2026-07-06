@@ -146,7 +146,7 @@ public class PaymentServiceTests
             IdempotencyKey = "idem-key-1"
         };
 
-        _paymentRepo.Setup(r => r.GetByIdempotencyKeyAsync("idem-key-1", It.IsAny<CancellationToken>()))
+        _paymentRepo.Setup(r => r.GetByIdempotencyKeyAsync("idem-key-1", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingPayment);
 
         var request = new CreatePaymentRequest
@@ -178,7 +178,7 @@ public class PaymentServiceTests
             Type = PaymentMethodType.CreditCard
         };
 
-        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<CancellationToken>()))
+        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(storedMethod);
 
         _gateway.Setup(g => g.ChargeAsync(It.Is<GatewayChargeRequest>(r => r.Token == "tok_stored_123"), It.IsAny<CancellationToken>()))
@@ -265,10 +265,10 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>()))
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(payment);
 
-        var result = await _service.GetPaymentByIdAsync(paymentId);
+        var result = await _service.GetPaymentByIdAsync(paymentId, "t1");
 
         result.Should().NotBeNull();
         result!.Id.Should().Be(paymentId);
@@ -279,10 +279,10 @@ public class PaymentServiceTests
     [Fact]
     public async Task GetPaymentById_WhenNotExists_ShouldReturnNull()
     {
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment?)null);
 
-        var result = await _service.GetPaymentByIdAsync(Guid.NewGuid());
+        var result = await _service.GetPaymentByIdAsync(Guid.NewGuid(), "t1");
 
         result.Should().BeNull();
     }
@@ -381,11 +381,11 @@ public class PaymentServiceTests
             Method = PaymentMethodType.CreditCard
         };
 
-        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
         _paymentRepo.Setup(r => r.UpdateAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment p, CancellationToken _) => p);
 
-        var result = await _service.CancelPaymentAsync(paymentId, new CancelPaymentRequest { Reason = "changed mind", CancelledBy = "user" });
+        var result = await _service.CancelPaymentAsync(paymentId, "t1", new CancelPaymentRequest { Reason = "changed mind", CancelledBy = "user" });
 
         result.Status.Should().Be("Cancelled");
     }
@@ -401,9 +401,9 @@ public class PaymentServiceTests
             Method = PaymentMethodType.CreditCard
         };
 
-        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
 
-        var act = () => _service.CancelPaymentAsync(paymentId, new CancelPaymentRequest { Reason = "test" });
+        var act = () => _service.CancelPaymentAsync(paymentId, "t1", new CancelPaymentRequest { Reason = "test" });
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*cannot cancel*");
@@ -426,7 +426,7 @@ public class PaymentServiceTests
             GatewayTransactionId = "gw_txn_to_void"
         };
 
-        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
         _paymentRepo.Setup(r => r.UpdateAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment p, CancellationToken _) => p);
         _gateway.Setup(g => g.VoidAsync("gw_txn_to_void", It.IsAny<CancellationToken>()))
@@ -434,7 +434,7 @@ public class PaymentServiceTests
         _transactionRepo.Setup(r => r.CreateAsync(It.IsAny<PaymentTransaction>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PaymentTransaction t, CancellationToken _) => t);
 
-        var result = await _service.CancelPaymentAsync(paymentId, new CancelPaymentRequest { Reason = "test", CancelledBy = "user" });
+        var result = await _service.CancelPaymentAsync(paymentId, "t1", new CancelPaymentRequest { Reason = "test", CancelledBy = "user" });
 
         result.Status.Should().Be("Cancelled");
         _gateway.Verify(g => g.VoidAsync("gw_txn_to_void", It.IsAny<CancellationToken>()), Times.Once);
@@ -444,10 +444,10 @@ public class PaymentServiceTests
     [Fact]
     public async Task CancelPayment_WhenNotFound_ShouldThrowKeyNotFound()
     {
-        _paymentRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _paymentRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment?)null);
 
-        var act = () => _service.CancelPaymentAsync(Guid.NewGuid(), new CancelPaymentRequest { Reason = "test" });
+        var act = () => _service.CancelPaymentAsync(Guid.NewGuid(), "t1", new CancelPaymentRequest { Reason = "test" });
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
@@ -476,7 +476,7 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
         _paymentRepo.Setup(r => r.UpdateAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment p, CancellationToken _) => p);
         _refundRepo.Setup(r => r.CreateAsync(It.IsAny<Refund>(), It.IsAny<CancellationToken>()))
@@ -488,7 +488,7 @@ public class PaymentServiceTests
         _gateway.Setup(g => g.RefundAsync(It.IsAny<GatewayRefundRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GatewayResponse { Success = true, TransactionId = "gw_rf_1" });
 
-        var result = await _service.RefundPaymentAsync(paymentId, new RefundPaymentRequest { Reason = "Customer request" });
+        var result = await _service.RefundPaymentAsync(paymentId, "t1", new RefundPaymentRequest { Reason = "Customer request" });
 
         result.Status.Should().Be("Completed");
         result.Amount.Should().Be(100m);
@@ -515,7 +515,7 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
         _paymentRepo.Setup(r => r.UpdateAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment p, CancellationToken _) => p);
         _refundRepo.Setup(r => r.CreateAsync(It.IsAny<Refund>(), It.IsAny<CancellationToken>()))
@@ -527,7 +527,7 @@ public class PaymentServiceTests
         _gateway.Setup(g => g.RefundAsync(It.IsAny<GatewayRefundRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GatewayResponse { Success = true, TransactionId = "gw_rf_partial" });
 
-        var result = await _service.RefundPaymentAsync(paymentId, new RefundPaymentRequest { Reason = "partial", Amount = 40m });
+        var result = await _service.RefundPaymentAsync(paymentId, "t1", new RefundPaymentRequest { Reason = "partial", Amount = 40m });
 
         result.Status.Should().Be("Completed");
         result.Amount.Should().Be(40m);
@@ -552,9 +552,9 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
 
-        var act = () => _service.RefundPaymentAsync(paymentId, new RefundPaymentRequest { Reason = "too much", Amount = 30m });
+        var act = () => _service.RefundPaymentAsync(paymentId, "t1", new RefundPaymentRequest { Reason = "too much", Amount = 30m });
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*exceeds remaining*");
@@ -573,9 +573,9 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
 
-        var act = () => _service.RefundPaymentAsync(paymentId, new RefundPaymentRequest { Reason = "test" });
+        var act = () => _service.RefundPaymentAsync(paymentId, "t1", new RefundPaymentRequest { Reason = "test" });
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*cannot refund*");
@@ -584,10 +584,10 @@ public class PaymentServiceTests
     [Fact]
     public async Task RefundPayment_WhenNotFound_ShouldThrowKeyNotFound()
     {
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment?)null);
 
-        var act = () => _service.RefundPaymentAsync(Guid.NewGuid(), new RefundPaymentRequest { Reason = "test" });
+        var act = () => _service.RefundPaymentAsync(Guid.NewGuid(), "t1", new RefundPaymentRequest { Reason = "test" });
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
@@ -610,7 +610,7 @@ public class PaymentServiceTests
             Refunds = new List<Refund>()
         };
 
-        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(payment);
+        _paymentRepo.Setup(r => r.GetByIdWithDetailsAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(payment);
         _paymentRepo.Setup(r => r.UpdateAsync(It.IsAny<Payment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Payment p, CancellationToken _) => p);
         _refundRepo.Setup(r => r.CreateAsync(It.IsAny<Refund>(), It.IsAny<CancellationToken>()))
@@ -622,7 +622,7 @@ public class PaymentServiceTests
         _gateway.Setup(g => g.RefundAsync(It.IsAny<GatewayRefundRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GatewayResponse { Success = false, ErrorMessage = "refund_failed" });
 
-        var result = await _service.RefundPaymentAsync(paymentId, new RefundPaymentRequest { Reason = "test" });
+        var result = await _service.RefundPaymentAsync(paymentId, "t1", new RefundPaymentRequest { Reason = "test" });
 
         result.Status.Should().Be("Failed");
         result.FailureReason.Should().Be("refund_failed");
@@ -642,9 +642,9 @@ public class PaymentServiceTests
             Status = RefundStatus.Completed
         };
 
-        _refundRepo.Setup(r => r.GetByIdAsync(refund.Id, It.IsAny<CancellationToken>())).ReturnsAsync(refund);
+        _refundRepo.Setup(r => r.GetByIdAsync(refund.Id, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(refund);
 
-        var result = await _service.GetRefundByIdAsync(refund.Id);
+        var result = await _service.GetRefundByIdAsync(refund.Id, "t1");
 
         result.Should().NotBeNull();
         result!.Amount.Should().Be(50m);
@@ -660,9 +660,9 @@ public class PaymentServiceTests
             new() { Id = Guid.NewGuid(), TenantId = "t1", PaymentId = paymentId, Amount = 20m, Currency = "USD", Reason = "r2", Status = RefundStatus.Completed }
         };
 
-        _refundRepo.Setup(r => r.GetByPaymentIdAsync(paymentId, It.IsAny<CancellationToken>())).ReturnsAsync(refunds);
+        _refundRepo.Setup(r => r.GetByPaymentIdAsync(paymentId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(refunds);
 
-        var result = await _service.GetRefundsByPaymentAsync(paymentId);
+        var result = await _service.GetRefundsByPaymentAsync(paymentId, "t1");
 
         result.Should().HaveCount(2);
     }

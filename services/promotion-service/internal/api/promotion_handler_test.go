@@ -29,8 +29,8 @@ func (m *MockPromotionService) CreatePromotion(ctx context.Context, req *models.
 	return args.Get(0).(*models.PromotionResponse), args.Error(1)
 }
 
-func (m *MockPromotionService) GetPromotion(ctx context.Context, id string) (*models.PromotionResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockPromotionService) GetPromotion(ctx context.Context, tenantID, id string) (*models.PromotionResponse, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -82,13 +82,34 @@ func (m *MockPromotionService) ProcessLoyaltyPoints(ctx context.Context, req *mo
 	return args.Get(0).(*models.LoyaltyAccountResponse), args.Error(1)
 }
 
+// setupRouter builds a router with a default authenticated staff (admin)
+// identity injected into the request context, mirroring what the JWT Auth
+// middleware sets in production.
 func setupRouter(mockService *MockPromotionService) *gin.Engine {
+	return setupRouterWithClaims(mockService, "tenant-1", "user-1", "admin")
+}
+
+// setupRouterWithClaims lets a test control the injected identity. Empty values
+// are not set, allowing tests to simulate unauthenticated or role-less callers.
+func setupRouterWithClaims(mockService *MockPromotionService, tenantID, userID, role string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewPromotionHandler(mockService, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set("tenant_id", tenantID)
+		}
+		if userID != "" {
+			c.Set("user_id", userID)
+		}
+		if role != "" {
+			c.Set("user_role", role)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -102,7 +123,7 @@ func TestHandler_CreatePromotion_Success(t *testing.T) {
 	resp := &models.PromotionResponse{
 		ID: "promo-1", TenantID: "tenant-1", Name: "Summer Sale",
 		DiscountType: models.DiscountPercentage, DiscountValue: 20,
-		Status: models.StatusActive,
+		Status:    models.StatusActive,
 		StartDate: time.Now().UTC(), EndDate: time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	mockService.On("CreatePromotion", mock.Anything, mock.AnythingOfType("*models.CreatePromotionRequest")).Return(resp, nil)
@@ -156,6 +177,26 @@ func TestHandler_CreatePromotion_ValidationError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_CreatePromotion_Forbidden(t *testing.T) {
+	mockService := new(MockPromotionService)
+	// A customer must not be able to create promotions.
+	router := setupRouterWithClaims(mockService, "tenant-1", "user-1", "customer")
+
+	body := `{
+		"name": "Summer Sale",
+		"discount_type": "percentage", "discount_value": 20,
+		"start_date": "2026-04-01T00:00:00Z", "end_date": "2026-05-01T00:00:00Z"
+	}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/promotions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockService.AssertNotCalled(t, "CreatePromotion", mock.Anything, mock.Anything)
+}
+
 // === GetPromotion Handler Tests ===
 
 func TestHandler_GetPromotion_Success(t *testing.T) {
@@ -163,7 +204,7 @@ func TestHandler_GetPromotion_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.PromotionResponse{ID: "promo-1", Name: "Summer Sale"}
-	mockService.On("GetPromotion", mock.Anything, "promo-1").Return(resp, nil)
+	mockService.On("GetPromotion", mock.Anything, "tenant-1", "promo-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/promotions/promo-1", nil)
@@ -176,7 +217,7 @@ func TestHandler_GetPromotion_NotFound(t *testing.T) {
 	mockService := new(MockPromotionService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetPromotion", mock.Anything, "bad").Return(nil, errors.New("promotion not found"))
+	mockService.On("GetPromotion", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("promotion not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/promotions/bad", nil)
@@ -205,15 +246,16 @@ func TestHandler_GetActivePromotions_Success(t *testing.T) {
 	assert.Len(t, result, 1)
 }
 
-func TestHandler_GetActivePromotions_MissingTenantID(t *testing.T) {
+func TestHandler_GetActivePromotions_Unauthenticated(t *testing.T) {
 	mockService := new(MockPromotionService)
-	router := setupRouter(mockService)
+	// No tenant in context => unauthenticated.
+	router := setupRouterWithClaims(mockService, "", "user-1", "admin")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/promotions/active", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // === CreateCoupon Handler Tests ===
@@ -250,6 +292,22 @@ func TestHandler_CreateCoupon_Conflict(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestHandler_CreateCoupon_Forbidden(t *testing.T) {
+	mockService := new(MockPromotionService)
+	// A customer must not be able to create coupons.
+	router := setupRouterWithClaims(mockService, "tenant-1", "user-1", "customer")
+
+	body := `{"promotion_id": "promo-1", "code": "SUMMER20"}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/coupons", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockService.AssertNotCalled(t, "CreateCoupon", mock.Anything, mock.Anything)
 }
 
 // === ValidateCoupon Handler Tests ===
@@ -320,15 +378,16 @@ func TestHandler_GetLoyaltyAccount_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestHandler_GetLoyaltyAccount_MissingTenantID(t *testing.T) {
+func TestHandler_GetLoyaltyAccount_Unauthenticated(t *testing.T) {
 	mockService := new(MockPromotionService)
-	router := setupRouter(mockService)
+	// No identity in context => unauthenticated.
+	router := setupRouterWithClaims(mockService, "", "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/loyalty/user-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_ProcessLoyaltyPoints_Success(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/config-service/internal/models"
 	"github.com/ecommerce/config-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -71,6 +72,14 @@ func (h *MenuHandler) CreateMenu(c *gin.Context) {
 		return
 	}
 
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	// Menu is always created under the authenticated tenant.
+	req.TenantID = tenantID
+
 	result, err := h.service.CreateMenu(c.Request.Context(), &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid location") || strings.Contains(err.Error(), "already exists") {
@@ -88,7 +97,15 @@ func (h *MenuHandler) CreateMenu(c *gin.Context) {
 func (h *MenuHandler) GetMenu(c *gin.Context) {
 	id := c.Param("id")
 
-	result, err := h.service.GetMenu(c.Request.Context(), id)
+	// Public storefront read: tenant is supplied explicitly and scopes the
+	// lookup so a menu id from another tenant cannot be fetched.
+	tenantID := c.Query("tenant_id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		return
+	}
+
+	result, err := h.service.GetMenu(c.Request.Context(), id, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -125,6 +142,12 @@ func (h *MenuHandler) GetMenuBySlug(c *gin.Context) {
 }
 
 func (h *MenuHandler) UpdateMenu(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
 	var req models.UpdateMenuRequest
@@ -133,7 +156,7 @@ func (h *MenuHandler) UpdateMenu(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateMenu(c.Request.Context(), id, &req)
+	result, err := h.service.UpdateMenu(c.Request.Context(), id, tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -152,9 +175,15 @@ func (h *MenuHandler) UpdateMenu(c *gin.Context) {
 }
 
 func (h *MenuHandler) DeleteMenu(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
-	err := h.service.DeleteMenu(c.Request.Context(), id)
+	err := h.service.DeleteMenu(c.Request.Context(), id, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -208,6 +237,12 @@ func (h *MenuHandler) ListMenusByLocation(c *gin.Context) {
 }
 
 func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	menuID := c.Param("menuId")
 
 	var req models.CreateMenuItemRequest
@@ -217,7 +252,7 @@ func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
 	}
 	req.MenuID = menuID
 
-	result, err := h.service.CreateMenuItem(c.Request.Context(), &req)
+	result, err := h.service.CreateMenuItem(c.Request.Context(), tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -232,6 +267,12 @@ func (h *MenuHandler) CreateMenuItem(c *gin.Context) {
 }
 
 func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	itemID := c.Param("itemId")
 
 	var req models.UpdateMenuItemRequest
@@ -240,7 +281,7 @@ func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateMenuItem(c.Request.Context(), itemID, &req)
+	result, err := h.service.UpdateMenuItem(c.Request.Context(), itemID, tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -255,9 +296,15 @@ func (h *MenuHandler) UpdateMenuItem(c *gin.Context) {
 }
 
 func (h *MenuHandler) DeleteMenuItem(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	itemID := c.Param("itemId")
 
-	err := h.service.DeleteMenuItem(c.Request.Context(), itemID)
+	err := h.service.DeleteMenuItem(c.Request.Context(), itemID, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -272,6 +319,12 @@ func (h *MenuHandler) DeleteMenuItem(c *gin.Context) {
 }
 
 func (h *MenuHandler) ReorderItems(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	menuID := c.Param("menuId")
 
 	var req models.ReorderItemsRequest
@@ -280,7 +333,7 @@ func (h *MenuHandler) ReorderItems(c *gin.Context) {
 		return
 	}
 
-	err := h.service.ReorderItems(c.Request.Context(), menuID, &req)
+	err := h.service.ReorderItems(c.Request.Context(), menuID, tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

@@ -19,10 +19,10 @@ type CategoryRepository interface {
 	GetBySlug(ctx context.Context, tenantID, slug string) (*models.Category, error)
 	List(ctx context.Context, tenantID string, offset, limit int) ([]models.Category, int64, error)
 	ListByParent(ctx context.Context, tenantID string, parentID *string, offset, limit int) ([]models.Category, int64, error)
-	Update(ctx context.Context, id string, category *models.Category) error
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, tenantID, id string, category *models.Category) error
+	Delete(ctx context.Context, tenantID, id string) error
 	SlugExists(ctx context.Context, tenantID, slug string) (bool, error)
-	UpdateStatus(ctx context.Context, id string, status models.CategoryStatus) error
+	UpdateStatus(ctx context.Context, tenantID, id string, status models.CategoryStatus) error
 	UpdateImage(ctx context.Context, id string, imageURL string) error
 }
 
@@ -167,8 +167,9 @@ func (r *categoryRepository) ListByParent(ctx context.Context, tenantID string, 
 	return categories, total, nil
 }
 
-// Update updates a category
-func (r *categoryRepository) Update(ctx context.Context, id string, category *models.Category) error {
+// Update updates a category. The tenant_id predicate ensures a tenant can only
+// modify its own categories; a cross-tenant id yields no match (404 upstream).
+func (r *categoryRepository) Update(ctx context.Context, tenantID, id string, category *models.Category) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid category ID")
@@ -177,6 +178,7 @@ func (r *categoryRepository) Update(ctx context.Context, id string, category *mo
 	category.UpdatedAt = time.Now()
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 
@@ -193,8 +195,9 @@ func (r *categoryRepository) Update(ctx context.Context, id string, category *mo
 	return nil
 }
 
-// Delete soft deletes a category
-func (r *categoryRepository) Delete(ctx context.Context, id string) error {
+// Delete soft deletes a category. The tenant_id predicate ensures a tenant can
+// only delete its own categories; a cross-tenant id yields no match (404 upstream).
+func (r *categoryRepository) Delete(ctx context.Context, tenantID, id string) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid category ID")
@@ -203,6 +206,7 @@ func (r *categoryRepository) Delete(ctx context.Context, id string) error {
 	now := time.Now()
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 
@@ -275,8 +279,10 @@ func (r *categoryRepository) UpdateImage(ctx context.Context, id string, imageUR
 	return nil
 }
 
-// UpdateStatus updates a category's status
-func (r *categoryRepository) UpdateStatus(ctx context.Context, id string, status models.CategoryStatus) error {
+// UpdateStatus updates a category's status. The tenant_id predicate ensures a
+// tenant can only change its own categories' status; a cross-tenant id yields no
+// match (404 upstream).
+func (r *categoryRepository) UpdateStatus(ctx context.Context, tenantID, id string, status models.CategoryStatus) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid category ID")
@@ -284,6 +290,7 @@ func (r *categoryRepository) UpdateStatus(ctx context.Context, id string, status
 
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 

@@ -48,13 +48,13 @@ func (m *MockCategoryRepository) ListByParent(ctx context.Context, tenantID stri
 	return args.Get(0).([]models.Category), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockCategoryRepository) Update(ctx context.Context, id string, category *models.Category) error {
-	args := m.Called(ctx, id, category)
+func (m *MockCategoryRepository) Update(ctx context.Context, tenantID, id string, category *models.Category) error {
+	args := m.Called(ctx, tenantID, id, category)
 	return args.Error(0)
 }
 
-func (m *MockCategoryRepository) Delete(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockCategoryRepository) Delete(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
@@ -63,8 +63,8 @@ func (m *MockCategoryRepository) SlugExists(ctx context.Context, tenantID, slug 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockCategoryRepository) UpdateStatus(ctx context.Context, id string, status models.CategoryStatus) error {
-	args := m.Called(ctx, id, status)
+func (m *MockCategoryRepository) UpdateStatus(ctx context.Context, tenantID, id string, status models.CategoryStatus) error {
+	args := m.Called(ctx, tenantID, id, status)
 	return args.Error(0)
 }
 

@@ -19,15 +19,15 @@ import (
 var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 type ReviewService interface {
-	CreateReview(ctx context.Context, req *models.CreateReviewRequest) (*models.ReviewResponse, error)
-	GetReview(ctx context.Context, id string) (*models.ReviewResponse, error)
+	CreateReview(ctx context.Context, tenantID, userID string, req *models.CreateReviewRequest) (*models.ReviewResponse, error)
+	GetReview(ctx context.Context, tenantID, id string) (*models.ReviewResponse, error)
 	GetProductReviews(ctx context.Context, tenantID, productID string, page, pageSize int) ([]models.ReviewResponse, int64, error)
 	GetUserReviews(ctx context.Context, tenantID, userID string, page, pageSize int) ([]models.ReviewResponse, int64, error)
-	UpdateReview(ctx context.Context, id, userID string, req *models.UpdateReviewRequest) (*models.ReviewResponse, error)
-	DeleteReview(ctx context.Context, id, userID string) error
-	ModerateReview(ctx context.Context, id string, req *models.ModerateReviewRequest) (*models.ReviewResponse, error)
-	AddHelpfulVote(ctx context.Context, id string, req *models.HelpfulVoteRequest) error
-	RespondToReview(ctx context.Context, id string, req *models.SellerResponseRequest) (*models.ReviewResponse, error)
+	UpdateReview(ctx context.Context, tenantID, userID, id string, req *models.UpdateReviewRequest) (*models.ReviewResponse, error)
+	DeleteReview(ctx context.Context, tenantID, userID, id string, isStaff bool) error
+	ModerateReview(ctx context.Context, tenantID, id string, req *models.ModerateReviewRequest) (*models.ReviewResponse, error)
+	AddHelpfulVote(ctx context.Context, tenantID, id string, req *models.HelpfulVoteRequest) error
+	RespondToReview(ctx context.Context, tenantID, id string, req *models.SellerResponseRequest) (*models.ReviewResponse, error)
 	GetProductSummary(ctx context.Context, tenantID, productID string) (*models.ReviewSummaryResponse, error)
 }
 
@@ -45,9 +45,9 @@ func NewReviewService(repo repository.ReviewRepository, writer *kafka.Writer, lo
 	}
 }
 
-func (s *reviewService) CreateReview(ctx context.Context, req *models.CreateReviewRequest) (*models.ReviewResponse, error) {
+func (s *reviewService) CreateReview(ctx context.Context, tenantID, userID string, req *models.CreateReviewRequest) (*models.ReviewResponse, error) {
 	// Check if user already reviewed this product
-	hasReviewed, err := s.repo.HasUserReviewed(ctx, req.TenantID, req.ProductID, req.UserID)
+	hasReviewed, err := s.repo.HasUserReviewed(ctx, tenantID, req.ProductID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing review: %w", err)
 	}
@@ -57,9 +57,9 @@ func (s *reviewService) CreateReview(ctx context.Context, req *models.CreateRevi
 
 	review := &models.Review{
 		ID:               uuid.New().String(),
-		TenantID:         req.TenantID,
+		TenantID:         tenantID,
 		ProductID:        req.ProductID,
-		UserID:           req.UserID,
+		UserID:           userID,
 		OrderID:          req.OrderID,
 		Rating:           req.Rating,
 		Title:            req.Title,
@@ -85,8 +85,8 @@ func (s *reviewService) CreateReview(ctx context.Context, req *models.CreateRevi
 	return toReviewResponse(review), nil
 }
 
-func (s *reviewService) GetReview(ctx context.Context, id string) (*models.ReviewResponse, error) {
-	review, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) GetReview(ctx context.Context, tenantID, id string) (*models.ReviewResponse, error) {
+	review, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +121,8 @@ func (s *reviewService) GetUserReviews(ctx context.Context, tenantID, userID str
 	return responses, total, nil
 }
 
-func (s *reviewService) UpdateReview(ctx context.Context, id, userID string, req *models.UpdateReviewRequest) (*models.ReviewResponse, error) {
-	review, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) UpdateReview(ctx context.Context, tenantID, userID, id string, req *models.UpdateReviewRequest) (*models.ReviewResponse, error) {
+	review, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -153,18 +153,20 @@ func (s *reviewService) UpdateReview(ctx context.Context, id, userID string, req
 	return toReviewResponse(review), nil
 }
 
-func (s *reviewService) DeleteReview(ctx context.Context, id, userID string) error {
-	review, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) DeleteReview(ctx context.Context, tenantID, userID, id string, isStaff bool) error {
+	review, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
 
-	// Allow deletion by the review owner or admin (userID empty = admin)
-	if userID != "" && review.UserID != userID {
+	// Owners may delete their own review; staff (admin/moderator) may delete any
+	// review within their tenant. Authorization is gated on the JWT role, never
+	// on an empty/attacker-controlled user id.
+	if !isStaff && review.UserID != userID {
 		return errors.New("unauthorized: you can only delete your own reviews")
 	}
 
-	if err := s.repo.Delete(ctx, id); err != nil {
+	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
 		return fmt.Errorf("failed to delete review: %w", err)
 	}
 
@@ -174,8 +176,8 @@ func (s *reviewService) DeleteReview(ctx context.Context, id, userID string) err
 	return nil
 }
 
-func (s *reviewService) ModerateReview(ctx context.Context, id string, req *models.ModerateReviewRequest) (*models.ReviewResponse, error) {
-	review, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) ModerateReview(ctx context.Context, tenantID, id string, req *models.ModerateReviewRequest) (*models.ReviewResponse, error) {
+	review, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -197,18 +199,18 @@ func (s *reviewService) ModerateReview(ctx context.Context, id string, req *mode
 	return toReviewResponse(review), nil
 }
 
-func (s *reviewService) AddHelpfulVote(ctx context.Context, id string, req *models.HelpfulVoteRequest) error {
-	// Verify review exists
-	_, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) AddHelpfulVote(ctx context.Context, tenantID, id string, req *models.HelpfulVoteRequest) error {
+	// Verify review exists within the caller's tenant
+	_, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
 
-	return s.repo.AddHelpfulVote(ctx, id, req.UserID, req.Helpful)
+	return s.repo.AddHelpfulVote(ctx, tenantID, id, req.UserID, req.Helpful)
 }
 
-func (s *reviewService) RespondToReview(ctx context.Context, id string, req *models.SellerResponseRequest) (*models.ReviewResponse, error) {
-	review, err := s.repo.GetByID(ctx, id)
+func (s *reviewService) RespondToReview(ctx context.Context, tenantID, id string, req *models.SellerResponseRequest) (*models.ReviewResponse, error) {
+	review, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}

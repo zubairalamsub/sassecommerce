@@ -13,18 +13,18 @@ import (
 type MenuService interface {
 	// Menus
 	CreateMenu(ctx context.Context, req *models.CreateMenuRequest) (*models.MenuResponse, error)
-	GetMenu(ctx context.Context, id string) (*models.MenuResponse, error)
+	GetMenu(ctx context.Context, id, tenantID string) (*models.MenuResponse, error)
 	GetMenuBySlug(ctx context.Context, tenantID, slug string) (*models.MenuResponse, error)
-	UpdateMenu(ctx context.Context, id string, req *models.UpdateMenuRequest) (*models.MenuResponse, error)
-	DeleteMenu(ctx context.Context, id string) error
+	UpdateMenu(ctx context.Context, id, tenantID string, req *models.UpdateMenuRequest) (*models.MenuResponse, error)
+	DeleteMenu(ctx context.Context, id, tenantID string) error
 	ListMenus(ctx context.Context, tenantID string) ([]models.MenuResponse, error)
 	ListMenusByLocation(ctx context.Context, tenantID, location string) ([]models.MenuResponse, error)
 
 	// Menu items
-	CreateMenuItem(ctx context.Context, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error)
-	UpdateMenuItem(ctx context.Context, id string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error)
-	DeleteMenuItem(ctx context.Context, id string) error
-	ReorderItems(ctx context.Context, menuID string, req *models.ReorderItemsRequest) error
+	CreateMenuItem(ctx context.Context, tenantID string, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error)
+	UpdateMenuItem(ctx context.Context, id, tenantID string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error)
+	DeleteMenuItem(ctx context.Context, id, tenantID string) error
+	ReorderItems(ctx context.Context, menuID, tenantID string, req *models.ReorderItemsRequest) error
 }
 
 type menuService struct {
@@ -68,8 +68,8 @@ func (s *menuService) CreateMenu(ctx context.Context, req *models.CreateMenuRequ
 	return toMenuResponse(menu, nil), nil
 }
 
-func (s *menuService) GetMenu(ctx context.Context, id string) (*models.MenuResponse, error) {
-	menu, err := s.repo.GetMenu(ctx, id)
+func (s *menuService) GetMenu(ctx context.Context, id, tenantID string) (*models.MenuResponse, error) {
+	menu, err := s.repo.GetMenu(ctx, id, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("menu not found")
 	}
@@ -98,8 +98,8 @@ func (s *menuService) GetMenuBySlug(ctx context.Context, tenantID, slug string) 
 	return toMenuResponse(menu, tree), nil
 }
 
-func (s *menuService) UpdateMenu(ctx context.Context, id string, req *models.UpdateMenuRequest) (*models.MenuResponse, error) {
-	menu, err := s.repo.GetMenu(ctx, id)
+func (s *menuService) UpdateMenu(ctx context.Context, id, tenantID string, req *models.UpdateMenuRequest) (*models.MenuResponse, error) {
+	menu, err := s.repo.GetMenu(ctx, id, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("menu not found")
 	}
@@ -129,8 +129,8 @@ func (s *menuService) UpdateMenu(ctx context.Context, id string, req *models.Upd
 	return toMenuResponse(menu, tree), nil
 }
 
-func (s *menuService) DeleteMenu(ctx context.Context, id string) error {
-	_, err := s.repo.GetMenu(ctx, id)
+func (s *menuService) DeleteMenu(ctx context.Context, id, tenantID string) error {
+	_, err := s.repo.GetMenu(ctx, id, tenantID)
 	if err != nil {
 		return fmt.Errorf("menu not found")
 	}
@@ -175,17 +175,17 @@ func (s *menuService) ListMenusByLocation(ctx context.Context, tenantID, locatio
 	return responses, nil
 }
 
-func (s *menuService) CreateMenuItem(ctx context.Context, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error) {
-	// Verify menu exists
-	_, err := s.repo.GetMenu(ctx, req.MenuID)
+func (s *menuService) CreateMenuItem(ctx context.Context, tenantID string, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error) {
+	// Verify the target menu exists and belongs to the caller's tenant.
+	_, err := s.repo.GetMenu(ctx, req.MenuID, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("menu not found")
 	}
 
-	// Verify parent exists if specified
+	// Verify parent exists and belongs to the same menu if specified
 	if req.ParentID != "" {
-		_, err := s.repo.GetMenuItem(ctx, req.ParentID)
-		if err != nil {
+		parent, err := s.repo.GetMenuItem(ctx, req.ParentID)
+		if err != nil || parent.MenuID != req.MenuID {
 			return nil, fmt.Errorf("parent item not found")
 		}
 	}
@@ -216,9 +216,14 @@ func (s *menuService) CreateMenuItem(ctx context.Context, req *models.CreateMenu
 	return toMenuItemResponse(item), nil
 }
 
-func (s *menuService) UpdateMenuItem(ctx context.Context, id string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error) {
+func (s *menuService) UpdateMenuItem(ctx context.Context, id, tenantID string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error) {
 	item, err := s.repo.GetMenuItem(ctx, id)
 	if err != nil {
+		return nil, fmt.Errorf("menu item not found")
+	}
+
+	// Ensure the item's menu belongs to the caller's tenant before mutating.
+	if _, err := s.repo.GetMenu(ctx, item.MenuID, tenantID); err != nil {
 		return nil, fmt.Errorf("menu item not found")
 	}
 
@@ -257,9 +262,14 @@ func (s *menuService) UpdateMenuItem(ctx context.Context, id string, req *models
 	return toMenuItemResponse(item), nil
 }
 
-func (s *menuService) DeleteMenuItem(ctx context.Context, id string) error {
-	_, err := s.repo.GetMenuItem(ctx, id)
+func (s *menuService) DeleteMenuItem(ctx context.Context, id, tenantID string) error {
+	item, err := s.repo.GetMenuItem(ctx, id)
 	if err != nil {
+		return fmt.Errorf("menu item not found")
+	}
+
+	// Ensure the item's menu belongs to the caller's tenant before deleting.
+	if _, err := s.repo.GetMenu(ctx, item.MenuID, tenantID); err != nil {
 		return fmt.Errorf("menu item not found")
 	}
 
@@ -269,9 +279,9 @@ func (s *menuService) DeleteMenuItem(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *menuService) ReorderItems(ctx context.Context, menuID string, req *models.ReorderItemsRequest) error {
-	// Verify menu exists
-	_, err := s.repo.GetMenu(ctx, menuID)
+func (s *menuService) ReorderItems(ctx context.Context, menuID, tenantID string, req *models.ReorderItemsRequest) error {
+	// Verify the menu exists and belongs to the caller's tenant.
+	_, err := s.repo.GetMenu(ctx, menuID, tenantID)
 	if err != nil {
 		return fmt.Errorf("menu not found")
 	}

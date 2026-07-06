@@ -322,7 +322,7 @@ func (suite *ProductRepositoryTestSuite) TestUpdate() {
 	// Update the product
 	product.Name = "Updated Name"
 	product.Price = 149.99
-	err = suite.repository.Update(suite.ctx, product.ID.Hex(), product)
+	err = suite.repository.Update(suite.ctx, "tenant-1", product.ID.Hex(), product)
 	suite.NoError(err)
 
 	// Verify update
@@ -347,7 +347,7 @@ func (suite *ProductRepositoryTestSuite) TestDelete() {
 	suite.NoError(err)
 
 	// Delete the product
-	err = suite.repository.Delete(suite.ctx, product.ID.Hex())
+	err = suite.repository.Delete(suite.ctx, "tenant-1", product.ID.Hex())
 	suite.NoError(err)
 
 	// Verify deletion (soft delete)
@@ -371,7 +371,7 @@ func (suite *ProductRepositoryTestSuite) TestUpdateStatus() {
 	suite.NoError(err)
 
 	// Update status
-	err = suite.repository.UpdateStatus(suite.ctx, product.ID.Hex(), models.ProductStatusActive)
+	err = suite.repository.UpdateStatus(suite.ctx, "tenant-1", product.ID.Hex(), models.ProductStatusActive)
 	suite.NoError(err)
 
 	// Verify status update

@@ -27,6 +27,16 @@ type ProductDocument struct {
 	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
+// ReindexProductRequest is the request body for POST /api/v1/search/reindex.
+// It embeds ProductDocument but shadows TenantID with json:"-" so the tenant
+// cannot be supplied by the client. The handler forces the tenant from the
+// authenticated JWT before indexing. ProductDocument itself keeps its tenant_id
+// json tag because that struct is also the Elasticsearch storage model.
+type ReindexProductRequest struct {
+	ProductDocument
+	TenantID string `json:"-"`
+}
+
 // VariantDocument represents a product variant in the search index
 type VariantDocument struct {
 	ID      string            `json:"id"`
@@ -55,12 +65,12 @@ type SearchRequest struct {
 }
 
 type SearchResponse struct {
-	Products   []ProductHit       `json:"products"`
-	Total      int64              `json:"total"`
-	Page       int                `json:"page"`
-	PageSize   int                `json:"page_size"`
-	TotalPages int                `json:"total_pages"`
-	Facets     *SearchFacets      `json:"facets,omitempty"`
+	Products   []ProductHit  `json:"products"`
+	Total      int64         `json:"total"`
+	Page       int           `json:"page"`
+	PageSize   int           `json:"page_size"`
+	TotalPages int           `json:"total_pages"`
+	Facets     *SearchFacets `json:"facets,omitempty"`
 }
 
 type ProductHit struct {
@@ -98,10 +108,10 @@ type AutocompleteResponse struct {
 }
 
 type Suggestion struct {
-	Text      string  `json:"text"`
-	Type      string  `json:"type"` // product, brand, category
-	ID        string  `json:"id,omitempty"`
-	Score     float64 `json:"_score,omitempty"`
+	Text  string  `json:"text"`
+	Type  string  `json:"type"` // product, brand, category
+	ID    string  `json:"id,omitempty"`
+	Score float64 `json:"_score,omitempty"`
 }
 
 // --- Kafka Event Models ---
@@ -152,12 +162,12 @@ func IndexMapping() map[string]interface{} {
 		},
 		"mappings": map[string]interface{}{
 			"properties": map[string]interface{}{
-				"id":               map[string]string{"type": "keyword"},
-				"tenant_id":        map[string]string{"type": "keyword"},
-				"sku":              map[string]string{"type": "keyword"},
+				"id":        map[string]string{"type": "keyword"},
+				"tenant_id": map[string]string{"type": "keyword"},
+				"sku":       map[string]string{"type": "keyword"},
 				"name": map[string]interface{}{
-					"type":            "text",
-					"analyzer":        "standard",
+					"type":     "text",
+					"analyzer": "standard",
 					"fields": map[string]interface{}{
 						"autocomplete": map[string]interface{}{
 							"type":            "text",
@@ -169,7 +179,7 @@ func IndexMapping() map[string]interface{} {
 						},
 					},
 				},
-				"description":      map[string]string{"type": "text"},
+				"description": map[string]string{"type": "text"},
 				"brand": map[string]interface{}{
 					"type": "text",
 					"fields": map[string]interface{}{
@@ -181,7 +191,7 @@ func IndexMapping() map[string]interface{} {
 						},
 					},
 				},
-				"category_id":      map[string]string{"type": "keyword"},
+				"category_id": map[string]string{"type": "keyword"},
 				"category_name": map[string]interface{}{
 					"type": "text",
 					"fields": map[string]interface{}{
@@ -194,15 +204,15 @@ func IndexMapping() map[string]interface{} {
 				"tags":             map[string]string{"type": "keyword"},
 				"status":           map[string]string{"type": "keyword"},
 				"attributes": map[string]interface{}{
-					"type": "object",
+					"type":    "object",
 					"dynamic": true,
 				},
-				"in_stock":         map[string]string{"type": "boolean"},
-				"stock_quantity":   map[string]string{"type": "integer"},
-				"weight":           map[string]string{"type": "float"},
-				"seo_keywords":     map[string]string{"type": "keyword"},
-				"created_at":       map[string]string{"type": "date"},
-				"updated_at":       map[string]string{"type": "date"},
+				"in_stock":       map[string]string{"type": "boolean"},
+				"stock_quantity": map[string]string{"type": "integer"},
+				"weight":         map[string]string{"type": "float"},
+				"seo_keywords":   map[string]string{"type": "keyword"},
+				"created_at":     map[string]string{"type": "date"},
+				"updated_at":     map[string]string{"type": "date"},
 			},
 		},
 	}

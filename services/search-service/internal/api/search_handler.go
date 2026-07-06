@@ -1,10 +1,12 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/ecommerce/search-service/internal/models"
 	"github.com/ecommerce/search-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -26,7 +28,12 @@ func RegisterRoutes(router *gin.Engine, handler *SearchHandler) {
 	{
 		v1.GET("/products", handler.SearchProducts)
 		v1.GET("/autocomplete", handler.Autocomplete)
-		v1.POST("/reindex", handler.ReindexProduct)
+		// Reindex mutates the shared search index; restrict to staff roles.
+		// Tenant identity is taken from the JWT inside the handler, never the body.
+		v1.POST("/reindex",
+			sharedmiddleware.RequireRole("super_admin", "admin", "moderator"),
+			handler.ReindexProduct,
+		)
 	}
 }
 
@@ -70,23 +77,36 @@ func (h *SearchHandler) Autocomplete(c *gin.Context) {
 }
 
 func (h *SearchHandler) ReindexProduct(c *gin.Context) {
-	var product models.ProductDocument
-	if err := c.ShouldBindJSON(&product); err != nil {
+	// Tenant is always derived from the verified JWT, never from the request
+	// body, so a caller cannot pollute another tenant's search documents.
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "tenant not found in token"})
+		return
+	}
+
+	var req models.ReindexProductRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	product := req.ProductDocument
+	// Force the indexed doc's tenant to the caller's JWT tenant.
+	product.TenantID = tenantID
 
 	if product.ID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "product id is required"})
 		return
 	}
 
-	if product.TenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
-		return
-	}
-
 	if err := h.service.IndexProduct(c.Request.Context(), &product); err != nil {
+		if errors.Is(err, service.ErrTenantMismatch) {
+			// The document exists under a different tenant — do not disclose it.
+			h.logger.WithError(err).Warn("Reindex blocked: cross-tenant product")
+			c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+			return
+		}
 		h.logger.WithError(err).Error("Failed to reindex product")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reindex product"})
 		return

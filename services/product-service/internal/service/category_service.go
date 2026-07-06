@@ -12,13 +12,13 @@ import (
 // CategoryService defines the interface for category operations
 type CategoryService interface {
 	CreateCategory(ctx context.Context, req *models.CreateCategoryRequest) (*models.CategoryResponse, error)
-	GetCategoryByID(ctx context.Context, id string) (*models.CategoryResponse, error)
+	GetCategoryByID(ctx context.Context, tenantID, id string) (*models.CategoryResponse, error)
 	GetCategoryBySlug(ctx context.Context, tenantID, slug string) (*models.CategoryResponse, error)
 	ListCategories(ctx context.Context, tenantID string, offset, limit int) ([]models.CategoryResponse, int64, error)
 	ListCategoriesByParent(ctx context.Context, tenantID string, parentID *string, offset, limit int) ([]models.CategoryResponse, int64, error)
-	UpdateCategory(ctx context.Context, id string, req *models.UpdateCategoryRequest) (*models.CategoryResponse, error)
-	DeleteCategory(ctx context.Context, id string) error
-	UpdateCategoryStatus(ctx context.Context, id string, status models.CategoryStatus) error
+	UpdateCategory(ctx context.Context, tenantID, id string, req *models.UpdateCategoryRequest) (*models.CategoryResponse, error)
+	DeleteCategory(ctx context.Context, tenantID, id string) error
+	UpdateCategoryStatus(ctx context.Context, tenantID, id string, status models.CategoryStatus) error
 }
 
 type categoryService struct {
@@ -85,11 +85,22 @@ func (s *categoryService) CreateCategory(ctx context.Context, req *models.Create
 	return category.ToResponse(), nil
 }
 
-// GetCategoryByID retrieves a category by ID
-func (s *categoryService) GetCategoryByID(ctx context.Context, id string) (*models.CategoryResponse, error) {
+// GetCategoryByID retrieves a category by ID for the public storefront read
+// path. It scopes the lookup to the caller's tenant and only exposes active
+// categories, so one tenant cannot read another tenant's categories and
+// inactive ones are never leaked publicly. A mismatch on tenant or status is
+// reported as "not found" (no existence oracle).
+func (s *categoryService) GetCategoryByID(ctx context.Context, tenantID, id string) (*models.CategoryResponse, error) {
 	category, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
 		s.logger.WithError(err).WithField("category_id", id).Error("Failed to get category")
+		return nil, errors.New("category not found")
+	}
+
+	if category.TenantID != tenantID {
+		return nil, errors.New("category not found")
+	}
+	if category.Status != models.CategoryStatusActive {
 		return nil, errors.New("category not found")
 	}
 
@@ -143,11 +154,17 @@ func (s *categoryService) ListCategoriesByParent(ctx context.Context, tenantID s
 }
 
 // UpdateCategory updates a category
-func (s *categoryService) UpdateCategory(ctx context.Context, id string, req *models.UpdateCategoryRequest) (*models.CategoryResponse, error) {
+func (s *categoryService) UpdateCategory(ctx context.Context, tenantID, id string, req *models.UpdateCategoryRequest) (*models.CategoryResponse, error) {
 	// Get existing category
 	category, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
 		s.logger.WithError(err).WithField("category_id", id).Error("Failed to get category for update")
+		return nil, errors.New("category not found")
+	}
+
+	// Ownership check: a category belonging to another tenant is reported as not
+	// found so a caller can't update or probe across tenants.
+	if category.TenantID != tenantID {
 		return nil, errors.New("category not found")
 	}
 
@@ -193,8 +210,8 @@ func (s *categoryService) UpdateCategory(ctx context.Context, id string, req *mo
 	}
 	category.UpdatedBy = req.UpdatedBy
 
-	// Save changes
-	if err := s.categoryRepo.Update(ctx, id, category); err != nil {
+	// Save changes (repo also scopes by tenant_id as defense in depth)
+	if err := s.categoryRepo.Update(ctx, tenantID, id, category); err != nil {
 		s.logger.WithError(err).WithField("category_id", id).Error("Failed to update category")
 		return nil, errors.New("failed to update category")
 	}
@@ -205,8 +222,8 @@ func (s *categoryService) UpdateCategory(ctx context.Context, id string, req *mo
 }
 
 // DeleteCategory deletes a category (soft delete)
-func (s *categoryService) DeleteCategory(ctx context.Context, id string) error {
-	if err := s.categoryRepo.Delete(ctx, id); err != nil {
+func (s *categoryService) DeleteCategory(ctx context.Context, tenantID, id string) error {
+	if err := s.categoryRepo.Delete(ctx, tenantID, id); err != nil {
 		s.logger.WithError(err).WithField("category_id", id).Error("Failed to delete category")
 		return errors.New("failed to delete category")
 	}
@@ -217,8 +234,8 @@ func (s *categoryService) DeleteCategory(ctx context.Context, id string) error {
 }
 
 // UpdateCategoryStatus updates a category's status
-func (s *categoryService) UpdateCategoryStatus(ctx context.Context, id string, status models.CategoryStatus) error {
-	if err := s.categoryRepo.UpdateStatus(ctx, id, status); err != nil {
+func (s *categoryService) UpdateCategoryStatus(ctx context.Context, tenantID, id string, status models.CategoryStatus) error {
+	if err := s.categoryRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 		s.logger.WithError(err).WithField("category_id", id).Error("Failed to update category status")
 		return errors.New("failed to update category status")
 	}

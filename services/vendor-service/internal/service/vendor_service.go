@@ -20,13 +20,13 @@ var eventSigner = sharedkafka.NewEventSignerFromEnv()
 
 // VendorService defines the interface for vendor business logic
 type VendorService interface {
-	RegisterVendor(ctx context.Context, req *models.RegisterVendorRequest) (*models.VendorResponse, error)
-	GetVendor(ctx context.Context, id string) (*models.VendorResponse, error)
+	RegisterVendor(ctx context.Context, tenantID string, req *models.RegisterVendorRequest) (*models.VendorResponse, error)
+	GetVendor(ctx context.Context, id string, tenantID string) (*models.VendorResponse, error)
 	ListVendors(ctx context.Context, tenantID, status string, page, pageSize int) ([]models.VendorResponse, int64, error)
-	UpdateVendor(ctx context.Context, id string, req *models.UpdateVendorRequest) (*models.VendorResponse, error)
-	UpdateVendorStatus(ctx context.Context, id string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error)
-	GetVendorOrders(ctx context.Context, vendorID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error)
-	GetVendorAnalytics(ctx context.Context, vendorID string) (*models.VendorAnalyticsResponse, error)
+	UpdateVendor(ctx context.Context, id string, tenantID string, req *models.UpdateVendorRequest) (*models.VendorResponse, error)
+	UpdateVendorStatus(ctx context.Context, id string, tenantID string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error)
+	GetVendorOrders(ctx context.Context, vendorID string, tenantID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error)
+	GetVendorAnalytics(ctx context.Context, vendorID string, tenantID string) (*models.VendorAnalyticsResponse, error)
 	RecordOrder(ctx context.Context, vendorID, tenantID, orderID string, amount float64) error
 }
 
@@ -44,9 +44,9 @@ func NewVendorService(repo repository.VendorRepository, writer *kafka.Writer, lo
 	}
 }
 
-func (s *vendorService) RegisterVendor(ctx context.Context, req *models.RegisterVendorRequest) (*models.VendorResponse, error) {
-	// Check if email already registered
-	existing, err := s.repo.GetByEmail(ctx, req.Email)
+func (s *vendorService) RegisterVendor(ctx context.Context, tenantID string, req *models.RegisterVendorRequest) (*models.VendorResponse, error) {
+	// Check if email already registered within this tenant
+	existing, err := s.repo.GetByEmail(ctx, req.Email, tenantID)
 	if err == nil && existing != nil {
 		return nil, fmt.Errorf("vendor with this email already exists")
 	}
@@ -59,7 +59,7 @@ func (s *vendorService) RegisterVendor(ctx context.Context, req *models.Register
 	now := time.Now().UTC()
 	vendor := &models.Vendor{
 		ID:             uuid.New().String(),
-		TenantID:       req.TenantID,
+		TenantID:       tenantID,
 		Name:           req.Name,
 		Email:          req.Email,
 		Phone:          req.Phone,
@@ -91,8 +91,8 @@ func (s *vendorService) RegisterVendor(ctx context.Context, req *models.Register
 	return toVendorResponse(vendor), nil
 }
 
-func (s *vendorService) GetVendor(ctx context.Context, id string) (*models.VendorResponse, error) {
-	vendor, err := s.repo.GetByID(ctx, id)
+func (s *vendorService) GetVendor(ctx context.Context, id string, tenantID string) (*models.VendorResponse, error) {
+	vendor, err := s.repo.GetByID(ctx, id, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +119,8 @@ func (s *vendorService) ListVendors(ctx context.Context, tenantID, status string
 	return responses, total, nil
 }
 
-func (s *vendorService) UpdateVendor(ctx context.Context, id string, req *models.UpdateVendorRequest) (*models.VendorResponse, error) {
-	vendor, err := s.repo.GetByID(ctx, id)
+func (s *vendorService) UpdateVendor(ctx context.Context, id string, tenantID string, req *models.UpdateVendorRequest) (*models.VendorResponse, error) {
+	vendor, err := s.repo.GetByID(ctx, id, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +155,8 @@ func (s *vendorService) UpdateVendor(ctx context.Context, id string, req *models
 	return toVendorResponse(vendor), nil
 }
 
-func (s *vendorService) UpdateVendorStatus(ctx context.Context, id string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error) {
-	vendor, err := s.repo.GetByID(ctx, id)
+func (s *vendorService) UpdateVendorStatus(ctx context.Context, id string, tenantID string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error) {
+	vendor, err := s.repo.GetByID(ctx, id, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,12 +197,17 @@ func (s *vendorService) UpdateVendorStatus(ctx context.Context, id string, req *
 	return toVendorResponse(vendor), nil
 }
 
-func (s *vendorService) GetVendorOrders(ctx context.Context, vendorID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error) {
+func (s *vendorService) GetVendorOrders(ctx context.Context, vendorID string, tenantID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 {
 		pageSize = 20
+	}
+
+	// Ensure the vendor belongs to the caller's tenant before exposing its orders.
+	if _, err := s.repo.GetByID(ctx, vendorID, tenantID); err != nil {
+		return nil, 0, err
 	}
 
 	orders, total, err := s.repo.GetOrdersByVendor(ctx, vendorID, page, pageSize)
@@ -226,7 +231,12 @@ func (s *vendorService) GetVendorOrders(ctx context.Context, vendorID string, pa
 	return responses, total, nil
 }
 
-func (s *vendorService) GetVendorAnalytics(ctx context.Context, vendorID string) (*models.VendorAnalyticsResponse, error) {
+func (s *vendorService) GetVendorAnalytics(ctx context.Context, vendorID string, tenantID string) (*models.VendorAnalyticsResponse, error) {
+	// Ensure the vendor belongs to the caller's tenant before exposing analytics.
+	if _, err := s.repo.GetByID(ctx, vendorID, tenantID); err != nil {
+		return nil, err
+	}
+
 	analytics, err := s.repo.GetVendorAnalytics(ctx, vendorID)
 	if err != nil {
 		return nil, err
@@ -235,7 +245,7 @@ func (s *vendorService) GetVendorAnalytics(ctx context.Context, vendorID string)
 }
 
 func (s *vendorService) RecordOrder(ctx context.Context, vendorID, tenantID, orderID string, amount float64) error {
-	vendor, err := s.repo.GetByID(ctx, vendorID)
+	vendor, err := s.repo.GetByID(ctx, vendorID, tenantID)
 	if err != nil {
 		return fmt.Errorf("vendor not found: %w", err)
 	}

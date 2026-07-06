@@ -30,16 +30,16 @@ func (m *MockShippingService) CreateShipment(ctx context.Context, req *models.Cr
 	return args.Get(0).(*models.ShipmentResponse), args.Error(1)
 }
 
-func (m *MockShippingService) GetShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockShippingService) GetShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.ShipmentResponse), args.Error(1)
 }
 
-func (m *MockShippingService) GetShipmentByTracking(ctx context.Context, trackingNumber string) (*models.ShipmentResponse, error) {
-	args := m.Called(ctx, trackingNumber)
+func (m *MockShippingService) GetShipmentByTracking(ctx context.Context, tenantID, trackingNumber string) (*models.ShipmentResponse, error) {
+	args := m.Called(ctx, tenantID, trackingNumber)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -59,16 +59,16 @@ func (m *MockShippingService) ListShipments(ctx context.Context, tenantID string
 	return args.Get(0).([]models.ShipmentResponse), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockShippingService) UpdateStatus(ctx context.Context, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockShippingService) UpdateStatus(ctx context.Context, tenantID, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
+	args := m.Called(ctx, tenantID, id, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.ShipmentResponse), args.Error(1)
 }
 
-func (m *MockShippingService) CancelShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockShippingService) CancelShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -83,15 +83,28 @@ func (m *MockShippingService) CalculateRates(ctx context.Context, req *models.Ca
 	return args.Get(0).(*models.RateCalculationResponse), args.Error(1)
 }
 
-func setupRouter(mockService *MockShippingService) *gin.Engine {
+// setupRouter builds a router with a stub Auth middleware that injects the given
+// tenant into the gin context (mirroring sharedmiddleware.Auth). Pass an empty
+// tenant to simulate an unauthenticated request.
+func setupRouterWithTenant(mockService *MockShippingService, tenantID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewShippingHandler(mockService, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set("tenant_id", tenantID)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
+}
+
+func setupRouter(mockService *MockShippingService) *gin.Engine {
+	return setupRouterWithTenant(mockService, "tenant-1")
 }
 
 func createTestResponse() *models.ShipmentResponse {
@@ -198,7 +211,7 @@ func TestHandler_GetShipment_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := createTestResponse()
-	mockService.On("GetShipment", mock.Anything, "shipment-1").Return(resp, nil)
+	mockService.On("GetShipment", mock.Anything, "tenant-1", "shipment-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments/shipment-1", nil)
@@ -215,7 +228,7 @@ func TestHandler_GetShipment_NotFound(t *testing.T) {
 	mockService := new(MockShippingService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetShipment", mock.Anything, "nonexistent").Return(nil, errors.New("shipment not found"))
+	mockService.On("GetShipment", mock.Anything, "tenant-1", "nonexistent").Return(nil, errors.New("shipment not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments/nonexistent", nil)
@@ -231,7 +244,7 @@ func TestHandler_GetShipmentByTracking_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := createTestResponse()
-	mockService.On("GetShipmentByTracking", mock.Anything, "PA1234567890").Return(resp, nil)
+	mockService.On("GetShipmentByTracking", mock.Anything, "tenant-1", "PA1234567890").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments/tracking/PA1234567890", nil)
@@ -244,7 +257,7 @@ func TestHandler_GetShipmentByTracking_NotFound(t *testing.T) {
 	mockService := new(MockShippingService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetShipmentByTracking", mock.Anything, "INVALID").Return(nil, errors.New("not found"))
+	mockService.On("GetShipmentByTracking", mock.Anything, "tenant-1", "INVALID").Return(nil, errors.New("not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments/tracking/INVALID", nil)
@@ -269,15 +282,15 @@ func TestHandler_GetShipmentByOrderID_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestHandler_GetShipmentByOrderID_MissingTenantID(t *testing.T) {
+func TestHandler_GetShipmentByOrderID_Unauthenticated(t *testing.T) {
 	mockService := new(MockShippingService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments/order/order-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetShipmentByOrderID_NotFound(t *testing.T) {
@@ -314,15 +327,15 @@ func TestHandler_ListShipments_Success(t *testing.T) {
 	assert.Equal(t, int64(1), result.Pagination.Total)
 }
 
-func TestHandler_ListShipments_MissingTenantID(t *testing.T) {
+func TestHandler_ListShipments_Unauthenticated(t *testing.T) {
 	mockService := new(MockShippingService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/shipments", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_ListShipments_WithStatusFilter(t *testing.T) {
@@ -368,7 +381,7 @@ func TestHandler_UpdateStatus_Success(t *testing.T) {
 
 	resp := createTestResponse()
 	resp.Status = models.StatusInTransit
-	mockService.On("UpdateStatus", mock.Anything, "shipment-1", mock.AnythingOfType("*models.UpdateStatusRequest")).Return(resp, nil)
+	mockService.On("UpdateStatus", mock.Anything, "tenant-1", "shipment-1", mock.AnythingOfType("*models.UpdateStatusRequest")).Return(resp, nil)
 
 	body := `{"status": "in_transit", "location": "Gazipur, Dhaka", "description": "In transit"}`
 
@@ -398,7 +411,7 @@ func TestHandler_UpdateStatus_InvalidTransition(t *testing.T) {
 	mockService := new(MockShippingService)
 	router := setupRouter(mockService)
 
-	mockService.On("UpdateStatus", mock.Anything, "shipment-1", mock.AnythingOfType("*models.UpdateStatusRequest")).
+	mockService.On("UpdateStatus", mock.Anything, "tenant-1", "shipment-1", mock.AnythingOfType("*models.UpdateStatusRequest")).
 		Return(nil, errors.New("invalid status transition"))
 
 	body := `{"status": "delivered"}`
@@ -419,7 +432,7 @@ func TestHandler_CancelShipment_Success(t *testing.T) {
 
 	resp := createTestResponse()
 	resp.Status = models.StatusCancelled
-	mockService.On("CancelShipment", mock.Anything, "shipment-1").Return(resp, nil)
+	mockService.On("CancelShipment", mock.Anything, "tenant-1", "shipment-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/shipments/shipment-1/cancel", nil)
@@ -436,7 +449,7 @@ func TestHandler_CancelShipment_Error(t *testing.T) {
 	mockService := new(MockShippingService)
 	router := setupRouter(mockService)
 
-	mockService.On("CancelShipment", mock.Anything, "shipment-1").
+	mockService.On("CancelShipment", mock.Anything, "tenant-1", "shipment-1").
 		Return(nil, errors.New("can only be cancelled when pending"))
 
 	w := httptest.NewRecorder()

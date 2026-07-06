@@ -21,10 +21,10 @@ type ProductRepository interface {
 	List(ctx context.Context, tenantID string, offset, limit int) ([]models.Product, int64, error)
 	ListByCategory(ctx context.Context, tenantID, categoryID string, offset, limit int) ([]models.Product, int64, error)
 	Search(ctx context.Context, tenantID, query string, offset, limit int) ([]models.Product, int64, error)
-	Update(ctx context.Context, id string, product *models.Product) error
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, tenantID, id string, product *models.Product) error
+	Delete(ctx context.Context, tenantID, id string) error
 	SKUExists(ctx context.Context, tenantID, sku string) (bool, error)
-	UpdateStatus(ctx context.Context, id string, status models.ProductStatus) error
+	UpdateStatus(ctx context.Context, tenantID, id string, status models.ProductStatus) error
 	UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error
 	AddImage(ctx context.Context, id, imageURL string) error
 	RemoveImage(ctx context.Context, id, imageURL string) error
@@ -208,8 +208,9 @@ func (r *productRepository) Search(ctx context.Context, tenantID, query string, 
 	return products, total, nil
 }
 
-// Update updates a product
-func (r *productRepository) Update(ctx context.Context, id string, product *models.Product) error {
+// Update updates a product. The tenant_id predicate ensures a tenant can only
+// modify its own products; a cross-tenant id yields no match (404 upstream).
+func (r *productRepository) Update(ctx context.Context, tenantID, id string, product *models.Product) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid product ID")
@@ -218,6 +219,7 @@ func (r *productRepository) Update(ctx context.Context, id string, product *mode
 	product.UpdatedAt = time.Now()
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 
@@ -234,8 +236,9 @@ func (r *productRepository) Update(ctx context.Context, id string, product *mode
 	return nil
 }
 
-// Delete soft deletes a product
-func (r *productRepository) Delete(ctx context.Context, id string) error {
+// Delete soft deletes a product. The tenant_id predicate ensures a tenant can
+// only delete its own products; a cross-tenant id yields no match (404 upstream).
+func (r *productRepository) Delete(ctx context.Context, tenantID, id string) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid product ID")
@@ -244,6 +247,7 @@ func (r *productRepository) Delete(ctx context.Context, id string) error {
 	now := time.Now()
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 
@@ -283,8 +287,10 @@ func (r *productRepository) SKUExists(ctx context.Context, tenantID, sku string)
 	return count > 0, nil
 }
 
-// UpdateStatus updates a product's status
-func (r *productRepository) UpdateStatus(ctx context.Context, id string, status models.ProductStatus) error {
+// UpdateStatus updates a product's status. The tenant_id predicate ensures a
+// tenant can only change its own products' status; a cross-tenant id yields no
+// match (404 upstream).
+func (r *productRepository) UpdateStatus(ctx context.Context, tenantID, id string, status models.ProductStatus) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return errors.New("invalid product ID")
@@ -292,6 +298,7 @@ func (r *productRepository) UpdateStatus(ctx context.Context, id string, status 
 
 	filter := bson.M{
 		"_id":        objectID,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}
 

@@ -16,8 +16,8 @@ func (m *MockReviewRepository) Create(ctx context.Context, review *models.Review
 	return args.Error(0)
 }
 
-func (m *MockReviewRepository) GetByID(ctx context.Context, id string) (*models.Review, error) {
-	args := m.Called(ctx, id)
+func (m *MockReviewRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Review, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -39,8 +39,8 @@ func (m *MockReviewRepository) Update(ctx context.Context, review *models.Review
 	return args.Error(0)
 }
 
-func (m *MockReviewRepository) Delete(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockReviewRepository) Delete(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
@@ -57,7 +57,7 @@ func (m *MockReviewRepository) HasUserReviewed(ctx context.Context, tenantID, pr
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockReviewRepository) AddHelpfulVote(ctx context.Context, id, voterID string, helpful bool) error {
-	args := m.Called(ctx, id, voterID, helpful)
+func (m *MockReviewRepository) AddHelpfulVote(ctx context.Context, tenantID, id, voterID string, helpful bool) error {
+	args := m.Called(ctx, tenantID, id, voterID, helpful)
 	return args.Error(0)
 }

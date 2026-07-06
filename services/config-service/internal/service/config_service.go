@@ -14,20 +14,20 @@ type ConfigService interface {
 	// CRUD
 	GetConfig(ctx context.Context, namespace, key, environment, tenantID string) (*models.ConfigEntryResponse, error)
 	SetConfig(ctx context.Context, req *models.SetConfigRequest) (*models.ConfigEntryResponse, error)
-	DeleteConfig(ctx context.Context, id string) error
+	DeleteConfig(ctx context.Context, id, tenantID string) error
 
 	// Listing
 	ListByNamespace(ctx context.Context, namespace, environment, tenantID string) ([]models.ConfigEntryResponse, error)
 	ListNamespaces(ctx context.Context) (*models.NamespaceListResponse, error)
-	SearchConfigs(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error)
+	SearchConfigs(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error)
 
 	// Bulk operations
 	BulkGet(ctx context.Context, req *models.BulkGetRequest, environment, tenantID string) ([]models.ConfigEntryResponse, error)
 	BulkSet(ctx context.Context, req *models.BulkSetRequest) ([]models.ConfigEntryResponse, error)
 
 	// Audit
-	GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error)
-	GetConfigHistory(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error)
+	GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error)
+	GetConfigHistory(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error)
 
 	// Export
 	ExportNamespace(ctx context.Context, namespace, environment, tenantID string) ([]models.ConfigEntryResponse, error)
@@ -134,13 +134,19 @@ func (s *configService) SetConfig(ctx context.Context, req *models.SetConfigRequ
 	return toConfigResponse(entry), nil
 }
 
-func (s *configService) DeleteConfig(ctx context.Context, id string) error {
+func (s *configService) DeleteConfig(ctx context.Context, id, tenantID string) error {
 	entry, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("config not found")
 	}
 
-	if err := s.repo.Delete(ctx, id); err != nil {
+	// Enforce tenant ownership: an id belonging to another tenant is treated as
+	// not found so callers cannot probe or delete cross-tenant config.
+	if entry.TenantID != tenantID {
+		return fmt.Errorf("config not found")
+	}
+
+	if err := s.repo.Delete(ctx, id, tenantID); err != nil {
 		return fmt.Errorf("failed to delete config: %w", err)
 	}
 
@@ -180,7 +186,7 @@ func (s *configService) ListNamespaces(ctx context.Context) (*models.NamespaceLi
 	return &models.NamespaceListResponse{Namespaces: summaries}, nil
 }
 
-func (s *configService) SearchConfigs(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error) {
+func (s *configService) SearchConfigs(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -188,7 +194,7 @@ func (s *configService) SearchConfigs(ctx context.Context, query, namespace, env
 		pageSize = 50
 	}
 
-	entries, total, err := s.repo.Search(ctx, query, namespace, environment, page, pageSize)
+	entries, total, err := s.repo.Search(ctx, query, namespace, environment, tenantID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -227,7 +233,7 @@ func (s *configService) BulkSet(ctx context.Context, req *models.BulkSetRequest)
 	return results, nil
 }
 
-func (s *configService) GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
+func (s *configService) GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -235,7 +241,7 @@ func (s *configService) GetAuditLog(ctx context.Context, namespace, key string, 
 		pageSize = 50
 	}
 
-	logs, total, err := s.repo.GetAuditLog(ctx, namespace, key, page, pageSize)
+	logs, total, err := s.repo.GetAuditLog(ctx, namespace, key, tenantID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -243,7 +249,7 @@ func (s *configService) GetAuditLog(ctx context.Context, namespace, key string, 
 	return toAuditResponses(logs), total, nil
 }
 
-func (s *configService) GetConfigHistory(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
+func (s *configService) GetConfigHistory(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -251,7 +257,7 @@ func (s *configService) GetConfigHistory(ctx context.Context, configID string, p
 		pageSize = 50
 	}
 
-	logs, total, err := s.repo.GetAuditByConfigID(ctx, configID, page, pageSize)
+	logs, total, err := s.repo.GetAuditByConfigID(ctx, configID, tenantID, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}

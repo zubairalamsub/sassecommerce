@@ -7,6 +7,7 @@ import (
 
 	"github.com/ecommerce/analytics-service/internal/models"
 	"github.com/ecommerce/analytics-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -36,9 +37,9 @@ func RegisterRoutes(router *gin.Engine, handler *AnalyticsHandler) {
 }
 
 func (h *AnalyticsHandler) GetSalesReport(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -60,9 +61,9 @@ func (h *AnalyticsHandler) GetSalesReport(c *gin.Context) {
 }
 
 func (h *AnalyticsHandler) GetCustomerInsights(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -83,9 +84,9 @@ func (h *AnalyticsHandler) GetCustomerInsights(c *gin.Context) {
 }
 
 func (h *AnalyticsHandler) GetProductPerformance(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -109,11 +110,18 @@ func (h *AnalyticsHandler) GetProductPerformance(c *gin.Context) {
 }
 
 func (h *AnalyticsHandler) CreateReport(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.CreateReportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
 
 	result, err := h.service.CreateReport(c.Request.Context(), &req)
 	if err != nil {
@@ -130,9 +138,15 @@ func (h *AnalyticsHandler) CreateReport(c *gin.Context) {
 }
 
 func (h *AnalyticsHandler) GetReport(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	reportID := c.Param("reportId")
 
-	result, err := h.service.GetReport(c.Request.Context(), reportID)
+	result, err := h.service.GetReport(c.Request.Context(), reportID, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -147,9 +161,9 @@ func (h *AnalyticsHandler) GetReport(c *gin.Context) {
 }
 
 func (h *AnalyticsHandler) ListReports(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 

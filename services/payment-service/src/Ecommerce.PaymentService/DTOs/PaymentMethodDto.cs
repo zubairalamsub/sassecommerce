@@ -4,6 +4,8 @@ namespace Ecommerce.PaymentService.DTOs;
 
 public class CreatePaymentMethodRequest
 {
+    // Server-set only: the authenticated controller overwrites this from the JWT
+    // "tenant_id" claim. Any value sent by an API client is ignored.
     public string TenantId { get; set; } = string.Empty;
     public string CustomerId { get; set; } = string.Empty;
     public string Type { get; set; } = "credit_card";

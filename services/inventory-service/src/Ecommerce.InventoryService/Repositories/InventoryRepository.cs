@@ -13,11 +13,11 @@ public class InventoryRepository : IInventoryRepository
         _context = context;
     }
 
-    public async Task<InventoryItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<InventoryItem?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.InventoryItems
             .Include(i => i.Warehouse)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<InventoryItem?> GetByProductAsync(string tenantId, Guid warehouseId, string productId, string? variantId, CancellationToken cancellationToken = default)
@@ -40,11 +40,11 @@ public class InventoryRepository : IInventoryRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<InventoryItem>> GetByWarehouseAsync(Guid warehouseId, CancellationToken cancellationToken = default)
+    public async Task<List<InventoryItem>> GetByWarehouseAsync(Guid warehouseId, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.InventoryItems
             .Include(i => i.Warehouse)
-            .Where(i => i.WarehouseId == warehouseId)
+            .Where(i => i.WarehouseId == warehouseId && i.TenantId == tenantId)
             .OrderBy(i => i.SKU)
             .ToListAsync(cancellationToken);
     }
@@ -88,9 +88,9 @@ public class InventoryRepository : IInventoryRepository
         return inventoryItem;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var item = await GetByIdAsync(id, cancellationToken);
+        var item = await GetByIdAsync(id, tenantId, cancellationToken);
         if (item != null)
         {
             item.DeletedAt = DateTime.UtcNow;

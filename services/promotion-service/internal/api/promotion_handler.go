@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/promotion-service/internal/models"
 	"github.com/ecommerce/promotion-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -25,13 +26,13 @@ func NewPromotionHandler(service service.PromotionService, logger *logrus.Logger
 func RegisterRoutes(router *gin.Engine, handler *PromotionHandler) {
 	v1 := router.Group("/api/v1")
 	{
-		// Promotions
-		v1.POST("/promotions", handler.CreatePromotion)
+		// Promotions — creation is a staff-only mutation.
+		v1.POST("/promotions", sharedmiddleware.RequireRole("admin", "moderator"), handler.CreatePromotion)
 		v1.GET("/promotions/:id", handler.GetPromotion)
 		v1.GET("/promotions/active", handler.GetActivePromotions)
 
-		// Coupons
-		v1.POST("/coupons", handler.CreateCoupon)
+		// Coupons — creation is a staff-only mutation.
+		v1.POST("/coupons", sharedmiddleware.RequireRole("admin", "moderator"), handler.CreateCoupon)
 		v1.POST("/coupons/validate/:code", handler.ValidateCoupon)
 		v1.POST("/coupons/apply", handler.ApplyCoupon)
 
@@ -42,11 +43,18 @@ func RegisterRoutes(router *gin.Engine, handler *PromotionHandler) {
 }
 
 func (h *PromotionHandler) CreatePromotion(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.CreatePromotionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
 
 	result, err := h.service.CreatePromotion(c.Request.Context(), &req)
 	if err != nil {
@@ -63,9 +71,15 @@ func (h *PromotionHandler) CreatePromotion(c *gin.Context) {
 }
 
 func (h *PromotionHandler) GetPromotion(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 
-	result, err := h.service.GetPromotion(c.Request.Context(), id)
+	result, err := h.service.GetPromotion(c.Request.Context(), tenantID, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -80,9 +94,9 @@ func (h *PromotionHandler) GetPromotion(c *gin.Context) {
 }
 
 func (h *PromotionHandler) GetActivePromotions(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -97,11 +111,18 @@ func (h *PromotionHandler) GetActivePromotions(c *gin.Context) {
 }
 
 func (h *PromotionHandler) CreateCoupon(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.CreateCouponRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
 
 	result, err := h.service.CreateCoupon(c.Request.Context(), &req)
 	if err != nil {
@@ -122,6 +143,13 @@ func (h *PromotionHandler) CreateCoupon(c *gin.Context) {
 }
 
 func (h *PromotionHandler) ValidateCoupon(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	code := c.Param("code")
 
 	var req models.ValidateCouponRequest
@@ -129,6 +157,8 @@ func (h *PromotionHandler) ValidateCoupon(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
+	req.UserID = userID
 
 	result, err := h.service.ValidateCoupon(c.Request.Context(), code, &req)
 	if err != nil {
@@ -141,11 +171,20 @@ func (h *PromotionHandler) ValidateCoupon(c *gin.Context) {
 }
 
 func (h *PromotionHandler) ApplyCoupon(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.ApplyCouponRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
+	req.UserID = userID
 
 	result, err := h.service.ApplyCoupon(c.Request.Context(), &req)
 	if err != nil {
@@ -158,10 +197,12 @@ func (h *PromotionHandler) ApplyCoupon(c *gin.Context) {
 }
 
 func (h *PromotionHandler) GetLoyaltyAccount(c *gin.Context) {
-	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
-	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+	// Both tenant and user come from the verified JWT — a caller may only read
+	// their own loyalty account. The :userId path param is ignored.
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -176,11 +217,22 @@ func (h *PromotionHandler) GetLoyaltyAccount(c *gin.Context) {
 }
 
 func (h *PromotionHandler) ProcessLoyaltyPoints(c *gin.Context) {
+	// Tenant and user are taken from the verified JWT so a caller can only
+	// affect their own loyalty balance, never another user's or tenant's.
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.LoyaltyPointsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.TenantID = tenantID
+	req.UserID = userID
 
 	result, err := h.service.ProcessLoyaltyPoints(c.Request.Context(), &req)
 	if err != nil {

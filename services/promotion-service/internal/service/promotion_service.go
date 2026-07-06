@@ -22,7 +22,7 @@ var eventSigner = sharedkafka.NewEventSignerFromEnv()
 type PromotionService interface {
 	// Promotions
 	CreatePromotion(ctx context.Context, req *models.CreatePromotionRequest) (*models.PromotionResponse, error)
-	GetPromotion(ctx context.Context, id string) (*models.PromotionResponse, error)
+	GetPromotion(ctx context.Context, tenantID, id string) (*models.PromotionResponse, error)
 	GetActivePromotions(ctx context.Context, tenantID string) ([]models.PromotionResponse, error)
 
 	// Coupons
@@ -98,8 +98,8 @@ func (s *promotionService) CreatePromotion(ctx context.Context, req *models.Crea
 	return toPromotionResponse(promotion), nil
 }
 
-func (s *promotionService) GetPromotion(ctx context.Context, id string) (*models.PromotionResponse, error) {
-	promotion, err := s.repo.GetPromotionByID(ctx, id)
+func (s *promotionService) GetPromotion(ctx context.Context, tenantID, id string) (*models.PromotionResponse, error) {
+	promotion, err := s.repo.GetPromotionByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +122,10 @@ func (s *promotionService) GetActivePromotions(ctx context.Context, tenantID str
 // --- Coupons ---
 
 func (s *promotionService) CreateCoupon(ctx context.Context, req *models.CreateCouponRequest) (*models.CouponResponse, error) {
-	// Verify promotion exists
-	promotion, err := s.repo.GetPromotionByID(ctx, req.PromotionID)
+	// Verify the promotion exists AND belongs to the caller's tenant. Scoping the
+	// lookup by the JWT-derived tenant prevents attaching a coupon to another
+	// tenant's promotion.
+	promotion, err := s.repo.GetPromotionByID(ctx, req.TenantID, req.PromotionID)
 	if err != nil {
 		return nil, fmt.Errorf("promotion not found")
 	}
@@ -171,7 +173,7 @@ func (s *promotionService) CreateCoupon(ctx context.Context, req *models.CreateC
 func (s *promotionService) ValidateCoupon(ctx context.Context, code string, req *models.ValidateCouponRequest) (*models.ValidateCouponResponse, error) {
 	code = strings.ToUpper(code)
 
-	coupon, err := s.repo.GetCouponByCode(ctx, code)
+	coupon, err := s.repo.GetCouponByCode(ctx, req.TenantID, code)
 	if err != nil {
 		return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "coupon not found"}, nil
 	}
@@ -199,7 +201,7 @@ func (s *promotionService) ValidateCoupon(ctx context.Context, code string, req 
 	}
 
 	// Get promotion for discount details
-	promotion, err := s.repo.GetPromotionByID(ctx, coupon.PromotionID)
+	promotion, err := s.repo.GetPromotionByID(ctx, coupon.TenantID, coupon.PromotionID)
 	if err != nil {
 		return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "associated promotion not found"}, nil
 	}
@@ -249,7 +251,7 @@ func (s *promotionService) ApplyCoupon(ctx context.Context, req *models.ApplyCou
 
 	// Record usage
 	code := strings.ToUpper(req.Code)
-	coupon, _ := s.repo.GetCouponByCode(ctx, code)
+	coupon, _ := s.repo.GetCouponByCode(ctx, req.TenantID, code)
 
 	usage := &models.CouponUsage{
 		ID:       uuid.New().String(),

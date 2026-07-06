@@ -4,7 +4,7 @@ namespace Ecommerce.InventoryService.Repositories;
 
 public interface IStockReservationRepository
 {
-    Task<StockReservation?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<StockReservation?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default);
     Task<List<StockReservation>> GetByOrderAsync(string orderId, CancellationToken cancellationToken = default);
     Task<List<StockReservation>> GetActiveReservationsAsync(Guid inventoryItemId, CancellationToken cancellationToken = default);
     Task<List<StockReservation>> GetExpiredReservationsAsync(CancellationToken cancellationToken = default);

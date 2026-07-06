@@ -66,7 +66,7 @@ func TestCreateReview_Success(t *testing.T) {
 		Comment:   "Highly recommended.",
 	}
 
-	result, err := svc.CreateReview(ctx, req)
+	result, err := svc.CreateReview(ctx, "tenant-1", "user-1", req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -92,7 +92,7 @@ func TestCreateReview_NoOrderID_NotVerified(t *testing.T) {
 		Comment:   "Nice product.",
 	}
 
-	result, err := svc.CreateReview(ctx, req)
+	result, err := svc.CreateReview(ctx, "tenant-1", "user-1", req)
 
 	assert.NoError(t, err)
 	assert.False(t, result.VerifiedPurchase)
@@ -113,7 +113,7 @@ func TestCreateReview_AlreadyReviewed(t *testing.T) {
 		Comment:   "Test",
 	}
 
-	result, err := svc.CreateReview(ctx, req)
+	result, err := svc.CreateReview(ctx, "tenant-1", "user-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -136,7 +136,7 @@ func TestCreateReview_RepoFailure(t *testing.T) {
 		Comment:   "Test",
 	}
 
-	result, err := svc.CreateReview(ctx, req)
+	result, err := svc.CreateReview(ctx, "tenant-1", "user-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -149,9 +149,9 @@ func TestGetReview_Success(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 
-	result, err := svc.GetReview(ctx, "review-1")
+	result, err := svc.GetReview(ctx, "tenant-1", "review-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "review-1", result.ID)
@@ -162,9 +162,9 @@ func TestGetReview_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("review not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("review not found"))
 
-	result, err := svc.GetReview(ctx, "nonexistent")
+	result, err := svc.GetReview(ctx, "tenant-1", "nonexistent")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -222,7 +222,7 @@ func TestUpdateReview_Success(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Review")).Return(nil)
 
 	newRating := 4
@@ -232,7 +232,7 @@ func TestUpdateReview_Success(t *testing.T) {
 		Comment: "Updated comment",
 	}
 
-	result, err := svc.UpdateReview(ctx, "review-1", "user-1", req)
+	result, err := svc.UpdateReview(ctx, "tenant-1", "user-1", "review-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, result.Rating)
@@ -244,11 +244,11 @@ func TestUpdateReview_Unauthorized(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 
 	req := &models.UpdateReviewRequest{Title: "Hacked"}
 
-	result, err := svc.UpdateReview(ctx, "review-1", "other-user", req)
+	result, err := svc.UpdateReview(ctx, "tenant-1", "other-user", "review-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -259,11 +259,11 @@ func TestUpdateReview_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("review not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("review not found"))
 
 	req := &models.UpdateReviewRequest{Title: "Test"}
 
-	result, err := svc.UpdateReview(ctx, "nonexistent", "user-1", req)
+	result, err := svc.UpdateReview(ctx, "tenant-1", "user-1", "nonexistent", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -276,23 +276,25 @@ func TestDeleteReview_ByOwner(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
-	mockRepo.On("Delete", ctx, "review-1").Return(nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
+	mockRepo.On("Delete", ctx, "tenant-1", "review-1").Return(nil)
 
-	err := svc.DeleteReview(ctx, "review-1", "user-1")
+	err := svc.DeleteReview(ctx, "tenant-1", "user-1", "review-1", false)
 
 	assert.NoError(t, err)
 }
 
-func TestDeleteReview_ByAdmin(t *testing.T) {
+func TestDeleteReview_ByStaff(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
-	mockRepo.On("Delete", ctx, "review-1").Return(nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
+	mockRepo.On("Delete", ctx, "tenant-1", "review-1").Return(nil)
 
-	err := svc.DeleteReview(ctx, "review-1", "") // empty userID = admin
+	// A staff member (admin/moderator) deleting another user's review: not the
+	// owner, but authorized by role (isStaff = true).
+	err := svc.DeleteReview(ctx, "tenant-1", "moderator-user", "review-1", true)
 
 	assert.NoError(t, err)
 }
@@ -302,9 +304,9 @@ func TestDeleteReview_Unauthorized(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 
-	err := svc.DeleteReview(ctx, "review-1", "other-user")
+	err := svc.DeleteReview(ctx, "tenant-1", "other-user", "review-1", false)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unauthorized")
@@ -314,9 +316,9 @@ func TestDeleteReview_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("review not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("review not found"))
 
-	err := svc.DeleteReview(ctx, "nonexistent", "user-1")
+	err := svc.DeleteReview(ctx, "tenant-1", "user-1", "nonexistent", false)
 
 	assert.Error(t, err)
 }
@@ -329,12 +331,12 @@ func TestModerateReview_Approve(t *testing.T) {
 
 	review := createTestReview()
 	review.Status = models.StatusPending
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Review")).Return(nil)
 
 	req := &models.ModerateReviewRequest{Status: "approved"}
 
-	result, err := svc.ModerateReview(ctx, "review-1", req)
+	result, err := svc.ModerateReview(ctx, "tenant-1", "review-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusApproved, result.Status)
@@ -345,7 +347,7 @@ func TestModerateReview_Reject(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Review")).Return(nil)
 
 	req := &models.ModerateReviewRequest{
@@ -353,7 +355,7 @@ func TestModerateReview_Reject(t *testing.T) {
 		RejectReason: "Inappropriate content",
 	}
 
-	result, err := svc.ModerateReview(ctx, "review-1", req)
+	result, err := svc.ModerateReview(ctx, "tenant-1", "review-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusRejected, result.Status)
@@ -364,11 +366,11 @@ func TestModerateReview_InvalidStatus(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 
 	req := &models.ModerateReviewRequest{Status: "invalid"}
 
-	result, err := svc.ModerateReview(ctx, "review-1", req)
+	result, err := svc.ModerateReview(ctx, "tenant-1", "review-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -382,15 +384,15 @@ func TestAddHelpfulVote_Success(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
-	mockRepo.On("AddHelpfulVote", ctx, "review-1", "voter-1", true).Return(nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
+	mockRepo.On("AddHelpfulVote", ctx, "tenant-1", "review-1", "voter-1", true).Return(nil)
 
 	req := &models.HelpfulVoteRequest{
 		UserID:  "voter-1",
 		Helpful: true,
 	}
 
-	err := svc.AddHelpfulVote(ctx, "review-1", req)
+	err := svc.AddHelpfulVote(ctx, "tenant-1", "review-1", req)
 
 	assert.NoError(t, err)
 }
@@ -399,11 +401,11 @@ func TestAddHelpfulVote_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("review not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("review not found"))
 
 	req := &models.HelpfulVoteRequest{UserID: "voter-1", Helpful: true}
 
-	err := svc.AddHelpfulVote(ctx, "nonexistent", req)
+	err := svc.AddHelpfulVote(ctx, "tenant-1", "nonexistent", req)
 
 	assert.Error(t, err)
 }
@@ -415,14 +417,14 @@ func TestRespondToReview_Success(t *testing.T) {
 	ctx := context.Background()
 
 	review := createTestReview()
-	mockRepo.On("GetByID", ctx, "review-1").Return(review, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "review-1").Return(review, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Review")).Return(nil)
 
 	req := &models.SellerResponseRequest{
 		Response: "Thank you for your feedback!",
 	}
 
-	result, err := svc.RespondToReview(ctx, "review-1", req)
+	result, err := svc.RespondToReview(ctx, "tenant-1", "review-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Thank you for your feedback!", result.SellerResponse)
@@ -433,11 +435,11 @@ func TestRespondToReview_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("review not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("review not found"))
 
 	req := &models.SellerResponseRequest{Response: "Thanks!"}
 
-	result, err := svc.RespondToReview(ctx, "nonexistent", req)
+	result, err := svc.RespondToReview(ctx, "tenant-1", "nonexistent", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

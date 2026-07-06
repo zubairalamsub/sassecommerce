@@ -16,16 +16,16 @@ func (m *MockVendorRepository) Create(ctx context.Context, vendor *models.Vendor
 	return args.Error(0)
 }
 
-func (m *MockVendorRepository) GetByID(ctx context.Context, id string) (*models.Vendor, error) {
-	args := m.Called(ctx, id)
+func (m *MockVendorRepository) GetByID(ctx context.Context, id string, tenantID string) (*models.Vendor, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.Vendor), args.Error(1)
 }
 
-func (m *MockVendorRepository) GetByEmail(ctx context.Context, email string) (*models.Vendor, error) {
-	args := m.Called(ctx, email)
+func (m *MockVendorRepository) GetByEmail(ctx context.Context, email string, tenantID string) (*models.Vendor, error) {
+	args := m.Called(ctx, email, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

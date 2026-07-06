@@ -30,12 +30,12 @@ public class StockMovementRepository : IStockMovementRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<StockMovement>> GetByOrderAsync(string orderId, CancellationToken cancellationToken = default)
+    public async Task<List<StockMovement>> GetByOrderAsync(string orderId, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.StockMovements
             .Include(sm => sm.InventoryItem)
             .Include(sm => sm.Warehouse)
-            .Where(sm => sm.OrderId == orderId)
+            .Where(sm => sm.OrderId == orderId && sm.TenantId == tenantId)
             .OrderBy(sm => sm.MovementDate)
             .ToListAsync(cancellationToken);
     }

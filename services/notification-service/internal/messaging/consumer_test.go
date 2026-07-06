@@ -25,13 +25,15 @@ func (f *fakeNotificationService) SendNotification(ctx context.Context, req *mod
 	return &models.NotificationResponse{ID: "fake"}, nil
 }
 
-func (f *fakeNotificationService) GetNotification(ctx context.Context, id string) (*models.NotificationResponse, error) {
+func (f *fakeNotificationService) GetNotification(ctx context.Context, tenantID, id string) (*models.NotificationResponse, error) {
 	return nil, nil
 }
 func (f *fakeNotificationService) GetUserNotifications(ctx context.Context, tenantID, userID string, page, pageSize int) ([]models.NotificationResponse, int64, error) {
 	return nil, 0, nil
 }
-func (f *fakeNotificationService) MarkAsRead(ctx context.Context, id string) error { return nil }
+func (f *fakeNotificationService) MarkAsRead(ctx context.Context, tenantID, id string) error {
+	return nil
+}
 func (f *fakeNotificationService) GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreferenceResponse, error) {
 	return nil, errors.New("no preference")
 }

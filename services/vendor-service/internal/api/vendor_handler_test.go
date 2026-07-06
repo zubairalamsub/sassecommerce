@@ -20,16 +20,16 @@ type MockVendorService struct {
 	mock.Mock
 }
 
-func (m *MockVendorService) RegisterVendor(ctx context.Context, req *models.RegisterVendorRequest) (*models.VendorResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockVendorService) RegisterVendor(ctx context.Context, tenantID string, req *models.RegisterVendorRequest) (*models.VendorResponse, error) {
+	args := m.Called(ctx, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.VendorResponse), args.Error(1)
 }
 
-func (m *MockVendorService) GetVendor(ctx context.Context, id string) (*models.VendorResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockVendorService) GetVendor(ctx context.Context, id string, tenantID string) (*models.VendorResponse, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -41,29 +41,29 @@ func (m *MockVendorService) ListVendors(ctx context.Context, tenantID, status st
 	return args.Get(0).([]models.VendorResponse), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockVendorService) UpdateVendor(ctx context.Context, id string, req *models.UpdateVendorRequest) (*models.VendorResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockVendorService) UpdateVendor(ctx context.Context, id string, tenantID string, req *models.UpdateVendorRequest) (*models.VendorResponse, error) {
+	args := m.Called(ctx, id, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.VendorResponse), args.Error(1)
 }
 
-func (m *MockVendorService) UpdateVendorStatus(ctx context.Context, id string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockVendorService) UpdateVendorStatus(ctx context.Context, id string, tenantID string, req *models.UpdateVendorStatusRequest) (*models.VendorResponse, error) {
+	args := m.Called(ctx, id, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.VendorResponse), args.Error(1)
 }
 
-func (m *MockVendorService) GetVendorOrders(ctx context.Context, vendorID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error) {
-	args := m.Called(ctx, vendorID, page, pageSize)
+func (m *MockVendorService) GetVendorOrders(ctx context.Context, vendorID string, tenantID string, page, pageSize int) ([]models.VendorOrderResponse, int64, error) {
+	args := m.Called(ctx, vendorID, tenantID, page, pageSize)
 	return args.Get(0).([]models.VendorOrderResponse), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockVendorService) GetVendorAnalytics(ctx context.Context, vendorID string) (*models.VendorAnalyticsResponse, error) {
-	args := m.Called(ctx, vendorID)
+func (m *MockVendorService) GetVendorAnalytics(ctx context.Context, vendorID string, tenantID string) (*models.VendorAnalyticsResponse, error) {
+	args := m.Called(ctx, vendorID, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -75,13 +75,30 @@ func (m *MockVendorService) RecordOrder(ctx context.Context, vendorID, tenantID,
 	return args.Error(0)
 }
 
+// setupRouter builds a router with an authenticated tenant + admin role injected
+// into the context, mimicking the shared Auth middleware in tests.
 func setupRouter(mockService *MockVendorService) *gin.Engine {
+	return setupRouterWithIdentity(mockService, "tenant-1", "admin")
+}
+
+// setupRouterWithIdentity builds a router that injects the given tenant ID and
+// role. An empty tenantID leaves the context unauthenticated.
+func setupRouterWithIdentity(mockService *MockVendorService, tenantID, role string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewVendorHandler(mockService, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set("tenant_id", tenantID)
+		}
+		if role != "" {
+			c.Set("user_role", role)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -93,7 +110,7 @@ func TestHandler_RegisterVendor_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.VendorResponse{ID: "vendor-1", Name: "Acme", Status: models.StatusPending}
-	mockService.On("RegisterVendor", mock.Anything, mock.AnythingOfType("*models.RegisterVendorRequest")).Return(resp, nil)
+	mockService.On("RegisterVendor", mock.Anything, "tenant-1", mock.AnythingOfType("*models.RegisterVendorRequest")).Return(resp, nil)
 
 	body := `{"tenant_id": "tenant-1", "name": "Acme", "email": "vendor@acme.com"}`
 
@@ -123,7 +140,7 @@ func TestHandler_RegisterVendor_Conflict(t *testing.T) {
 	mockService := new(MockVendorService)
 	router := setupRouter(mockService)
 
-	mockService.On("RegisterVendor", mock.Anything, mock.AnythingOfType("*models.RegisterVendorRequest")).
+	mockService.On("RegisterVendor", mock.Anything, "tenant-1", mock.AnythingOfType("*models.RegisterVendorRequest")).
 		Return(nil, errors.New("vendor with this email already exists"))
 
 	body := `{"tenant_id": "t1", "name": "Acme", "email": "vendor@acme.com"}`
@@ -143,7 +160,7 @@ func TestHandler_GetVendor_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.VendorResponse{ID: "vendor-1", Name: "Acme"}
-	mockService.On("GetVendor", mock.Anything, "vendor-1").Return(resp, nil)
+	mockService.On("GetVendor", mock.Anything, "vendor-1", "tenant-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1", nil)
@@ -156,7 +173,7 @@ func TestHandler_GetVendor_NotFound(t *testing.T) {
 	mockService := new(MockVendorService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetVendor", mock.Anything, "bad").Return(nil, errors.New("vendor not found"))
+	mockService.On("GetVendor", mock.Anything, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors/bad", nil)
@@ -185,15 +202,15 @@ func TestHandler_ListVendors_Success(t *testing.T) {
 	assert.Equal(t, float64(1), result["total"])
 }
 
-func TestHandler_ListVendors_MissingTenantID(t *testing.T) {
+func TestHandler_ListVendors_Unauthenticated(t *testing.T) {
 	mockService := new(MockVendorService)
-	router := setupRouter(mockService)
+	router := setupRouterWithIdentity(mockService, "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // === UpdateVendor Handler Tests ===
@@ -203,7 +220,7 @@ func TestHandler_UpdateVendor_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.VendorResponse{ID: "vendor-1", Name: "Updated Acme"}
-	mockService.On("UpdateVendor", mock.Anything, "vendor-1", mock.AnythingOfType("*models.UpdateVendorRequest")).Return(resp, nil)
+	mockService.On("UpdateVendor", mock.Anything, "vendor-1", "tenant-1", mock.AnythingOfType("*models.UpdateVendorRequest")).Return(resp, nil)
 
 	body := `{"name": "Updated Acme"}`
 
@@ -219,7 +236,7 @@ func TestHandler_UpdateVendor_NotFound(t *testing.T) {
 	mockService := new(MockVendorService)
 	router := setupRouter(mockService)
 
-	mockService.On("UpdateVendor", mock.Anything, "bad", mock.AnythingOfType("*models.UpdateVendorRequest")).
+	mockService.On("UpdateVendor", mock.Anything, "bad", "tenant-1", mock.AnythingOfType("*models.UpdateVendorRequest")).
 		Return(nil, errors.New("vendor not found"))
 
 	body := `{"name": "Test"}`
@@ -239,7 +256,7 @@ func TestHandler_UpdateVendorStatus_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.VendorResponse{ID: "vendor-1", Status: models.StatusApproved}
-	mockService.On("UpdateVendorStatus", mock.Anything, "vendor-1", mock.AnythingOfType("*models.UpdateVendorStatusRequest")).Return(resp, nil)
+	mockService.On("UpdateVendorStatus", mock.Anything, "vendor-1", "tenant-1", mock.AnythingOfType("*models.UpdateVendorStatusRequest")).Return(resp, nil)
 
 	body := `{"status": "approved"}`
 
@@ -255,7 +272,7 @@ func TestHandler_UpdateVendorStatus_InvalidTransition(t *testing.T) {
 	mockService := new(MockVendorService)
 	router := setupRouter(mockService)
 
-	mockService.On("UpdateVendorStatus", mock.Anything, "vendor-1", mock.AnythingOfType("*models.UpdateVendorStatusRequest")).
+	mockService.On("UpdateVendorStatus", mock.Anything, "vendor-1", "tenant-1", mock.AnythingOfType("*models.UpdateVendorStatusRequest")).
 		Return(nil, errors.New("invalid status transition from pending to suspended"))
 
 	body := `{"status": "suspended"}`
@@ -268,6 +285,22 @@ func TestHandler_UpdateVendorStatus_InvalidTransition(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestHandler_UpdateVendorStatus_Forbidden(t *testing.T) {
+	mockService := new(MockVendorService)
+	// A customer role must not be able to approve/suspend vendors.
+	router := setupRouterWithIdentity(mockService, "tenant-1", "customer")
+
+	body := `{"status": "approved"}`
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockService.AssertNotCalled(t, "UpdateVendorStatus", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
 // === GetVendorOrders Handler Tests ===
 
 func TestHandler_GetVendorOrders_Success(t *testing.T) {
@@ -275,7 +308,7 @@ func TestHandler_GetVendorOrders_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	orders := []models.VendorOrderResponse{{ID: "vo-1", OrderID: "order-1", Amount: 100}}
-	mockService.On("GetVendorOrders", mock.Anything, "vendor-1", 1, 20).Return(orders, int64(1), nil)
+	mockService.On("GetVendorOrders", mock.Anything, "vendor-1", "tenant-1", 1, 20).Return(orders, int64(1), nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1/orders", nil)
@@ -293,7 +326,7 @@ func TestHandler_GetVendorAnalytics_Success(t *testing.T) {
 	analytics := &models.VendorAnalyticsResponse{
 		VendorID: "vendor-1", TotalRevenue: 5000, NetEarnings: 4500,
 	}
-	mockService.On("GetVendorAnalytics", mock.Anything, "vendor-1").Return(analytics, nil)
+	mockService.On("GetVendorAnalytics", mock.Anything, "vendor-1", "tenant-1").Return(analytics, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1/analytics", nil)
@@ -310,7 +343,7 @@ func TestHandler_GetVendorAnalytics_NotFound(t *testing.T) {
 	mockService := new(MockVendorService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetVendorAnalytics", mock.Anything, "bad").Return(nil, errors.New("vendor not found"))
+	mockService.On("GetVendorAnalytics", mock.Anything, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/vendors/bad/analytics", nil)

@@ -55,9 +55,10 @@ type SetConfigRequest struct {
 	ValueType   string `json:"value_type"`
 	Description string `json:"description"`
 	Environment string `json:"environment"`
-	TenantID    string `json:"tenant_id"`
-	IsSecret    bool   `json:"is_secret"`
-	UpdatedBy   string `json:"updated_by"`
+	// TenantID is derived from the authenticated JWT, never from the request body.
+	TenantID  string `json:"-"`
+	IsSecret  bool   `json:"is_secret"`
+	UpdatedBy string `json:"updated_by"`
 }
 
 type BulkSetRequest struct {

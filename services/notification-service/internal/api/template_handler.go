@@ -7,6 +7,7 @@ import (
 	"github.com/ecommerce/notification-service/internal/models"
 	"github.com/ecommerce/notification-service/internal/service"
 	deftpl "github.com/ecommerce/notification-service/internal/templates"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -24,23 +25,18 @@ func NewTemplateHandler(s service.TemplateService, logger *logrus.Logger) *Templ
 	return &TemplateHandler{service: s, logger: logger}
 }
 
-// tenantIDFrom resolves the tenant the request operates on. We require
-// X-Tenant-Id (set by the admin shell) but also tolerate a ?tenant_id
-// query param for convenience when hitting the API from tooling.
+// tenantIDFrom resolves the tenant the request operates on. Tenant identity is
+// taken exclusively from the verified JWT claim (set by the auth middleware) —
+// never from client-controlled transport such as the X-Tenant-Id header or a
+// query param, both of which are attacker-controllable behind the BFF rewrite.
 func tenantIDFrom(c *gin.Context) string {
-	if v := c.GetHeader("X-Tenant-Id"); v != "" {
-		return v
-	}
-	if v := c.GetHeader("X-Tenant-ID"); v != "" {
-		return v
-	}
-	return strings.TrimSpace(c.Query("tenant_id"))
+	return sharedmiddleware.GetTenantID(c)
 }
 
 func (h *TemplateHandler) List(c *gin.Context) {
 	tenantID := tenantIDFrom(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "X-Tenant-Id header is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 	items, err := h.service.List(c.Request.Context(), tenantID)
@@ -53,8 +49,13 @@ func (h *TemplateHandler) List(c *gin.Context) {
 }
 
 func (h *TemplateHandler) Get(c *gin.Context) {
+	tenantID := tenantIDFrom(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
-	t, err := h.service.Get(c.Request.Context(), id)
+	t, err := h.service.Get(c.Request.Context(), tenantID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
@@ -65,7 +66,7 @@ func (h *TemplateHandler) Get(c *gin.Context) {
 func (h *TemplateHandler) Create(c *gin.Context) {
 	tenantID := tenantIDFrom(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "X-Tenant-Id header is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 	var req models.CreateTemplateRequest
@@ -82,13 +83,18 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 }
 
 func (h *TemplateHandler) Update(c *gin.Context) {
+	tenantID := tenantIDFrom(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
 	var req models.UpdateTemplateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	t, err := h.service.Update(c.Request.Context(), id, &req)
+	t, err := h.service.Update(c.Request.Context(), tenantID, id, &req)
 	if err != nil {
 		// Distinguish not-found from validation errors so the admin UI can
 		// surface useful messages.
@@ -103,8 +109,13 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 }
 
 func (h *TemplateHandler) Delete(c *gin.Context) {
+	tenantID := tenantIDFrom(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), tenantID, id); err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -112,11 +123,16 @@ func (h *TemplateHandler) Delete(c *gin.Context) {
 }
 
 func (h *TemplateHandler) Preview(c *gin.Context) {
+	tenantID := tenantIDFrom(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
 	var req models.PreviewTemplateRequest
 	// Empty body is OK; preview will fall back to defaults.
 	_ = c.ShouldBindJSON(&req)
-	rendered, err := h.service.Preview(c.Request.Context(), id, req.SampleVars)
+	rendered, err := h.service.Preview(c.Request.Context(), tenantID, id, req.SampleVars)
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 		return
@@ -164,7 +180,7 @@ type InstallDefaultsRequest struct {
 func (h *TemplateHandler) InstallDefaults(c *gin.Context) {
 	tenantID := tenantIDFrom(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "X-Tenant-Id header is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 	var req InstallDefaultsRequest
@@ -181,13 +197,18 @@ func (h *TemplateHandler) InstallDefaults(c *gin.Context) {
 }
 
 func (h *TemplateHandler) TestSend(c *gin.Context) {
+	tenantID := tenantIDFrom(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
 	var req models.TestSendTemplateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	if err := h.service.TestSend(c.Request.Context(), id, req.Email, req.SampleVars); err != nil {
+	if err := h.service.TestSend(c.Request.Context(), tenantID, id, req.Email, req.SampleVars); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 		return
 	}

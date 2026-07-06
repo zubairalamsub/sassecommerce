@@ -24,8 +24,8 @@ func (m *MockConfigRepository) Set(ctx context.Context, entry *models.ConfigEntr
 	return args.Error(0)
 }
 
-func (m *MockConfigRepository) Delete(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockConfigRepository) Delete(ctx context.Context, id, tenantID string) error {
+	args := m.Called(ctx, id, tenantID)
 	return args.Error(0)
 }
 
@@ -52,8 +52,8 @@ func (m *MockConfigRepository) BulkGet(ctx context.Context, keys []models.Namesp
 	return args.Get(0).([]models.ConfigEntry), args.Error(1)
 }
 
-func (m *MockConfigRepository) Search(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntry, int64, error) {
-	args := m.Called(ctx, query, namespace, environment, page, pageSize)
+func (m *MockConfigRepository) Search(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntry, int64, error) {
+	args := m.Called(ctx, query, namespace, environment, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigEntry), args.Get(1).(int64), args.Error(2)
 }
 
@@ -62,13 +62,13 @@ func (m *MockConfigRepository) RecordAudit(ctx context.Context, log *models.Conf
 	return args.Error(0)
 }
 
-func (m *MockConfigRepository) GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
-	args := m.Called(ctx, namespace, key, page, pageSize)
+func (m *MockConfigRepository) GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
+	args := m.Called(ctx, namespace, key, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigAuditLog), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockConfigRepository) GetAuditByConfigID(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
-	args := m.Called(ctx, configID, page, pageSize)
+func (m *MockConfigRepository) GetAuditByConfigID(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
+	args := m.Called(ctx, configID, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigAuditLog), args.Get(1).(int64), args.Error(2)
 }
 
@@ -83,8 +83,8 @@ func (m *MockMenuRepository) CreateMenu(ctx context.Context, menu *models.Menu) 
 	return args.Error(0)
 }
 
-func (m *MockMenuRepository) GetMenu(ctx context.Context, id string) (*models.Menu, error) {
-	args := m.Called(ctx, id)
+func (m *MockMenuRepository) GetMenu(ctx context.Context, id, tenantID string) (*models.Menu, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

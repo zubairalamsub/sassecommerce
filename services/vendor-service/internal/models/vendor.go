@@ -14,26 +14,26 @@ const (
 
 // Vendor represents a marketplace vendor/seller
 type Vendor struct {
-	ID              string       `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	TenantID        string       `gorm:"type:varchar(36);index;not null" json:"tenant_id"`
-	Name            string       `gorm:"type:varchar(255);not null" json:"name"`
-	Email           string       `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
-	Phone           string       `gorm:"type:varchar(50)" json:"phone"`
-	Description     string       `gorm:"type:text" json:"description"`
-	LogoURL         string       `gorm:"type:varchar(500)" json:"logo_url"`
-	Address         string       `gorm:"type:text" json:"address"`
-	City            string       `gorm:"type:varchar(100)" json:"city"`
-	Country         string       `gorm:"type:varchar(100)" json:"country"`
-	Status          VendorStatus `gorm:"type:varchar(20);default:'pending'" json:"status"`
-	CommissionRate  float64      `gorm:"default:10" json:"commission_rate"` // percentage
-	TotalRevenue    float64      `gorm:"default:0" json:"total_revenue"`
-	TotalOrders     int          `gorm:"default:0" json:"total_orders"`
-	TotalProducts   int          `gorm:"default:0" json:"total_products"`
-	Rating          float64      `gorm:"default:0" json:"rating"`
-	SuspendReason   string       `gorm:"type:text" json:"suspend_reason,omitempty"`
-	ApprovedAt      *time.Time   `json:"approved_at,omitempty"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
+	ID             string       `gorm:"primaryKey;type:varchar(36)" json:"id"`
+	TenantID       string       `gorm:"type:varchar(36);index;not null" json:"tenant_id"`
+	Name           string       `gorm:"type:varchar(255);not null" json:"name"`
+	Email          string       `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+	Phone          string       `gorm:"type:varchar(50)" json:"phone"`
+	Description    string       `gorm:"type:text" json:"description"`
+	LogoURL        string       `gorm:"type:varchar(500)" json:"logo_url"`
+	Address        string       `gorm:"type:text" json:"address"`
+	City           string       `gorm:"type:varchar(100)" json:"city"`
+	Country        string       `gorm:"type:varchar(100)" json:"country"`
+	Status         VendorStatus `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	CommissionRate float64      `gorm:"default:10" json:"commission_rate"` // percentage
+	TotalRevenue   float64      `gorm:"default:0" json:"total_revenue"`
+	TotalOrders    int          `gorm:"default:0" json:"total_orders"`
+	TotalProducts  int          `gorm:"default:0" json:"total_products"`
+	Rating         float64      `gorm:"default:0" json:"rating"`
+	SuspendReason  string       `gorm:"type:text" json:"suspend_reason,omitempty"`
+	ApprovedAt     *time.Time   `json:"approved_at,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 // VendorOrder tracks orders assigned to a vendor
@@ -52,15 +52,15 @@ type VendorOrder struct {
 // --- Request DTOs ---
 
 type RegisterVendorRequest struct {
-	TenantID    string  `json:"tenant_id" binding:"required"`
-	Name        string  `json:"name" binding:"required"`
-	Email       string  `json:"email" binding:"required,email"`
-	Phone       string  `json:"phone"`
-	Description string  `json:"description"`
-	LogoURL     string  `json:"logo_url"`
-	Address     string  `json:"address"`
-	City        string  `json:"city"`
-	Country     string  `json:"country"`
+	TenantID       string  `json:"-"`
+	Name           string  `json:"name" binding:"required"`
+	Email          string  `json:"email" binding:"required,email"`
+	Phone          string  `json:"phone"`
+	Description    string  `json:"description"`
+	LogoURL        string  `json:"logo_url"`
+	Address        string  `json:"address"`
+	City           string  `json:"city"`
+	Country        string  `json:"country"`
 	CommissionRate float64 `json:"commission_rate"`
 }
 

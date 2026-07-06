@@ -27,10 +27,10 @@ func (f *fakeShippingService) CreateShipment(ctx context.Context, req *models.Cr
 	f.created = append(f.created, req)
 	return &models.ShipmentResponse{ID: "ship-" + req.OrderID, OrderID: req.OrderID, TrackingNumber: "TRK1"}, nil
 }
-func (f *fakeShippingService) GetShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
+func (f *fakeShippingService) GetShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
 	return nil, errors.New("not implemented")
 }
-func (f *fakeShippingService) GetShipmentByTracking(ctx context.Context, trackingNumber string) (*models.ShipmentResponse, error) {
+func (f *fakeShippingService) GetShipmentByTracking(ctx context.Context, tenantID, trackingNumber string) (*models.ShipmentResponse, error) {
 	return nil, errors.New("not implemented")
 }
 func (f *fakeShippingService) GetShipmentByOrderID(ctx context.Context, tenantID, orderID string) (*models.ShipmentResponse, error) {
@@ -45,10 +45,10 @@ func (f *fakeShippingService) GetShipmentByOrderID(ctx context.Context, tenantID
 func (f *fakeShippingService) ListShipments(ctx context.Context, tenantID string, page, pageSize int, status string) ([]models.ShipmentResponse, int64, error) {
 	return nil, 0, nil
 }
-func (f *fakeShippingService) UpdateStatus(ctx context.Context, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
+func (f *fakeShippingService) UpdateStatus(ctx context.Context, tenantID, id string, req *models.UpdateStatusRequest) (*models.ShipmentResponse, error) {
 	return nil, nil
 }
-func (f *fakeShippingService) CancelShipment(ctx context.Context, id string) (*models.ShipmentResponse, error) {
+func (f *fakeShippingService) CancelShipment(ctx context.Context, tenantID, id string) (*models.ShipmentResponse, error) {
 	f.cancelled = append(f.cancelled, id)
 	return &models.ShipmentResponse{ID: id}, nil
 }

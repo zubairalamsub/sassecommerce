@@ -70,8 +70,8 @@ func (m *MockRecommendationRepository) UpdateTrainingJob(ctx context.Context, jo
 	return args.Error(0)
 }
 
-func (m *MockRecommendationRepository) GetTrainingJob(ctx context.Context, id string) (*models.TrainingJob, error) {
-	args := m.Called(ctx, id)
+func (m *MockRecommendationRepository) GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJob, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

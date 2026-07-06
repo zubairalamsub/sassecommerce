@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/notification-service/internal/models"
 	"github.com/ecommerce/notification-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -40,9 +41,14 @@ func (h *NotificationHandler) SendNotification(c *gin.Context) {
 }
 
 func (h *NotificationHandler) GetNotification(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
 
-	notification, err := h.service.GetNotification(c.Request.Context(), id)
+	notification, err := h.service.GetNotification(c.Request.Context(), tenantID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
@@ -53,9 +59,9 @@ func (h *NotificationHandler) GetNotification(c *gin.Context) {
 
 func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
 	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 
@@ -88,9 +94,14 @@ func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
 	id := c.Param("id")
 
-	if err := h.service.MarkAsRead(c.Request.Context(), id); err != nil {
+	if err := h.service.MarkAsRead(c.Request.Context(), tenantID, id); err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -100,9 +111,9 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 
 func (h *NotificationHandler) GetPreference(c *gin.Context) {
 	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 
@@ -117,9 +128,9 @@ func (h *NotificationHandler) GetPreference(c *gin.Context) {
 
 func (h *NotificationHandler) UpdatePreference(c *gin.Context) {
 	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return
 	}
 

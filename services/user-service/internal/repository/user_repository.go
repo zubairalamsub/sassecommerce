@@ -13,6 +13,7 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetByIDForTenant(ctx context.Context, tenantID, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, tenantID, email string) (*models.User, error)
 	GetByUsername(ctx context.Context, tenantID, username string) (*models.User, error)
 	List(ctx context.Context, tenantID string, offset, limit int) ([]models.User, int64, error)
@@ -49,6 +50,25 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, 
 	var user models.User
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND deleted_at IS NULL", id).
+		First(&user)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.New("user not found")
+		}
+		return nil, result.Error
+	}
+
+	return &user, nil
+}
+
+// GetByIDForTenant retrieves a user by ID scoped to a tenant. It returns
+// "user not found" when the id does not exist or belongs to another tenant,
+// so callers cannot distinguish cross-tenant records from missing ones.
+func (r *userRepository) GetByIDForTenant(ctx context.Context, tenantID, id string) (*models.User, error) {
+	var user models.User
+	result := r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", id, tenantID).
 		First(&user)
 
 	if result.Error != nil {
@@ -128,9 +148,12 @@ func (r *userRepository) List(ctx context.Context, tenantID string, offset, limi
 // Update updates a user
 func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 	user.UpdatedAt = time.Now()
+	// Scope the write by tenant as well as id. The tenant comes from the
+	// already-loaded record (never from client input), so this is a
+	// defensive guard against cross-tenant writes with no caller impact.
 	result := r.db.WithContext(ctx).
 		Model(user).
-		Where("id = ? AND deleted_at IS NULL", user.ID).
+		Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", user.ID, user.TenantID).
 		Updates(user)
 
 	if result.Error != nil {

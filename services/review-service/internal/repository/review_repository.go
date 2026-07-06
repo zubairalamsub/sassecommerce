@@ -14,14 +14,14 @@ import (
 
 type ReviewRepository interface {
 	Create(ctx context.Context, review *models.Review) error
-	GetByID(ctx context.Context, id string) (*models.Review, error)
+	GetByID(ctx context.Context, tenantID, id string) (*models.Review, error)
 	GetByProductID(ctx context.Context, tenantID, productID string, page, pageSize int) ([]models.Review, int64, error)
 	GetByUserID(ctx context.Context, tenantID, userID string, page, pageSize int) ([]models.Review, int64, error)
 	Update(ctx context.Context, review *models.Review) error
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, tenantID, id string) error
 	GetProductSummary(ctx context.Context, tenantID, productID string) (*models.ReviewSummary, error)
 	HasUserReviewed(ctx context.Context, tenantID, productID, userID string) (bool, error)
-	AddHelpfulVote(ctx context.Context, id, voterID string, helpful bool) error
+	AddHelpfulVote(ctx context.Context, tenantID, id, voterID string, helpful bool) error
 }
 
 type reviewRepository struct {
@@ -46,10 +46,11 @@ func (r *reviewRepository) Create(ctx context.Context, review *models.Review) er
 	return err
 }
 
-func (r *reviewRepository) GetByID(ctx context.Context, id string) (*models.Review, error) {
+func (r *reviewRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Review, error) {
 	var review models.Review
 	err := r.reviews.FindOne(ctx, bson.M{
 		"_id":        id,
+		"tenant_id":  tenantID,
 		"deleted_at": bson.M{"$exists": false},
 	}).Decode(&review)
 	if err != nil {
@@ -128,18 +129,34 @@ func (r *reviewRepository) GetByUserID(ctx context.Context, tenantID, userID str
 
 func (r *reviewRepository) Update(ctx context.Context, review *models.Review) error {
 	review.UpdatedAt = time.Now().UTC()
-	_, err := r.reviews.ReplaceOne(ctx, bson.M{"_id": review.ID}, review)
-	return err
+	res, err := r.reviews.ReplaceOne(
+		ctx,
+		bson.M{"_id": review.ID, "tenant_id": review.TenantID},
+		review,
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("review not found")
+	}
+	return nil
 }
 
-func (r *reviewRepository) Delete(ctx context.Context, id string) error {
+func (r *reviewRepository) Delete(ctx context.Context, tenantID, id string) error {
 	now := time.Now().UTC()
-	_, err := r.reviews.UpdateOne(
+	res, err := r.reviews.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
+		bson.M{"_id": id, "tenant_id": tenantID, "deleted_at": bson.M{"$exists": false}},
 		bson.M{"$set": bson.M{"deleted_at": now, "updated_at": now}},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("review not found")
+	}
+	return nil
 }
 
 func (r *reviewRepository) GetProductSummary(ctx context.Context, tenantID, productID string) (*models.ReviewSummary, error) {
@@ -165,10 +182,10 @@ func (r *reviewRepository) GetProductSummary(ctx context.Context, tenantID, prod
 	defer cursor.Close(ctx)
 
 	var results []struct {
-		ProductID     string    `bson:"_id"`
-		AverageRating float64   `bson:"average_rating"`
-		TotalReviews  int       `bson:"total_reviews"`
-		Ratings       []int     `bson:"ratings"`
+		ProductID     string  `bson:"_id"`
+		AverageRating float64 `bson:"average_rating"`
+		TotalReviews  int     `bson:"total_reviews"`
+		Ratings       []int   `bson:"ratings"`
 	}
 
 	if err := cursor.All(ctx, &results); err != nil {
@@ -217,7 +234,7 @@ func (r *reviewRepository) HasUserReviewed(ctx context.Context, tenantID, produc
 	return count > 0, nil
 }
 
-func (r *reviewRepository) AddHelpfulVote(ctx context.Context, id, voterID string, helpful bool) error {
+func (r *reviewRepository) AddHelpfulVote(ctx context.Context, tenantID, id, voterID string, helpful bool) error {
 	field := "helpful_count"
 	if !helpful {
 		field = "unhelpful_count"
@@ -226,8 +243,9 @@ func (r *reviewRepository) AddHelpfulVote(ctx context.Context, id, voterID strin
 	_, err := r.reviews.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":              id,
-			"helpful_voters":   bson.M{"$ne": voterID},
+			"_id":            id,
+			"tenant_id":      tenantID,
+			"helpful_voters": bson.M{"$ne": voterID},
 		},
 		bson.M{
 			"$inc":      bson.M{field: 1},

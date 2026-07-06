@@ -32,8 +32,8 @@ func (m *MockTemplateService) List(ctx context.Context, tenantID string) ([]mode
 	return args.Get(0).([]models.NotificationTemplate), args.Error(1)
 }
 
-func (m *MockTemplateService) Get(ctx context.Context, id string) (*models.NotificationTemplate, error) {
-	args := m.Called(ctx, id)
+func (m *MockTemplateService) Get(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -48,28 +48,28 @@ func (m *MockTemplateService) Create(ctx context.Context, tenantID string, req *
 	return args.Get(0).(*models.NotificationTemplate), args.Error(1)
 }
 
-func (m *MockTemplateService) Update(ctx context.Context, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockTemplateService) Update(ctx context.Context, tenantID, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error) {
+	args := m.Called(ctx, tenantID, id, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.NotificationTemplate), args.Error(1)
 }
 
-func (m *MockTemplateService) Delete(ctx context.Context, id string) error {
-	return m.Called(ctx, id).Error(0)
+func (m *MockTemplateService) Delete(ctx context.Context, tenantID, id string) error {
+	return m.Called(ctx, tenantID, id).Error(0)
 }
 
-func (m *MockTemplateService) Preview(ctx context.Context, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error) {
-	args := m.Called(ctx, id, sampleVars)
+func (m *MockTemplateService) Preview(ctx context.Context, tenantID, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error) {
+	args := m.Called(ctx, tenantID, id, sampleVars)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.RenderedTemplate), args.Error(1)
 }
 
-func (m *MockTemplateService) TestSend(ctx context.Context, id, email string, sampleVars map[string]interface{}) error {
-	return m.Called(ctx, id, email, sampleVars).Error(0)
+func (m *MockTemplateService) TestSend(ctx context.Context, tenantID, id, email string, sampleVars map[string]interface{}) error {
+	return m.Called(ctx, tenantID, id, email, sampleVars).Error(0)
 }
 
 func (m *MockTemplateService) InstallDefaults(ctx context.Context, tenantID string, force bool) (*service.InstallDefaultsResult, error) {
@@ -81,11 +81,25 @@ func (m *MockTemplateService) InstallDefaults(ctx context.Context, tenantID stri
 }
 
 func setupTemplateRouter(svc *MockTemplateService) *gin.Engine {
+	return setupTemplateRouterWithTenant(svc, "tenant-1")
+}
+
+// setupTemplateRouterWithTenant builds the template router with a middleware
+// that injects the given tenant into the gin context, standing in for the JWT
+// auth middleware. Pass an empty tenantID to simulate an unauthenticated
+// request (no tenant claim).
+func setupTemplateRouterWithTenant(svc *MockTemplateService, tenantID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 	h := NewTemplateHandler(svc, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set("tenant_id", tenantID)
+		}
+		c.Next()
+	})
 	RegisterTemplateRoutes(router, h)
 	return router
 }
@@ -136,14 +150,17 @@ func TestInstallDefaults_ForceFlag(t *testing.T) {
 	mockSvc.AssertExpectations(t)
 }
 
-func TestInstallDefaults_MissingTenant(t *testing.T) {
+func TestInstallDefaults_Unauthenticated(t *testing.T) {
 	mockSvc := new(MockTemplateService)
-	router := setupTemplateRouter(mockSvc)
+	// No tenant claim in context → request is unauthenticated. Note the
+	// X-Tenant-Id header is deliberately not honored anymore.
+	router := setupTemplateRouterWithTenant(mockSvc, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-Id", "tenant-1")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

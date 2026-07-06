@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ecommerce/recommendation-service/internal/models"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -45,8 +46,8 @@ func (m *MockRecommendationService) TrainModel(ctx context.Context, tenantID str
 	return args.Get(0).(*models.TrainingJobResponse), args.Error(1)
 }
 
-func (m *MockRecommendationService) GetTrainingJob(ctx context.Context, id string) (*models.TrainingJobResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockRecommendationService) GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJobResponse, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -58,13 +59,32 @@ func (m *MockRecommendationService) RecordInteraction(ctx context.Context, tenan
 	return args.Error(0)
 }
 
+// setupRouter builds a router with a simulated authenticated context
+// (tenant + admin role) so tenant identity is derived from the JWT, not
+// from client-supplied inputs.
 func setupRouter(mockService *MockRecommendationService) *gin.Engine {
+	return setupRouterWithAuth(mockService, "tenant-1", "admin")
+}
+
+// setupRouterWithAuth injects the given tenant ID and role into the gin
+// context, emulating what the shared Auth middleware sets from a verified JWT.
+// An empty tenantID simulates an unauthenticated request.
+func setupRouterWithAuth(mockService *MockRecommendationService, tenantID, role string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewRecommendationHandler(mockService, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set(sharedmiddleware.TenantIDKey, tenantID)
+		}
+		if role != "" {
+			c.Set(sharedmiddleware.AuthUserRoleKey, role)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -97,15 +117,16 @@ func TestHandler_GetUserRecommendations_Success(t *testing.T) {
 	assert.Len(t, result.Recommendations, 1)
 }
 
-func TestHandler_GetUserRecommendations_MissingTenantID(t *testing.T) {
+func TestHandler_GetUserRecommendations_Unauthenticated(t *testing.T) {
 	mockService := new(MockRecommendationService)
-	router := setupRouter(mockService)
+	// No tenant in context => unauthenticated.
+	router := setupRouterWithAuth(mockService, "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/recommendations/user/user-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetUserRecommendations_ServiceFailure(t *testing.T) {
@@ -167,15 +188,15 @@ func TestHandler_GetProductRecommendations_Success(t *testing.T) {
 	assert.Equal(t, "p-1", result.ProductID)
 }
 
-func TestHandler_GetProductRecommendations_MissingTenantID(t *testing.T) {
+func TestHandler_GetProductRecommendations_Unauthenticated(t *testing.T) {
 	mockService := new(MockRecommendationService)
-	router := setupRouter(mockService)
+	router := setupRouterWithAuth(mockService, "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/recommendations/product/p-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetProductRecommendations_ServiceFailure(t *testing.T) {
@@ -214,9 +235,10 @@ func TestHandler_TrainModel_Success(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, w.Code)
 }
 
-func TestHandler_TrainModel_BadRequest(t *testing.T) {
+func TestHandler_TrainModel_Forbidden(t *testing.T) {
 	mockService := new(MockRecommendationService)
-	router := setupRouter(mockService)
+	// Authenticated but non-privileged role => training is staff-only.
+	router := setupRouterWithAuth(mockService, "tenant-1", "customer")
 
 	body := `{}`
 
@@ -225,7 +247,7 @@ func TestHandler_TrainModel_BadRequest(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestHandler_TrainModel_ServiceFailure(t *testing.T) {
@@ -255,7 +277,7 @@ func TestHandler_GetTrainingJob_Success(t *testing.T) {
 		TenantID: "tenant-1",
 		Status:   "completed",
 	}
-	mockService.On("GetTrainingJob", mock.Anything, "job-1").Return(resp, nil)
+	mockService.On("GetTrainingJob", mock.Anything, "tenant-1", "job-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/recommendations/train/job-1", nil)
@@ -268,7 +290,7 @@ func TestHandler_GetTrainingJob_NotFound(t *testing.T) {
 	mockService := new(MockRecommendationService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetTrainingJob", mock.Anything, "bad").Return(nil, errors.New("training job not found"))
+	mockService.On("GetTrainingJob", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("training job not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/recommendations/train/bad", nil)

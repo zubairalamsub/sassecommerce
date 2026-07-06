@@ -137,7 +137,7 @@ func (suite *ProductServiceTestSuite) TestGetProductByID_Success() {
 
 	suite.mockProductRepo.On("GetByID", suite.ctx, productID.Hex()).Return(product, nil)
 
-	result, err := suite.service.GetProductByID(suite.ctx, productID.Hex())
+	result, err := suite.service.GetProductByID(suite.ctx, "tenant-1", productID.Hex())
 
 	suite.NoError(err)
 	suite.NotNil(result)
@@ -148,7 +148,7 @@ func (suite *ProductServiceTestSuite) TestGetProductByID_Success() {
 func (suite *ProductServiceTestSuite) TestGetProductByID_NotFound() {
 	suite.mockProductRepo.On("GetByID", suite.ctx, "non-existent").Return(nil, errors.New("product not found"))
 
-	result, err := suite.service.GetProductByID(suite.ctx, "non-existent")
+	result, err := suite.service.GetProductByID(suite.ctx, "tenant-1", "non-existent")
 
 	suite.Error(err)
 	suite.Nil(result)
@@ -266,9 +266,9 @@ func (suite *ProductServiceTestSuite) TestUpdateProduct_Success() {
 	}
 
 	suite.mockProductRepo.On("GetByID", suite.ctx, productID.Hex()).Return(existingProduct, nil)
-	suite.mockProductRepo.On("Update", suite.ctx, productID.Hex(), mock.Anything).Return(nil)
+	suite.mockProductRepo.On("Update", suite.ctx, "tenant-1", productID.Hex(), mock.Anything).Return(nil)
 
-	result, err := suite.service.UpdateProduct(suite.ctx, productID.Hex(), req)
+	result, err := suite.service.UpdateProduct(suite.ctx, "tenant-1", productID.Hex(), req)
 
 	suite.NoError(err)
 	suite.NotNil(result)
@@ -305,9 +305,9 @@ func (suite *ProductServiceTestSuite) TestUpdateProduct_CategoryChange() {
 
 	suite.mockProductRepo.On("GetByID", suite.ctx, productID.Hex()).Return(existingProduct, nil)
 	suite.mockCategoryRepo.On("GetByID", suite.ctx, "cat-2").Return(category, nil)
-	suite.mockProductRepo.On("Update", suite.ctx, productID.Hex(), mock.Anything).Return(nil)
+	suite.mockProductRepo.On("Update", suite.ctx, "tenant-1", productID.Hex(), mock.Anything).Return(nil)
 
-	result, err := suite.service.UpdateProduct(suite.ctx, productID.Hex(), req)
+	result, err := suite.service.UpdateProduct(suite.ctx, "tenant-1", productID.Hex(), req)
 
 	suite.NoError(err)
 	suite.NotNil(result)
@@ -325,9 +325,9 @@ func (suite *ProductServiceTestSuite) TestDeleteProduct_Success() {
 		Name:     "Test Product",
 		SKU:      "PROD-001",
 	}, nil)
-	suite.mockProductRepo.On("Delete", suite.ctx, productID.Hex()).Return(nil)
+	suite.mockProductRepo.On("Delete", suite.ctx, "tenant-1", productID.Hex()).Return(nil)
 
-	err := suite.service.DeleteProduct(suite.ctx, productID.Hex())
+	err := suite.service.DeleteProduct(suite.ctx, "tenant-1", productID.Hex())
 
 	suite.NoError(err)
 	suite.mockProductRepo.AssertExpectations(suite.T())
@@ -335,9 +335,9 @@ func (suite *ProductServiceTestSuite) TestDeleteProduct_Success() {
 
 func (suite *ProductServiceTestSuite) TestDeleteProduct_NotFound() {
 	suite.mockProductRepo.On("GetByID", suite.ctx, "non-existent").Return(nil, errors.New("not found"))
-	suite.mockProductRepo.On("Delete", suite.ctx, "non-existent").Return(errors.New("product not found"))
+	suite.mockProductRepo.On("Delete", suite.ctx, "tenant-1", "non-existent").Return(errors.New("product not found"))
 
-	err := suite.service.DeleteProduct(suite.ctx, "non-existent")
+	err := suite.service.DeleteProduct(suite.ctx, "tenant-1", "non-existent")
 
 	suite.Error(err)
 	suite.mockProductRepo.AssertExpectations(suite.T())
@@ -346,9 +346,9 @@ func (suite *ProductServiceTestSuite) TestDeleteProduct_NotFound() {
 func (suite *ProductServiceTestSuite) TestUpdateProductStatus_Success() {
 	productID := primitive.NewObjectID()
 
-	suite.mockProductRepo.On("UpdateStatus", suite.ctx, productID.Hex(), models.ProductStatusActive).Return(nil)
+	suite.mockProductRepo.On("UpdateStatus", suite.ctx, "tenant-1", productID.Hex(), models.ProductStatusActive).Return(nil)
 
-	err := suite.service.UpdateProductStatus(suite.ctx, productID.Hex(), models.ProductStatusActive)
+	err := suite.service.UpdateProductStatus(suite.ctx, "tenant-1", productID.Hex(), models.ProductStatusActive)
 
 	suite.NoError(err)
 	suite.mockProductRepo.AssertExpectations(suite.T())

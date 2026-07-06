@@ -24,7 +24,7 @@ type AnalyticsRepository interface {
 
 	// Custom reports
 	CreateReport(ctx context.Context, report *models.CustomReport) error
-	GetReport(ctx context.Context, id string) (*models.CustomReport, error)
+	GetReport(ctx context.Context, id, tenantID string) (*models.CustomReport, error)
 	ListReports(ctx context.Context, tenantID string, page, pageSize int) ([]models.CustomReport, int64, error)
 	UpdateReport(ctx context.Context, report *models.CustomReport) error
 }
@@ -229,9 +229,9 @@ func (r *analyticsRepository) CreateReport(ctx context.Context, report *models.C
 	return r.db.WithContext(ctx).Create(report).Error
 }
 
-func (r *analyticsRepository) GetReport(ctx context.Context, id string) (*models.CustomReport, error) {
+func (r *analyticsRepository) GetReport(ctx context.Context, id, tenantID string) (*models.CustomReport, error) {
 	var report models.CustomReport
-	if err := r.db.WithContext(ctx).First(&report, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&report, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
 		return nil, err
 	}
 	return &report, nil

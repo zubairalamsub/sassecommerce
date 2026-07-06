@@ -13,19 +13,19 @@ public class PaymentRepository : IPaymentRepository
         _context = context;
     }
 
-    public async Task<Payment?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Payment?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Payments
-            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == tenantId, cancellationToken);
     }
 
-    public async Task<Payment?> GetByIdWithDetailsAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Payment?> GetByIdWithDetailsAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Payments
             .Include(p => p.Transactions.OrderByDescending(t => t.TransactionDate))
             .Include(p => p.Refunds.OrderByDescending(r => r.CreatedAt))
             .Include(p => p.PaymentMethodNavigation)
-            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<Payment?> GetByOrderIdAsync(string tenantId, string orderId, CancellationToken cancellationToken = default)
@@ -36,10 +36,10 @@ public class PaymentRepository : IPaymentRepository
             .FirstOrDefaultAsync(p => p.TenantId == tenantId && p.OrderId == orderId, cancellationToken);
     }
 
-    public async Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
+    public async Task<Payment?> GetByIdempotencyKeyAsync(string idempotencyKey, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Payments
-            .FirstOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey, cancellationToken);
+            .FirstOrDefaultAsync(p => p.IdempotencyKey == idempotencyKey && p.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<Payment?> GetByGatewayTransactionIdAsync(string gatewayTransactionId, CancellationToken cancellationToken = default)

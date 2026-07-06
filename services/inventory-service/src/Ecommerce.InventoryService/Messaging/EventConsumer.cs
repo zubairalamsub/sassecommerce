@@ -210,7 +210,7 @@ public class OrderEventConsumer : BackgroundService
         // Find and cancel all stock reservations for this order
         try
         {
-            var movements = await inventoryService.GetStockMovementsByOrderAsync(orderId, cancellationToken);
+            var movements = await inventoryService.GetStockMovementsByOrderAsync(orderId, tenantId ?? string.Empty, cancellationToken);
             _logger.LogInformation("Found {Count} stock movements for cancelled order {OrderId}", movements.Count, orderId);
         }
         catch (Exception ex)

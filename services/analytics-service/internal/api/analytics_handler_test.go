@@ -10,11 +10,14 @@ import (
 	"testing"
 
 	"github.com/ecommerce/analytics-service/internal/models"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+const testTenantID = "tenant-1"
 
 type MockAnalyticsService struct {
 	mock.Mock
@@ -52,8 +55,8 @@ func (m *MockAnalyticsService) CreateReport(ctx context.Context, req *models.Cre
 	return args.Get(0).(*models.CustomReportResponse), args.Error(1)
 }
 
-func (m *MockAnalyticsService) GetReport(ctx context.Context, id string) (*models.CustomReportResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockAnalyticsService) GetReport(ctx context.Context, id, tenantID string) (*models.CustomReportResponse, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -80,13 +83,27 @@ func (m *MockAnalyticsService) RecordProductActivity(ctx context.Context, tenant
 	return args.Error(0)
 }
 
+// setupRouter builds a router with the authenticated tenant (testTenantID)
+// injected into the gin context, simulating the JWT Auth middleware.
 func setupRouter(mockService *MockAnalyticsService) *gin.Engine {
+	return setupRouterWithTenant(mockService, testTenantID)
+}
+
+// setupRouterWithTenant injects the given tenant into context. Pass "" to
+// simulate an unauthenticated request (no tenant claim available).
+func setupRouterWithTenant(mockService *MockAnalyticsService, tenantID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewAnalyticsHandler(mockService, logger)
 	router := gin.New()
+	if tenantID != "" {
+		router.Use(func(c *gin.Context) {
+			c.Set(sharedmiddleware.TenantIDKey, tenantID)
+			c.Next()
+		})
+	}
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -111,15 +128,15 @@ func TestHandler_GetSalesReport_Success(t *testing.T) {
 	assert.Equal(t, 50000.0, result.TotalRevenue)
 }
 
-func TestHandler_GetSalesReport_MissingTenantID(t *testing.T) {
+func TestHandler_GetSalesReport_Unauthenticated(t *testing.T) {
 	mockService := new(MockAnalyticsService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/sales", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetSalesReport_ServiceFailure(t *testing.T) {
@@ -151,15 +168,15 @@ func TestHandler_GetCustomerInsights_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestHandler_GetCustomerInsights_MissingTenantID(t *testing.T) {
+func TestHandler_GetCustomerInsights_Unauthenticated(t *testing.T) {
 	mockService := new(MockAnalyticsService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/customers", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // === GetProductPerformance Handler Tests ===
@@ -178,15 +195,15 @@ func TestHandler_GetProductPerformance_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestHandler_GetProductPerformance_MissingTenantID(t *testing.T) {
+func TestHandler_GetProductPerformance_Unauthenticated(t *testing.T) {
 	mockService := new(MockAnalyticsService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/products", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // === CreateReport Handler Tests ===
@@ -263,7 +280,7 @@ func TestHandler_GetReport_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.CustomReportResponse{ID: "r-1", Name: "Monthly Sales", Status: "completed"}
-	mockService.On("GetReport", mock.Anything, "r-1").Return(resp, nil)
+	mockService.On("GetReport", mock.Anything, "r-1", testTenantID).Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/r-1", nil)
@@ -276,13 +293,29 @@ func TestHandler_GetReport_NotFound(t *testing.T) {
 	mockService := new(MockAnalyticsService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetReport", mock.Anything, "bad").Return(nil, errors.New("report not found"))
+	mockService.On("GetReport", mock.Anything, "bad", testTenantID).Return(nil, errors.New("report not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHandler_GetReport_CrossTenantDenied(t *testing.T) {
+	mockService := new(MockAnalyticsService)
+	// Requester authenticated as a different tenant than the report owner.
+	router := setupRouterWithTenant(mockService, "tenant-2")
+
+	// The report belongs to tenant-1; scoped lookup by tenant-2 finds nothing.
+	mockService.On("GetReport", mock.Anything, "r-1", "tenant-2").Return(nil, errors.New("report not found"))
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/r-1", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	mockService.AssertCalled(t, "GetReport", mock.Anything, "r-1", "tenant-2")
 }
 
 // === ListReports Handler Tests ===
@@ -305,13 +338,13 @@ func TestHandler_ListReports_Success(t *testing.T) {
 	assert.Equal(t, float64(1), result["total"])
 }
 
-func TestHandler_ListReports_MissingTenantID(t *testing.T) {
+func TestHandler_ListReports_Unauthenticated(t *testing.T) {
 	mockService := new(MockAnalyticsService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

@@ -266,15 +266,15 @@ func TestGetTrainingJob_Success(t *testing.T) {
 	ctx := context.Background()
 
 	job := &models.TrainingJob{
-		ID:       "job-1",
-		TenantID: "tenant-1",
-		Status:   "completed",
-		ItemsProcessed: 100,
+		ID:                    "job-1",
+		TenantID:              "tenant-1",
+		Status:                "completed",
+		ItemsProcessed:        100,
 		SimilaritiesGenerated: 50,
 	}
-	mockRepo.On("GetTrainingJob", ctx, "job-1").Return(job, nil)
+	mockRepo.On("GetTrainingJob", ctx, "tenant-1", "job-1").Return(job, nil)
 
-	result, err := svc.GetTrainingJob(ctx, "job-1")
+	result, err := svc.GetTrainingJob(ctx, "tenant-1", "job-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "completed", result.Status)
@@ -285,9 +285,9 @@ func TestGetTrainingJob_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetTrainingJob", ctx, "bad").Return(nil, errors.New("record not found"))
+	mockRepo.On("GetTrainingJob", ctx, "tenant-1", "bad").Return(nil, errors.New("record not found"))
 
-	result, err := svc.GetTrainingJob(ctx, "bad")
+	result, err := svc.GetTrainingJob(ctx, "tenant-1", "bad")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

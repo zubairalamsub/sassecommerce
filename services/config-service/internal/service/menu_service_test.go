@@ -111,10 +111,10 @@ func TestGetMenu_Success(t *testing.T) {
 		{ID: "i-2", MenuID: "m-1", Label: "Shop", URL: "/shop", Position: 1},
 	}
 
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("GetMenuItems", ctx, "m-1").Return(items, nil)
 
-	result, err := svc.GetMenu(ctx, "m-1")
+	result, err := svc.GetMenu(ctx, "m-1", "tenant-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Main Nav", result.Name)
@@ -125,9 +125,9 @@ func TestGetMenu_NotFound(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetMenu", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetMenu", ctx, "bad", "tenant-1").Return(nil, errors.New("not found"))
 
-	result, err := svc.GetMenu(ctx, "bad")
+	result, err := svc.GetMenu(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -145,10 +145,10 @@ func TestGetMenu_WithTreeStructure(t *testing.T) {
 		{ID: "i-3", MenuID: "m-1", ParentID: "i-1", Label: "Clothing", URL: "/shop/clothing", Position: 1},
 	}
 
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("GetMenuItems", ctx, "m-1").Return(items, nil)
 
-	result, err := svc.GetMenu(ctx, "m-1")
+	result, err := svc.GetMenu(ctx, "m-1", "tenant-1")
 
 	assert.NoError(t, err)
 	assert.Len(t, result.Items, 1) // Only "Shop" at root
@@ -192,12 +192,12 @@ func TestUpdateMenu_Success(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1", Name: "Old Name", Location: "header", IsActive: true}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("UpdateMenu", ctx, mock.AnythingOfType("*models.Menu")).Return(nil)
 	mockRepo.On("GetMenuItems", ctx, "m-1").Return([]models.MenuItem{}, nil)
 
 	req := &models.UpdateMenuRequest{Name: "New Name"}
-	result, err := svc.UpdateMenu(ctx, "m-1", req)
+	result, err := svc.UpdateMenu(ctx, "m-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "New Name", result.Name)
@@ -207,10 +207,10 @@ func TestUpdateMenu_NotFound(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetMenu", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetMenu", ctx, "bad", "tenant-1").Return(nil, errors.New("not found"))
 
 	req := &models.UpdateMenuRequest{Name: "New Name"}
-	result, err := svc.UpdateMenu(ctx, "bad", req)
+	result, err := svc.UpdateMenu(ctx, "bad", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -221,10 +221,10 @@ func TestUpdateMenu_InvalidLocation(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1", Name: "Nav", Location: "header"}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 
 	req := &models.UpdateMenuRequest{Location: "invalid"}
-	result, err := svc.UpdateMenu(ctx, "m-1", req)
+	result, err := svc.UpdateMenu(ctx, "m-1", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -236,13 +236,13 @@ func TestUpdateMenu_IsActive(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1", Name: "Nav", Location: "header", IsActive: true}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("UpdateMenu", ctx, mock.AnythingOfType("*models.Menu")).Return(nil)
 	mockRepo.On("GetMenuItems", ctx, "m-1").Return([]models.MenuItem{}, nil)
 
 	isActive := false
 	req := &models.UpdateMenuRequest{IsActive: &isActive}
-	result, err := svc.UpdateMenu(ctx, "m-1", req)
+	result, err := svc.UpdateMenu(ctx, "m-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.False(t, result.IsActive)
@@ -255,10 +255,10 @@ func TestDeleteMenu_Success(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1"}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("DeleteMenu", ctx, "m-1").Return(nil)
 
-	err := svc.DeleteMenu(ctx, "m-1")
+	err := svc.DeleteMenu(ctx, "m-1", "tenant-1")
 
 	assert.NoError(t, err)
 }
@@ -267,9 +267,9 @@ func TestDeleteMenu_NotFound(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetMenu", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetMenu", ctx, "bad", "tenant-1").Return(nil, errors.New("not found"))
 
-	err := svc.DeleteMenu(ctx, "bad")
+	err := svc.DeleteMenu(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -331,14 +331,14 @@ func TestCreateMenuItem_Success(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1"}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("CreateMenuItem", ctx, mock.AnythingOfType("*models.MenuItem")).Return(nil)
 
 	req := &models.CreateMenuItemRequest{
 		MenuID: "m-1", Label: "Home", URL: "/",
 	}
 
-	result, err := svc.CreateMenuItem(ctx, req)
+	result, err := svc.CreateMenuItem(ctx, "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Home", result.Label)
@@ -350,13 +350,13 @@ func TestCreateMenuItem_MenuNotFound(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetMenu", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetMenu", ctx, "bad", "tenant-1").Return(nil, errors.New("not found"))
 
 	req := &models.CreateMenuItemRequest{
 		MenuID: "bad", Label: "Home", URL: "/",
 	}
 
-	result, err := svc.CreateMenuItem(ctx, req)
+	result, err := svc.CreateMenuItem(ctx, "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -370,7 +370,7 @@ func TestCreateMenuItem_WithParent(t *testing.T) {
 	menu := &models.Menu{ID: "m-1"}
 	parent := &models.MenuItem{ID: "i-1", MenuID: "m-1", Label: "Shop"}
 
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("GetMenuItem", ctx, "i-1").Return(parent, nil)
 	mockRepo.On("CreateMenuItem", ctx, mock.AnythingOfType("*models.MenuItem")).Return(nil)
 
@@ -378,7 +378,7 @@ func TestCreateMenuItem_WithParent(t *testing.T) {
 		MenuID: "m-1", ParentID: "i-1", Label: "Electronics", URL: "/electronics",
 	}
 
-	result, err := svc.CreateMenuItem(ctx, req)
+	result, err := svc.CreateMenuItem(ctx, "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Electronics", result.Label)
@@ -389,14 +389,14 @@ func TestCreateMenuItem_ParentNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1"}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("GetMenuItem", ctx, "bad-parent").Return(nil, errors.New("not found"))
 
 	req := &models.CreateMenuItemRequest{
 		MenuID: "m-1", ParentID: "bad-parent", Label: "Item",
 	}
 
-	result, err := svc.CreateMenuItem(ctx, req)
+	result, err := svc.CreateMenuItem(ctx, "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -411,10 +411,11 @@ func TestUpdateMenuItem_Success(t *testing.T) {
 
 	item := &models.MenuItem{ID: "i-1", MenuID: "m-1", Label: "Old", URL: "/old", Target: "_self", IsActive: true}
 	mockRepo.On("GetMenuItem", ctx, "i-1").Return(item, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(&models.Menu{ID: "m-1", TenantID: "tenant-1"}, nil)
 	mockRepo.On("UpdateMenuItem", ctx, mock.AnythingOfType("*models.MenuItem")).Return(nil)
 
 	req := &models.UpdateMenuItemRequest{Label: "New", URL: "/new"}
-	result, err := svc.UpdateMenuItem(ctx, "i-1", req)
+	result, err := svc.UpdateMenuItem(ctx, "i-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "New", result.Label)
@@ -428,7 +429,7 @@ func TestUpdateMenuItem_NotFound(t *testing.T) {
 	mockRepo.On("GetMenuItem", ctx, "bad").Return(nil, errors.New("not found"))
 
 	req := &models.UpdateMenuItemRequest{Label: "New"}
-	result, err := svc.UpdateMenuItem(ctx, "bad", req)
+	result, err := svc.UpdateMenuItem(ctx, "bad", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -440,11 +441,12 @@ func TestDeleteMenuItem_Success(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	item := &models.MenuItem{ID: "i-1"}
+	item := &models.MenuItem{ID: "i-1", MenuID: "m-1"}
 	mockRepo.On("GetMenuItem", ctx, "i-1").Return(item, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(&models.Menu{ID: "m-1", TenantID: "tenant-1"}, nil)
 	mockRepo.On("DeleteMenuItem", ctx, "i-1").Return(nil)
 
-	err := svc.DeleteMenuItem(ctx, "i-1")
+	err := svc.DeleteMenuItem(ctx, "i-1", "tenant-1")
 
 	assert.NoError(t, err)
 }
@@ -455,7 +457,7 @@ func TestDeleteMenuItem_NotFound(t *testing.T) {
 
 	mockRepo.On("GetMenuItem", ctx, "bad").Return(nil, errors.New("not found"))
 
-	err := svc.DeleteMenuItem(ctx, "bad")
+	err := svc.DeleteMenuItem(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -468,7 +470,7 @@ func TestReorderItems_Success(t *testing.T) {
 	ctx := context.Background()
 
 	menu := &models.Menu{ID: "m-1"}
-	mockRepo.On("GetMenu", ctx, "m-1").Return(menu, nil)
+	mockRepo.On("GetMenu", ctx, "m-1", "tenant-1").Return(menu, nil)
 	mockRepo.On("BulkUpdatePositions", ctx, mock.AnythingOfType("[]models.MenuItem")).Return(nil)
 
 	req := &models.ReorderItemsRequest{
@@ -478,7 +480,7 @@ func TestReorderItems_Success(t *testing.T) {
 		},
 	}
 
-	err := svc.ReorderItems(ctx, "m-1", req)
+	err := svc.ReorderItems(ctx, "m-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 }
@@ -487,13 +489,13 @@ func TestReorderItems_MenuNotFound(t *testing.T) {
 	svc, mockRepo := newMenuTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetMenu", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetMenu", ctx, "bad", "tenant-1").Return(nil, errors.New("not found"))
 
 	req := &models.ReorderItemsRequest{
 		Items: []models.ReorderItem{{ID: "i-1", Position: 0}},
 	}
 
-	err := svc.ReorderItems(ctx, "bad", req)
+	err := svc.ReorderItems(ctx, "bad", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")

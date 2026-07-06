@@ -22,14 +22,14 @@ type KafkaPublisher interface {
 // ProductService defines the interface for product operations
 type ProductService interface {
 	CreateProduct(ctx context.Context, req *models.CreateProductRequest) (*models.ProductResponse, error)
-	GetProductByID(ctx context.Context, id string) (*models.ProductResponse, error)
+	GetProductByID(ctx context.Context, tenantID, id string) (*models.ProductResponse, error)
 	GetProductBySKU(ctx context.Context, tenantID, sku string) (*models.ProductResponse, error)
 	ListProducts(ctx context.Context, tenantID string, offset, limit int) ([]models.ProductResponse, int64, error)
 	ListProductsByCategory(ctx context.Context, tenantID, categoryID string, offset, limit int) ([]models.ProductResponse, int64, error)
 	SearchProducts(ctx context.Context, tenantID, query string, offset, limit int) ([]models.ProductResponse, int64, error)
-	UpdateProduct(ctx context.Context, id string, req *models.UpdateProductRequest) (*models.ProductResponse, error)
-	DeleteProduct(ctx context.Context, id string) error
-	UpdateProductStatus(ctx context.Context, id string, status models.ProductStatus) error
+	UpdateProduct(ctx context.Context, tenantID, id string, req *models.UpdateProductRequest) (*models.ProductResponse, error)
+	DeleteProduct(ctx context.Context, tenantID, id string) error
+	UpdateProductStatus(ctx context.Context, tenantID, id string, status models.ProductStatus) error
 }
 
 type productService struct {
@@ -132,11 +132,22 @@ func (s *productService) CreateProduct(ctx context.Context, req *models.CreatePr
 	return product.ToResponse(), nil
 }
 
-// GetProductByID retrieves a product by ID
-func (s *productService) GetProductByID(ctx context.Context, id string) (*models.ProductResponse, error) {
+// GetProductByID retrieves a product by ID for the public storefront read path.
+// It scopes the lookup to the caller's tenant and only exposes publicly-visible
+// (active) products, so one tenant cannot read another tenant's catalog and
+// drafts/inactive/archived items are never leaked publicly. A mismatch on tenant
+// or status is reported as "not found" (no existence oracle).
+func (s *productService) GetProductByID(ctx context.Context, tenantID, id string) (*models.ProductResponse, error) {
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to get product")
+		return nil, errors.New("product not found")
+	}
+
+	if product.TenantID != tenantID {
+		return nil, errors.New("product not found")
+	}
+	if product.Status != models.ProductStatusActive {
 		return nil, errors.New("product not found")
 	}
 
@@ -212,11 +223,17 @@ func (s *productService) SearchProducts(ctx context.Context, tenantID, query str
 }
 
 // UpdateProduct updates a product
-func (s *productService) UpdateProduct(ctx context.Context, id string, req *models.UpdateProductRequest) (*models.ProductResponse, error) {
+func (s *productService) UpdateProduct(ctx context.Context, tenantID, id string, req *models.UpdateProductRequest) (*models.ProductResponse, error) {
 	// Get existing product
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to get product for update")
+		return nil, errors.New("product not found")
+	}
+
+	// Ownership check: a product belonging to another tenant is reported as not
+	// found so a caller can't update or probe across tenants.
+	if product.TenantID != tenantID {
 		return nil, errors.New("product not found")
 	}
 
@@ -285,8 +302,8 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 	}
 	product.UpdatedBy = req.UpdatedBy
 
-	// Save changes
-	if err := s.productRepo.Update(ctx, id, product); err != nil {
+	// Save changes (repo also scopes by tenant_id as defense in depth)
+	if err := s.productRepo.Update(ctx, tenantID, id, product); err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to update product")
 		return nil, errors.New("failed to update product")
 	}
@@ -302,7 +319,7 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 		"price":      product.Price,
 		"status":     product.Status,
 		"brand":      product.Brand,
-		"old_values":  oldValues,
+		"old_values": oldValues,
 	})
 
 	// Also publish a dedicated ProductPriceChanged event whenever the price
@@ -326,11 +343,11 @@ func (s *productService) UpdateProduct(ctx context.Context, id string, req *mode
 }
 
 // DeleteProduct deletes a product (soft delete)
-func (s *productService) DeleteProduct(ctx context.Context, id string) error {
+func (s *productService) DeleteProduct(ctx context.Context, tenantID, id string) error {
 	// Fetch product first to get tenant_id for the event
 	product, _ := s.productRepo.GetByID(ctx, id)
 
-	if err := s.productRepo.Delete(ctx, id); err != nil {
+	if err := s.productRepo.Delete(ctx, tenantID, id); err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to delete product")
 		return errors.New("failed to delete product")
 	}
@@ -352,8 +369,8 @@ func (s *productService) DeleteProduct(ctx context.Context, id string) error {
 }
 
 // UpdateProductStatus updates a product's status
-func (s *productService) UpdateProductStatus(ctx context.Context, id string, status models.ProductStatus) error {
-	if err := s.productRepo.UpdateStatus(ctx, id, status); err != nil {
+func (s *productService) UpdateProductStatus(ctx context.Context, tenantID, id string, status models.ProductStatus) error {
+	if err := s.productRepo.UpdateStatus(ctx, tenantID, id, status); err != nil {
 		s.logger.WithError(err).WithField("product_id", id).Error("Failed to update product status")
 		return errors.New("failed to update product status")
 	}

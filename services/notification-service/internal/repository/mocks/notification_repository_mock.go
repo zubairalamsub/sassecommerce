@@ -16,8 +16,8 @@ func (m *MockNotificationRepository) Create(ctx context.Context, notification *m
 	return args.Error(0)
 }
 
-func (m *MockNotificationRepository) GetByID(ctx context.Context, id string) (*models.Notification, error) {
-	args := m.Called(ctx, id)
+func (m *MockNotificationRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Notification, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -34,8 +34,8 @@ func (m *MockNotificationRepository) Update(ctx context.Context, notification *m
 	return args.Error(0)
 }
 
-func (m *MockNotificationRepository) MarkAsRead(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockNotificationRepository) MarkAsRead(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
@@ -60,8 +60,8 @@ func (m *MockNotificationRepository) ListTemplates(ctx context.Context, tenantID
 	return args.Get(0).([]models.NotificationTemplate), args.Error(1)
 }
 
-func (m *MockNotificationRepository) GetTemplate(ctx context.Context, id string) (*models.NotificationTemplate, error) {
-	args := m.Called(ctx, id)
+func (m *MockNotificationRepository) GetTemplate(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -81,12 +81,12 @@ func (m *MockNotificationRepository) CreateTemplate(ctx context.Context, t *mode
 	return args.Error(0)
 }
 
-func (m *MockNotificationRepository) UpdateTemplate(ctx context.Context, id string, t *models.NotificationTemplate) error {
-	args := m.Called(ctx, id, t)
+func (m *MockNotificationRepository) UpdateTemplate(ctx context.Context, tenantID, id string, t *models.NotificationTemplate) error {
+	args := m.Called(ctx, tenantID, id, t)
 	return args.Error(0)
 }
 
-func (m *MockNotificationRepository) DeleteTemplate(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockNotificationRepository) DeleteTemplate(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }

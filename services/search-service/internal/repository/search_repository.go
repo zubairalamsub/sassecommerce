@@ -18,6 +18,7 @@ import (
 type SearchRepository interface {
 	EnsureIndex(ctx context.Context) error
 	IndexProduct(ctx context.Context, product *models.ProductDocument) error
+	GetProductByID(ctx context.Context, productID string) (*models.ProductDocument, error)
 	DeleteProduct(ctx context.Context, productID string) error
 	Search(ctx context.Context, req *models.SearchRequest) (*models.SearchResponse, error)
 	Autocomplete(ctx context.Context, req *models.AutocompleteRequest) (*models.AutocompleteResponse, error)
@@ -99,6 +100,44 @@ func (r *esSearchRepository) IndexProduct(ctx context.Context, product *models.P
 	return nil
 }
 
+// GetProductByID fetches a single product document by its ID. It returns
+// (nil, nil) when no document exists so callers can distinguish "not found"
+// from an error. Used to enforce tenant ownership before re-indexing.
+func (r *esSearchRepository) GetProductByID(ctx context.Context, productID string) (*models.ProductDocument, error) {
+	res, err := r.client.Get(
+		r.indexName,
+		productID,
+		r.client.Get.WithContext(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == 404 {
+		return nil, nil
+	}
+
+	if res.IsError() {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("failed to get product: %s", string(bodyBytes))
+	}
+
+	var envelope struct {
+		Found  bool                   `json:"found"`
+		Source models.ProductDocument `json:"_source"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to decode get response: %w", err)
+	}
+
+	if !envelope.Found {
+		return nil, nil
+	}
+
+	return &envelope.Source, nil
+}
+
 func (r *esSearchRepository) DeleteProduct(ctx context.Context, productID string) error {
 	res, err := r.client.Delete(
 		r.indexName,
@@ -155,7 +194,7 @@ func (r *esSearchRepository) Autocomplete(ctx context.Context, req *models.Autoc
 	}
 
 	query := map[string]interface{}{
-		"size": limit,
+		"size":    limit,
 		"_source": []string{"id", "name", "brand", "category_name"},
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{

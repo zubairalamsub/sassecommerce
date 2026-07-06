@@ -137,7 +137,7 @@ func (suite *CategoryServiceTestSuite) TestGetCategoryByID_Success() {
 
 	suite.mockCategoryRepo.On("GetByID", suite.ctx, categoryID.Hex()).Return(category, nil)
 
-	result, err := suite.service.GetCategoryByID(suite.ctx, categoryID.Hex())
+	result, err := suite.service.GetCategoryByID(suite.ctx, "tenant-1", categoryID.Hex())
 
 	suite.NoError(err)
 	suite.NotNil(result)
@@ -148,7 +148,7 @@ func (suite *CategoryServiceTestSuite) TestGetCategoryByID_Success() {
 func (suite *CategoryServiceTestSuite) TestGetCategoryByID_NotFound() {
 	suite.mockCategoryRepo.On("GetByID", suite.ctx, "non-existent").Return(nil, errors.New("category not found"))
 
-	result, err := suite.service.GetCategoryByID(suite.ctx, "non-existent")
+	result, err := suite.service.GetCategoryByID(suite.ctx, "tenant-1", "non-existent")
 
 	suite.Error(err)
 	suite.Nil(result)
@@ -243,9 +243,9 @@ func (suite *CategoryServiceTestSuite) TestUpdateCategory_Success() {
 
 	suite.mockCategoryRepo.On("GetByID", suite.ctx, categoryID.Hex()).Return(existingCategory, nil)
 	suite.mockCategoryRepo.On("SlugExists", suite.ctx, "tenant-1", "new-slug").Return(false, nil)
-	suite.mockCategoryRepo.On("Update", suite.ctx, categoryID.Hex(), mock.Anything).Return(nil)
+	suite.mockCategoryRepo.On("Update", suite.ctx, "tenant-1", categoryID.Hex(), mock.Anything).Return(nil)
 
-	result, err := suite.service.UpdateCategory(suite.ctx, categoryID.Hex(), req)
+	result, err := suite.service.UpdateCategory(suite.ctx, "tenant-1", categoryID.Hex(), req)
 
 	suite.NoError(err)
 	suite.NotNil(result)
@@ -272,7 +272,7 @@ func (suite *CategoryServiceTestSuite) TestUpdateCategory_SlugAlreadyExists() {
 	suite.mockCategoryRepo.On("GetByID", suite.ctx, categoryID.Hex()).Return(existingCategory, nil)
 	suite.mockCategoryRepo.On("SlugExists", suite.ctx, "tenant-1", "existing-slug").Return(true, nil)
 
-	result, err := suite.service.UpdateCategory(suite.ctx, categoryID.Hex(), req)
+	result, err := suite.service.UpdateCategory(suite.ctx, "tenant-1", categoryID.Hex(), req)
 
 	suite.Error(err)
 	suite.Nil(result)
@@ -283,18 +283,18 @@ func (suite *CategoryServiceTestSuite) TestUpdateCategory_SlugAlreadyExists() {
 func (suite *CategoryServiceTestSuite) TestDeleteCategory_Success() {
 	categoryID := primitive.NewObjectID()
 
-	suite.mockCategoryRepo.On("Delete", suite.ctx, categoryID.Hex()).Return(nil)
+	suite.mockCategoryRepo.On("Delete", suite.ctx, "tenant-1", categoryID.Hex()).Return(nil)
 
-	err := suite.service.DeleteCategory(suite.ctx, categoryID.Hex())
+	err := suite.service.DeleteCategory(suite.ctx, "tenant-1", categoryID.Hex())
 
 	suite.NoError(err)
 	suite.mockCategoryRepo.AssertExpectations(suite.T())
 }
 
 func (suite *CategoryServiceTestSuite) TestDeleteCategory_NotFound() {
-	suite.mockCategoryRepo.On("Delete", suite.ctx, "non-existent").Return(errors.New("category not found"))
+	suite.mockCategoryRepo.On("Delete", suite.ctx, "tenant-1", "non-existent").Return(errors.New("category not found"))
 
-	err := suite.service.DeleteCategory(suite.ctx, "non-existent")
+	err := suite.service.DeleteCategory(suite.ctx, "tenant-1", "non-existent")
 
 	suite.Error(err)
 	suite.mockCategoryRepo.AssertExpectations(suite.T())
@@ -303,9 +303,9 @@ func (suite *CategoryServiceTestSuite) TestDeleteCategory_NotFound() {
 func (suite *CategoryServiceTestSuite) TestUpdateCategoryStatus_Success() {
 	categoryID := primitive.NewObjectID()
 
-	suite.mockCategoryRepo.On("UpdateStatus", suite.ctx, categoryID.Hex(), models.CategoryStatusInactive).Return(nil)
+	suite.mockCategoryRepo.On("UpdateStatus", suite.ctx, "tenant-1", categoryID.Hex(), models.CategoryStatusInactive).Return(nil)
 
-	err := suite.service.UpdateCategoryStatus(suite.ctx, categoryID.Hex(), models.CategoryStatusInactive)
+	err := suite.service.UpdateCategoryStatus(suite.ctx, "tenant-1", categoryID.Hex(), models.CategoryStatusInactive)
 
 	suite.NoError(err)
 	suite.mockCategoryRepo.AssertExpectations(suite.T())

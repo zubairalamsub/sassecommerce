@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ecommerce/recommendation-service/internal/models"
 	"github.com/ecommerce/recommendation-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -28,16 +28,16 @@ func RegisterRoutes(router *gin.Engine, handler *RecommendationHandler) {
 	{
 		v1.GET("/user/:userId", handler.GetUserRecommendations)
 		v1.GET("/product/:productId", handler.GetProductRecommendations)
-		v1.POST("/train", handler.TrainModel)
+		v1.POST("/train", sharedmiddleware.RequireRole("super_admin", "admin", "moderator"), handler.TrainModel)
 		v1.GET("/train/:jobId", handler.GetTrainingJob)
 	}
 }
 
 func (h *RecommendationHandler) GetUserRecommendations(c *gin.Context) {
 	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -59,9 +59,9 @@ func (h *RecommendationHandler) GetUserRecommendations(c *gin.Context) {
 
 func (h *RecommendationHandler) GetProductRecommendations(c *gin.Context) {
 	productID := c.Param("productId")
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -78,13 +78,13 @@ func (h *RecommendationHandler) GetProductRecommendations(c *gin.Context) {
 }
 
 func (h *RecommendationHandler) TrainModel(c *gin.Context) {
-	var req models.TrainRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	result, err := h.service.TrainModel(c.Request.Context(), req.TenantID)
+	result, err := h.service.TrainModel(c.Request.Context(), tenantID)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to start training")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start training"})
@@ -96,8 +96,13 @@ func (h *RecommendationHandler) TrainModel(c *gin.Context) {
 
 func (h *RecommendationHandler) GetTrainingJob(c *gin.Context) {
 	jobID := c.Param("jobId")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 
-	result, err := h.service.GetTrainingJob(c.Request.Context(), jobID)
+	result, err := h.service.GetTrainingJob(c.Request.Context(), tenantID, jobID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

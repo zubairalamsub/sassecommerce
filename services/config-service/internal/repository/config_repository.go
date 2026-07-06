@@ -11,17 +11,17 @@ type ConfigRepository interface {
 	// Config entries
 	Get(ctx context.Context, namespace, key, environment, tenantID string) (*models.ConfigEntry, error)
 	Set(ctx context.Context, entry *models.ConfigEntry) error
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id, tenantID string) error
 	ListByNamespace(ctx context.Context, namespace, environment, tenantID string) ([]models.ConfigEntry, error)
 	ListNamespaces(ctx context.Context) ([]models.NamespaceSummary, error)
 	GetByID(ctx context.Context, id string) (*models.ConfigEntry, error)
 	BulkGet(ctx context.Context, keys []models.NamespaceKey, environment, tenantID string) ([]models.ConfigEntry, error)
-	Search(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntry, int64, error)
+	Search(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntry, int64, error)
 
 	// Audit log
 	RecordAudit(ctx context.Context, log *models.ConfigAuditLog) error
-	GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditLog, int64, error)
-	GetAuditByConfigID(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error)
+	GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error)
+	GetAuditByConfigID(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error)
 }
 
 type configRepository struct {
@@ -71,8 +71,11 @@ func (r *configRepository) Set(ctx context.Context, entry *models.ConfigEntry) e
 	return r.db.WithContext(ctx).Save(entry).Error
 }
 
-func (r *configRepository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.ConfigEntry{}).Error
+func (r *configRepository) Delete(ctx context.Context, id, tenantID string) error {
+	// Scope deletes to the caller's tenant so an id from another tenant is a no-op.
+	return r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ?", id, tenantID).
+		Delete(&models.ConfigEntry{}).Error
 }
 
 func (r *configRepository) GetByID(ctx context.Context, id string) (*models.ConfigEntry, error) {
@@ -123,11 +126,15 @@ func (r *configRepository) BulkGet(ctx context.Context, keys []models.NamespaceK
 	return results, nil
 }
 
-func (r *configRepository) Search(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntry, int64, error) {
+func (r *configRepository) Search(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntry, int64, error) {
 	var entries []models.ConfigEntry
 	var total int64
 
 	dbQuery := r.db.WithContext(ctx).Model(&models.ConfigEntry{})
+
+	// Restrict search to the caller's tenant plus shared/global entries so one
+	// tenant can never ILIKE across another tenant's values (including secrets).
+	dbQuery = dbQuery.Where("tenant_id IN ('', ?)", tenantID)
 
 	if query != "" {
 		pattern := "%" + query + "%"
@@ -151,11 +158,13 @@ func (r *configRepository) RecordAudit(ctx context.Context, log *models.ConfigAu
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *configRepository) GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
+func (r *configRepository) GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
 	var logs []models.ConfigAuditLog
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&models.ConfigAuditLog{})
+	// Only ever return audit entries for the caller's own tenant.
+	query := r.db.WithContext(ctx).Model(&models.ConfigAuditLog{}).
+		Where("tenant_id = ?", tenantID)
 	if namespace != "" {
 		query = query.Where("namespace = ?", namespace)
 	}
@@ -170,11 +179,12 @@ func (r *configRepository) GetAuditLog(ctx context.Context, namespace, key strin
 	return logs, total, err
 }
 
-func (r *configRepository) GetAuditByConfigID(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
+func (r *configRepository) GetAuditByConfigID(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditLog, int64, error) {
 	var logs []models.ConfigAuditLog
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&models.ConfigAuditLog{}).Where("config_id = ?", configID)
+	query := r.db.WithContext(ctx).Model(&models.ConfigAuditLog{}).
+		Where("config_id = ? AND tenant_id = ?", configID, tenantID)
 	query.Count(&total)
 
 	offset := (page - 1) * pageSize

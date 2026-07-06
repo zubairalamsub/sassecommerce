@@ -214,7 +214,7 @@ public class PaymentMethodServiceTests
             BillingCity = "Old City"
         };
 
-        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         _methodRepo.Setup(r => r.UpdateAsync(It.IsAny<PaymentMethod>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PaymentMethod pm, CancellationToken _) => pm);
 
@@ -227,7 +227,7 @@ public class PaymentMethodServiceTests
             UpdatedBy = "admin"
         };
 
-        var result = await _service.UpdatePaymentMethodAsync(methodId, request);
+        var result = await _service.UpdatePaymentMethodAsync(methodId, "t1", request);
 
         result.ExpiryMonth.Should().Be(6);
         result.ExpiryYear.Should().Be(2028);
@@ -248,13 +248,13 @@ public class PaymentMethodServiceTests
             IsDefault = false
         };
 
-        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _methodRepo.Setup(r => r.GetByIdAsync(methodId, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(existing);
         _methodRepo.Setup(r => r.UpdateAsync(It.IsAny<PaymentMethod>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PaymentMethod pm, CancellationToken _) => pm);
         _methodRepo.Setup(r => r.ClearDefaultAsync("t1", "c1", It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var result = await _service.UpdatePaymentMethodAsync(methodId, new UpdatePaymentMethodRequest { IsDefault = true, UpdatedBy = "test" });
+        var result = await _service.UpdatePaymentMethodAsync(methodId, "t1", new UpdatePaymentMethodRequest { IsDefault = true, UpdatedBy = "test" });
 
         result.IsDefault.Should().BeTrue();
         _methodRepo.Verify(r => r.ClearDefaultAsync("t1", "c1", It.IsAny<CancellationToken>()), Times.Once);
@@ -263,10 +263,10 @@ public class PaymentMethodServiceTests
     [Fact]
     public async Task UpdatePaymentMethod_WhenNotFound_ShouldThrow()
     {
-        _methodRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _methodRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PaymentMethod?)null);
 
-        var act = () => _service.UpdatePaymentMethodAsync(Guid.NewGuid(), new UpdatePaymentMethodRequest { UpdatedBy = "test" });
+        var act = () => _service.UpdatePaymentMethodAsync(Guid.NewGuid(), "t1", new UpdatePaymentMethodRequest { UpdatedBy = "test" });
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
@@ -284,9 +284,9 @@ public class PaymentMethodServiceTests
             Brand = "Visa"
         };
 
-        _methodRepo.Setup(r => r.GetByIdAsync(method.Id, It.IsAny<CancellationToken>())).ReturnsAsync(method);
+        _methodRepo.Setup(r => r.GetByIdAsync(method.Id, It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(method);
 
-        var result = await _service.GetPaymentMethodByIdAsync(method.Id);
+        var result = await _service.GetPaymentMethodByIdAsync(method.Id, "t1");
 
         result.Should().NotBeNull();
         result!.Last4.Should().Be("4242");
@@ -295,10 +295,10 @@ public class PaymentMethodServiceTests
     [Fact]
     public async Task GetPaymentMethodById_WhenNotExists_ShouldReturnNull()
     {
-        _methodRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _methodRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PaymentMethod?)null);
 
-        var result = await _service.GetPaymentMethodByIdAsync(Guid.NewGuid());
+        var result = await _service.GetPaymentMethodByIdAsync(Guid.NewGuid(), "t1");
 
         result.Should().BeNull();
     }
@@ -323,10 +323,10 @@ public class PaymentMethodServiceTests
     public async Task DeletePaymentMethod_ShouldCallRepository()
     {
         var methodId = Guid.NewGuid();
-        _methodRepo.Setup(r => r.DeleteAsync(methodId, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _methodRepo.Setup(r => r.DeleteAsync(methodId, It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        await _service.DeletePaymentMethodAsync(methodId);
+        await _service.DeletePaymentMethodAsync(methodId, "t1");
 
-        _methodRepo.Verify(r => r.DeleteAsync(methodId, It.IsAny<CancellationToken>()), Times.Once);
+        _methodRepo.Verify(r => r.DeleteAsync(methodId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

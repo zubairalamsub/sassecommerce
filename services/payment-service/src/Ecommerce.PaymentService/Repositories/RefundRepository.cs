@@ -13,17 +13,17 @@ public class RefundRepository : IRefundRepository
         _context = context;
     }
 
-    public async Task<Refund?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Refund?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Refunds
             .Include(r => r.Payment)
-            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantId, cancellationToken);
     }
 
-    public async Task<List<Refund>> GetByPaymentIdAsync(Guid paymentId, CancellationToken cancellationToken = default)
+    public async Task<List<Refund>> GetByPaymentIdAsync(Guid paymentId, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Refunds
-            .Where(r => r.PaymentId == paymentId)
+            .Where(r => r.PaymentId == paymentId && r.TenantId == tenantId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
     }

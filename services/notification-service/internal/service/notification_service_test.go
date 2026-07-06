@@ -226,9 +226,9 @@ func TestGetNotification_Success(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	mockRepo.On("GetByID", ctx, "notif-1").Return(notification, nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "notif-1").Return(notification, nil)
 
-	result, err := svc.GetNotification(ctx, "notif-1")
+	result, err := svc.GetNotification(ctx, "tenant-1", "notif-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "notif-1", result.ID)
@@ -239,9 +239,9 @@ func TestGetNotification_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("notification not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("notification not found"))
 
-	result, err := svc.GetNotification(ctx, "nonexistent")
+	result, err := svc.GetNotification(ctx, "tenant-1", "nonexistent")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -300,10 +300,10 @@ func TestMarkAsRead_Success(t *testing.T) {
 		ID:     "notif-1",
 		Status: models.StatusSent,
 	}
-	mockRepo.On("GetByID", ctx, "notif-1").Return(notification, nil)
-	mockRepo.On("MarkAsRead", ctx, "notif-1").Return(nil)
+	mockRepo.On("GetByID", ctx, "tenant-1", "notif-1").Return(notification, nil)
+	mockRepo.On("MarkAsRead", ctx, "tenant-1", "notif-1").Return(nil)
 
-	err := svc.MarkAsRead(ctx, "notif-1")
+	err := svc.MarkAsRead(ctx, "tenant-1", "notif-1")
 
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -313,9 +313,9 @@ func TestMarkAsRead_NotFound(t *testing.T) {
 	svc, mockRepo, _ := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "nonexistent").Return(nil, errors.New("notification not found"))
+	mockRepo.On("GetByID", ctx, "tenant-1", "nonexistent").Return(nil, errors.New("notification not found"))
 
-	err := svc.MarkAsRead(ctx, "nonexistent")
+	err := svc.MarkAsRead(ctx, "tenant-1", "nonexistent")
 
 	assert.Error(t, err)
 }
@@ -380,7 +380,7 @@ func TestUpdatePreference_NewPreference(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.False(t, result.EmailEnabled)
-	assert.True(t, result.SMSEnabled) // default
+	assert.True(t, result.SMSEnabled)  // default
 	assert.True(t, result.PushEnabled) // default
 	assert.Equal(t, "new@example.com", result.Email)
 }

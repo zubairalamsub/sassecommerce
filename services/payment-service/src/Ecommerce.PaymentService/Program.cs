@@ -134,6 +134,22 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Security headers land first so they apply to every response — including
+// errors raised by middleware further down the pipeline. Values mirror the
+// shared Go SecurityHeaders middleware defaults for a JSON-only API.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()";
+    headers["X-XSS-Protection"] = "0";
+    headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+    await next();
+});
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {

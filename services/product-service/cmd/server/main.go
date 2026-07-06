@@ -183,6 +183,9 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 
 	// Global middleware
 	router.Use(gin.Recovery())
+	// Security headers land early so they apply to every response — including
+	// errors raised by middleware further down the chain.
+	router.Use(sharedmiddleware.SecurityHeaders(sharedmiddleware.SecurityHeadersConfig{}))
 	router.Use(metrics.Middleware("product-service"))
 	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
 		AllowCredentials: true,

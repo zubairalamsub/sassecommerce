@@ -13,11 +13,11 @@ public class StockReservationRepository : IStockReservationRepository
         _context = context;
     }
 
-    public async Task<StockReservation?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<StockReservation?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.StockReservations
             .Include(sr => sr.InventoryItem)
-            .FirstOrDefaultAsync(sr => sr.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(sr => sr.Id == id && sr.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<List<StockReservation>> GetByOrderAsync(string orderId, CancellationToken cancellationToken = default)

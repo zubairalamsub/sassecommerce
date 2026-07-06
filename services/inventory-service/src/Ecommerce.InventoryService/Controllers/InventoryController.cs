@@ -19,11 +19,24 @@ public class InventoryController : ControllerBase
         _logger = logger;
     }
 
+    // Trusted tenant identity comes from the verified JWT, never from query
+    // string, request body, or headers. user-service mints this claim as
+    // "tenant_id" (see internal/models/token.go TokenClaims).
+    private string TenantId => User.FindFirst("tenant_id")?.Value ?? string.Empty;
+
     #region Warehouse Endpoints
 
     [HttpPost("warehouses")]
     public async Task<ActionResult<WarehouseResponse>> CreateWarehouse([FromBody] CreateWarehouseRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        // Never trust a tenant supplied in the body.
+        request.TenantId = TenantId;
+
         try
         {
             var result = await _inventoryService.CreateWarehouseAsync(request, cancellationToken);
@@ -38,28 +51,38 @@ public class InventoryController : ControllerBase
     [HttpGet("warehouses/{id:guid}")]
     public async Task<ActionResult<WarehouseResponse>> GetWarehouse(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _inventoryService.GetWarehouseByIdAsync(id, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _inventoryService.GetWarehouseByIdAsync(id, TenantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
     [HttpGet("warehouses")]
-    public async Task<ActionResult<object>> GetWarehouses([FromQuery] string tenantId, [FromQuery] int offset = 0, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<object>> GetWarehouses([FromQuery] int offset = 0, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized();
         }
 
-        var (items, total) = await _inventoryService.GetWarehousesPagedAsync(tenantId, offset, limit, cancellationToken);
+        var (items, total) = await _inventoryService.GetWarehousesPagedAsync(TenantId, offset, limit, cancellationToken);
         return Ok(new { data = items, total, offset, limit });
     }
 
     [HttpPut("warehouses/{id:guid}")]
     public async Task<ActionResult<WarehouseResponse>> UpdateWarehouse(Guid id, [FromBody] UpdateWarehouseRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.UpdateWarehouseAsync(id, request, cancellationToken);
+            var result = await _inventoryService.UpdateWarehouseAsync(id, request, TenantId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -71,8 +94,20 @@ public class InventoryController : ControllerBase
     [HttpDelete("warehouses/{id:guid}")]
     public async Task<IActionResult> DeleteWarehouse(Guid id, CancellationToken cancellationToken)
     {
-        await _inventoryService.DeleteWarehouseAsync(id, cancellationToken);
-        return NoContent();
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await _inventoryService.DeleteWarehouseAsync(id, TenantId, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -82,6 +117,14 @@ public class InventoryController : ControllerBase
     [HttpPost("items")]
     public async Task<ActionResult<InventoryItemResponse>> CreateInventoryItem([FromBody] CreateInventoryItemRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        // Never trust a tenant supplied in the body.
+        request.TenantId = TenantId;
+
         try
         {
             var result = await _inventoryService.CreateInventoryItemAsync(request, cancellationToken);
@@ -100,40 +143,50 @@ public class InventoryController : ControllerBase
     [HttpGet("items/{id:guid}")]
     public async Task<ActionResult<InventoryItemResponse>> GetInventoryItem(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _inventoryService.GetInventoryItemByIdAsync(id, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _inventoryService.GetInventoryItemByIdAsync(id, TenantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
     [HttpGet("items")]
-    public async Task<ActionResult<object>> GetInventoryItems([FromQuery] string tenantId, [FromQuery] int offset = 0, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<object>> GetInventoryItems([FromQuery] int offset = 0, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized();
         }
 
-        var (items, total) = await _inventoryService.GetInventoryItemsPagedAsync(tenantId, offset, limit, cancellationToken);
+        var (items, total) = await _inventoryService.GetInventoryItemsPagedAsync(TenantId, offset, limit, cancellationToken);
         return Ok(new { data = items, total, offset, limit });
     }
 
     [HttpGet("items/low-stock")]
-    public async Task<ActionResult<List<InventoryItemResponse>>> GetLowStockItems([FromQuery] string tenantId, CancellationToken cancellationToken)
+    public async Task<ActionResult<List<InventoryItemResponse>>> GetLowStockItems(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized();
         }
 
-        var items = await _inventoryService.GetLowStockItemsAsync(tenantId, cancellationToken);
+        var items = await _inventoryService.GetLowStockItemsAsync(TenantId, cancellationToken);
         return Ok(items);
     }
 
     [HttpPut("items/{id:guid}")]
     public async Task<ActionResult<InventoryItemResponse>> UpdateInventoryItem(Guid id, [FromBody] UpdateInventoryItemRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.UpdateInventoryItemAsync(id, request, cancellationToken);
+            var result = await _inventoryService.UpdateInventoryItemAsync(id, request, TenantId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -145,8 +198,20 @@ public class InventoryController : ControllerBase
     [HttpDelete("items/{id:guid}")]
     public async Task<IActionResult> DeleteInventoryItem(Guid id, CancellationToken cancellationToken)
     {
-        await _inventoryService.DeleteInventoryItemAsync(id, cancellationToken);
-        return NoContent();
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await _inventoryService.DeleteInventoryItemAsync(id, TenantId, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     #endregion
@@ -154,14 +219,19 @@ public class InventoryController : ControllerBase
     #region Stock Level Endpoints
 
     [HttpGet("stock-levels")]
-    public async Task<ActionResult<StockLevelResponse>> GetStockLevel([FromQuery] string tenantId, [FromQuery] string productId, [FromQuery] string? variantId = null, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<StockLevelResponse>> GetStockLevel([FromQuery] string productId, [FromQuery] string? variantId = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(productId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId and ProductId are required" });
+            return Unauthorized();
         }
 
-        var result = await _inventoryService.GetStockLevelAsync(tenantId, productId, variantId, cancellationToken);
+        if (string.IsNullOrEmpty(productId))
+        {
+            return BadRequest(new { error = "ProductId is required" });
+        }
+
+        var result = await _inventoryService.GetStockLevelAsync(TenantId, productId, variantId, cancellationToken);
         return result == null ? NotFound() : Ok(result);
     }
 
@@ -172,9 +242,14 @@ public class InventoryController : ControllerBase
     [HttpPost("items/{id:guid}/adjust")]
     public async Task<ActionResult<InventoryItemResponse>> AdjustStock(Guid id, [FromBody] AdjustStockRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.AdjustStockAsync(id, request, cancellationToken);
+            var result = await _inventoryService.AdjustStockAsync(id, request, TenantId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -190,9 +265,14 @@ public class InventoryController : ControllerBase
     [HttpPost("items/{id:guid}/transfer")]
     public async Task<ActionResult<InventoryItemResponse>> TransferStock(Guid id, [FromBody] TransferStockRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.TransferStockAsync(id, request, cancellationToken);
+            var result = await _inventoryService.TransferStockAsync(id, request, TenantId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -208,6 +288,14 @@ public class InventoryController : ControllerBase
     [HttpPost("reservations")]
     public async Task<ActionResult<StockReservationResponse>> ReserveStock([FromBody] ReserveStockRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        // Never trust a tenant supplied in the body.
+        request.TenantId = TenantId;
+
         try
         {
             var result = await _inventoryService.ReserveStockAsync(request, cancellationToken);
@@ -229,9 +317,14 @@ public class InventoryController : ControllerBase
     [HttpPost("reservations/{id:guid}/fulfill")]
     public async Task<ActionResult<StockReservationResponse>> FulfillReservation(Guid id, [FromBody] FulfillReservationRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.FulfillReservationAsync(id, request.FulfilledBy, cancellationToken);
+            var result = await _inventoryService.FulfillReservationAsync(id, request.FulfilledBy, TenantId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -247,9 +340,14 @@ public class InventoryController : ControllerBase
     [HttpPost("reservations/{id:guid}/cancel")]
     public async Task<ActionResult<StockReservationResponse>> CancelReservation(Guid id, [FromBody] CancelReservationRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
         try
         {
-            var result = await _inventoryService.CancelReservationAsync(id, request.CancelledBy, request.Reason, cancellationToken);
+            var result = await _inventoryService.CancelReservationAsync(id, request.CancelledBy, TenantId, request.Reason, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException)
@@ -268,26 +366,30 @@ public class InventoryController : ControllerBase
 
     [HttpGet("movements")]
     public async Task<ActionResult<object>> GetStockMovements(
-        [FromQuery] string tenantId,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20,
         [FromQuery] DateTime? startDate = null,
         [FromQuery] DateTime? endDate = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { error = "TenantId is required" });
+            return Unauthorized();
         }
 
-        var (items, total) = await _inventoryService.GetStockMovementsPagedAsync(tenantId, offset, limit, startDate, endDate, cancellationToken);
+        var (items, total) = await _inventoryService.GetStockMovementsPagedAsync(TenantId, offset, limit, startDate, endDate, cancellationToken);
         return Ok(new { data = items, total, offset, limit });
     }
 
     [HttpGet("movements/order/{orderId}")]
     public async Task<ActionResult<List<StockMovementResponse>>> GetStockMovementsByOrder(string orderId, CancellationToken cancellationToken)
     {
-        var items = await _inventoryService.GetStockMovementsByOrderAsync(orderId, cancellationToken);
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            return Unauthorized();
+        }
+
+        var items = await _inventoryService.GetStockMovementsByOrderAsync(orderId, TenantId, cancellationToken);
         return Ok(items);
     }
 

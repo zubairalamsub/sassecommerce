@@ -53,9 +53,9 @@ public class InventoryService : IInventoryService
         return _mapper.Map<WarehouseResponse>(created);
     }
 
-    public async Task<WarehouseResponse> UpdateWarehouseAsync(Guid id, UpdateWarehouseRequest request, CancellationToken cancellationToken = default)
+    public async Task<WarehouseResponse> UpdateWarehouseAsync(Guid id, UpdateWarehouseRequest request, string tenantId, CancellationToken cancellationToken = default)
     {
-        var warehouse = await _warehouseRepository.GetByIdAsync(id, cancellationToken)
+        var warehouse = await _warehouseRepository.GetByIdAsync(id, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Warehouse {id} not found");
 
         if (request.Name != null) warehouse.Name = request.Name;
@@ -77,9 +77,9 @@ public class InventoryService : IInventoryService
         return _mapper.Map<WarehouseResponse>(updated);
     }
 
-    public async Task<WarehouseResponse?> GetWarehouseByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<WarehouseResponse?> GetWarehouseByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var warehouse = await _warehouseRepository.GetByIdAsync(id, cancellationToken);
+        var warehouse = await _warehouseRepository.GetByIdAsync(id, tenantId, cancellationToken);
         return warehouse == null ? null : _mapper.Map<WarehouseResponse>(warehouse);
     }
 
@@ -95,9 +95,12 @@ public class InventoryService : IInventoryService
         return (_mapper.Map<List<WarehouseResponse>>(warehouses), total);
     }
 
-    public async Task DeleteWarehouseAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteWarehouseAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        await _warehouseRepository.DeleteAsync(id, cancellationToken);
+        var warehouse = await _warehouseRepository.GetByIdAsync(id, tenantId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Warehouse {id} not found");
+
+        await _warehouseRepository.DeleteAsync(id, tenantId, cancellationToken);
         _logger.LogInformation("Warehouse deleted: {WarehouseId}", id);
     }
 
@@ -113,7 +116,7 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Product already exists in this warehouse");
         }
 
-        var warehouse = await _warehouseRepository.GetByIdAsync(request.WarehouseId, cancellationToken)
+        var warehouse = await _warehouseRepository.GetByIdAsync(request.WarehouseId, request.TenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Warehouse {request.WarehouseId} not found");
 
         var inventoryItem = _mapper.Map<InventoryItem>(request);
@@ -148,9 +151,9 @@ public class InventoryService : IInventoryService
         return await MapToInventoryItemResponseAsync(created, warehouse.Name);
     }
 
-    public async Task<InventoryItemResponse> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemResponse> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, string tenantId, CancellationToken cancellationToken = default)
     {
-        var inventoryItem = await _inventoryRepository.GetByIdAsync(id, cancellationToken)
+        var inventoryItem = await _inventoryRepository.GetByIdAsync(id, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Inventory item {id} not found");
 
         if (request.ReorderPoint.HasValue) inventoryItem.ReorderPoint = request.ReorderPoint.Value;
@@ -165,9 +168,9 @@ public class InventoryService : IInventoryService
         return await MapToInventoryItemResponseAsync(updated, updated.Warehouse.Name);
     }
 
-    public async Task<InventoryItemResponse?> GetInventoryItemByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemResponse?> GetInventoryItemByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var inventoryItem = await _inventoryRepository.GetByIdAsync(id, cancellationToken);
+        var inventoryItem = await _inventoryRepository.GetByIdAsync(id, tenantId, cancellationToken);
         return inventoryItem == null ? null : await MapToInventoryItemResponseAsync(inventoryItem, inventoryItem.Warehouse.Name);
     }
 
@@ -232,9 +235,12 @@ public class InventoryService : IInventoryService
         return (responses, total);
     }
 
-    public async Task DeleteInventoryItemAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteInventoryItemAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        await _inventoryRepository.DeleteAsync(id, cancellationToken);
+        var inventoryItem = await _inventoryRepository.GetByIdAsync(id, tenantId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Inventory item {id} not found");
+
+        await _inventoryRepository.DeleteAsync(id, tenantId, cancellationToken);
         _logger.LogInformation("Inventory item deleted: {InventoryItemId}", id);
     }
 
@@ -242,9 +248,9 @@ public class InventoryService : IInventoryService
 
     #region Stock Operations
 
-    public async Task<InventoryItemResponse> AdjustStockAsync(Guid inventoryItemId, AdjustStockRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemResponse> AdjustStockAsync(Guid inventoryItemId, AdjustStockRequest request, string tenantId, CancellationToken cancellationToken = default)
     {
-        var inventoryItem = await _inventoryRepository.GetByIdAsync(inventoryItemId, cancellationToken)
+        var inventoryItem = await _inventoryRepository.GetByIdAsync(inventoryItemId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Inventory item {inventoryItemId} not found");
 
         var quantityBefore = inventoryItem.QuantityOnHand;
@@ -306,9 +312,9 @@ public class InventoryService : IInventoryService
         return await MapToInventoryItemResponseAsync(inventoryItem, inventoryItem.Warehouse.Name);
     }
 
-    public async Task<InventoryItemResponse> TransferStockAsync(Guid inventoryItemId, TransferStockRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemResponse> TransferStockAsync(Guid inventoryItemId, TransferStockRequest request, string tenantId, CancellationToken cancellationToken = default)
     {
-        var sourceItem = await _inventoryRepository.GetByIdAsync(inventoryItemId, cancellationToken)
+        var sourceItem = await _inventoryRepository.GetByIdAsync(inventoryItemId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Source inventory item {inventoryItemId} not found");
 
         if (sourceItem.QuantityAvailable < request.Quantity)
@@ -316,7 +322,7 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Insufficient available stock for transfer");
         }
 
-        var targetWarehouse = await _warehouseRepository.GetByIdAsync(request.ToWarehouseId, cancellationToken)
+        var targetWarehouse = await _warehouseRepository.GetByIdAsync(request.ToWarehouseId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Target warehouse {request.ToWarehouseId} not found");
 
         // Get or create target inventory item
@@ -448,9 +454,9 @@ public class InventoryService : IInventoryService
         return _mapper.Map<StockReservationResponse>(reservation);
     }
 
-    public async Task<StockReservationResponse> FulfillReservationAsync(Guid reservationId, string fulfilledBy, CancellationToken cancellationToken = default)
+    public async Task<StockReservationResponse> FulfillReservationAsync(Guid reservationId, string fulfilledBy, string tenantId, CancellationToken cancellationToken = default)
     {
-        var reservation = await _stockReservationRepository.GetByIdAsync(reservationId, cancellationToken)
+        var reservation = await _stockReservationRepository.GetByIdAsync(reservationId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Reservation {reservationId} not found");
 
         if (reservation.Status != ReservationStatus.Active)
@@ -494,9 +500,9 @@ public class InventoryService : IInventoryService
         return _mapper.Map<StockReservationResponse>(reservation);
     }
 
-    public async Task<StockReservationResponse> CancelReservationAsync(Guid reservationId, string cancelledBy, string? reason = null, CancellationToken cancellationToken = default)
+    public async Task<StockReservationResponse> CancelReservationAsync(Guid reservationId, string cancelledBy, string tenantId, string? reason = null, CancellationToken cancellationToken = default)
     {
-        var reservation = await _stockReservationRepository.GetByIdAsync(reservationId, cancellationToken)
+        var reservation = await _stockReservationRepository.GetByIdAsync(reservationId, tenantId, cancellationToken)
             ?? throw new KeyNotFoundException($"Reservation {reservationId} not found");
 
         if (reservation.Status != ReservationStatus.Active)
@@ -573,9 +579,9 @@ public class InventoryService : IInventoryService
         return (responses, total);
     }
 
-    public async Task<List<StockMovementResponse>> GetStockMovementsByOrderAsync(string orderId, CancellationToken cancellationToken = default)
+    public async Task<List<StockMovementResponse>> GetStockMovementsByOrderAsync(string orderId, string tenantId, CancellationToken cancellationToken = default)
     {
-        var movements = await _stockMovementRepository.GetByOrderAsync(orderId, cancellationToken);
+        var movements = await _stockMovementRepository.GetByOrderAsync(orderId, tenantId, cancellationToken);
 
         return movements.Select(m => new StockMovementResponse
         {

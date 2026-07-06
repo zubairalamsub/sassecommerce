@@ -13,10 +13,10 @@ public class WarehouseRepository : IWarehouseRepository
         _context = context;
     }
 
-    public async Task<Warehouse?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Warehouse?> GetByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Warehouses
-            .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(w => w.Id == id && w.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<Warehouse?> GetByCodeAsync(string tenantId, string code, CancellationToken cancellationToken = default)
@@ -61,9 +61,9 @@ public class WarehouseRepository : IWarehouseRepository
         return warehouse;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
-        var warehouse = await GetByIdAsync(id, cancellationToken);
+        var warehouse = await GetByIdAsync(id, tenantId, cancellationToken);
         if (warehouse != null)
         {
             warehouse.DeletedAt = DateTime.UtcNow;

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/aggregates"
@@ -18,11 +19,11 @@ import (
 
 // CommandHandler handles HTTP requests for commands
 type CommandHandler struct {
-	commandHandler        *commands.CommandHandler
-	eventStore            eventstore.EventStore
-	logger                *zap.Logger
-	inventoryURL          string
-	paymentURL            string
+	commandHandler *commands.CommandHandler
+	eventStore     eventstore.EventStore
+	logger         *zap.Logger
+	inventoryURL   string
+	paymentURL     string
 	// notificationPublisher is optional — when nil, /send-receipt returns 503.
 	// This lets local dev / tests run without Kafka while still wiring the
 	// route into the router.
@@ -135,6 +136,11 @@ func (h *CommandHandler) AddOrderItem(c *gin.Context) {
 		return
 	}
 
+	// Enforce tenant isolation: the order must belong to the caller's tenant.
+	if order := h.authorizeOrderAccess(c, orderID); order == nil {
+		return
+	}
+
 	// Create command
 	cmd := commands.AddOrderItemCommand{
 		OrderID:   orderID,
@@ -167,6 +173,11 @@ func (h *CommandHandler) AddOrderItem(c *gin.Context) {
 func (h *CommandHandler) RemoveOrderItem(c *gin.Context) {
 	orderID := c.Param("id")
 	itemID := c.Param("itemId")
+
+	// Enforce tenant isolation: the order must belong to the caller's tenant.
+	if order := h.authorizeOrderAccess(c, orderID); order == nil {
+		return
+	}
 
 	// Create command
 	cmd := commands.RemoveOrderItemCommand{
@@ -204,14 +215,9 @@ func (h *CommandHandler) ConfirmOrder(c *gin.Context) {
 		return
 	}
 
-	// Load order for saga
-	order, err := h.loadOrder(orderID)
-	if err != nil {
-		h.logger.Error("Failed to load order", zap.Error(err))
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Error:   "order_not_found",
-			Message: err.Error(),
-		})
+	// Load order for saga, enforcing tenant isolation on the loaded aggregate.
+	order := h.authorizeOrderAccess(c, orderID)
+	if order == nil {
 		return
 	}
 
@@ -261,6 +267,11 @@ func (h *CommandHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 
+	// Enforce tenant isolation: the order must belong to the caller's tenant.
+	if order := h.authorizeOrderAccess(c, orderID); order == nil {
+		return
+	}
+
 	// Create command
 	cmd := commands.CancelOrderCommand{
 		OrderID:     orderID,
@@ -295,6 +306,11 @@ func (h *CommandHandler) ShipOrder(c *gin.Context) {
 			Error:   "invalid_request",
 			Message: err.Error(),
 		})
+		return
+	}
+
+	// Enforce tenant isolation: the order must belong to the caller's tenant.
+	if order := h.authorizeOrderAccess(c, orderID); order == nil {
 		return
 	}
 
@@ -333,6 +349,11 @@ func (h *CommandHandler) DeliverOrder(c *gin.Context) {
 			Error:   "invalid_request",
 			Message: err.Error(),
 		})
+		return
+	}
+
+	// Enforce tenant isolation: the order must belong to the caller's tenant.
+	if order := h.authorizeOrderAccess(c, orderID); order == nil {
 		return
 	}
 
@@ -390,14 +411,13 @@ func (h *CommandHandler) SendReceipt(c *gin.Context) {
 		return
 	}
 
-	// Load order summary from the event store. We replay events on the
+	// Load order summary from the event store, enforcing tenant isolation.
+	// This is the highest-risk mutation: it emails order contents to a
+	// caller-supplied address, so we must confirm the order belongs to the
+	// caller's tenant before building the receipt. We replay events on the
 	// aggregate so this works even when the read-model projection lags.
-	order, err := h.loadOrder(orderID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Error:   "order_not_found",
-			Message: err.Error(),
-		})
+	order := h.authorizeOrderAccess(c, orderID)
+	if order == nil {
 		return
 	}
 
@@ -453,6 +473,36 @@ func (h *CommandHandler) SendReceipt(c *gin.Context) {
 }
 
 // Helper functions
+
+// authorizeOrderAccess loads the order and verifies it belongs to the caller's
+// tenant, taken from the verified JWT (never the path/body). It is the single
+// tenant-isolation gate for every authenticated state mutation.
+//
+// On any failure — unauthenticated, order missing, or order owned by a
+// different tenant — it writes a 404 (never 403) and returns nil. Returning
+// 404 on a tenant mismatch is deliberate: a 403 would confirm the order exists,
+// letting an attacker probe another tenant's order IDs.
+func (h *CommandHandler) authorizeOrderAccess(c *gin.Context, orderID string) *aggregates.Order {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "authentication required",
+		})
+		return nil
+	}
+
+	order, err := h.loadOrder(orderID)
+	if err != nil || order.TenantID != tenantID {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "order_not_found",
+			Message: "order not found",
+		})
+		return nil
+	}
+
+	return order
+}
 
 func (h *CommandHandler) loadOrder(orderID string) (*aggregates.Order, error) {
 	eventsHistory, err := h.eventStore.GetEvents(orderID)

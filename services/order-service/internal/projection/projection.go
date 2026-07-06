@@ -324,8 +324,10 @@ func (p *OrderProjection) GetOrderItems(orderID string) ([]*queries.OrderItemRea
 	return items, rows.Err()
 }
 
-// GetOrdersByCustomer retrieves orders for a customer
-func (p *OrderProjection) GetOrdersByCustomer(customerID string, limit, offset int) ([]*queries.OrderSummary, error) {
+// GetOrdersByCustomer retrieves orders for a customer, scoped to a tenant.
+// The tenant filter is mandatory: it comes from the verified JWT so a caller
+// cannot read another tenant's orders by guessing customer IDs.
+func (p *OrderProjection) GetOrdersByCustomer(tenantID, customerID string, limit, offset int) ([]*queries.OrderSummary, error) {
 	rows, err := p.db.Query(`
 		SELECT o.id, o.customer_id, o.status,
 			CASE WHEN o.total_amount = 0
@@ -335,10 +337,10 @@ func (p *OrderProjection) GetOrdersByCustomer(customerID string, limit, offset i
 			o.currency, o.created_at, o.updated_at,
 			COALESCE((SELECT COUNT(*) FROM order_item_read_model WHERE order_id = o.id), 0) as item_count
 		FROM order_read_model o
-		WHERE o.customer_id = $1
+		WHERE o.tenant_id = $1 AND o.customer_id = $2
 		ORDER BY o.created_at DESC
-		LIMIT $2 OFFSET $3
-	`, customerID, limit, offset)
+		LIMIT $3 OFFSET $4
+	`, tenantID, customerID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

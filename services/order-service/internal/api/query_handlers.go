@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/aggregates"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/queries"
@@ -151,12 +152,23 @@ func (h *QueryHandler) rebuildFromEvents(orderID string) (*queries.OrderReadMode
 func (h *QueryHandler) GetOrdersByCustomer(c *gin.Context) {
 	customerID := c.Param("customerId")
 
+	// Tenant identity comes from the verified JWT, never the path/query.
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "authentication required",
+		})
+		return
+	}
+
 	// Parse pagination parameters
 	limit := h.getIntQueryParam(c, "limit", 10)
 	offset := h.getIntQueryParam(c, "offset", 0)
 
-	// Get orders
-	orders, err := h.projection.GetOrdersByCustomer(customerID, limit, offset)
+	// Get orders — scoped to the caller's tenant so customer IDs from another
+	// tenant return nothing rather than leaking cross-tenant orders.
+	orders, err := h.projection.GetOrdersByCustomer(tenantID, customerID, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to get orders by customer",
 			zap.String("customer_id", customerID),
@@ -184,7 +196,25 @@ func (h *QueryHandler) GetOrdersByCustomer(c *gin.Context) {
 
 // GetOrdersByTenant handles GET /api/v1/tenants/:tenantId/orders
 func (h *QueryHandler) GetOrdersByTenant(c *gin.Context) {
-	tenantID := c.Param("tenantId")
+	// Tenant identity comes from the verified JWT. The :tenantId path segment
+	// is client-controlled and must never be trusted for tenant scoping.
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "authentication required",
+		})
+		return
+	}
+
+	// Reject attempts to read another tenant's orders via the path param.
+	if pathTenant := c.Param("tenantId"); pathTenant != "" && pathTenant != tenantID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "cannot access another tenant's orders",
+		})
+		return
+	}
 
 	// Parse pagination parameters
 	limit := h.getIntQueryParam(c, "limit", 10)

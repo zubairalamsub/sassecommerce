@@ -141,3 +141,24 @@ func getErrorMessage(e validator.FieldError) string {
 		return fmt.Sprintf("%s failed validation (%s)", field, e.Tag())
 	}
 }
+
+// SanitizedBindingErrors converts a request-binding error (gin ShouldBindJSON
+// et al.) into client-safe details. Field-validation failures become
+// per-field messages without raw values or Go struct internals; anything
+// else — JSON syntax errors, type mismatches — collapses to a single generic
+// message so parser and struct details never reach the client. Use this
+// instead of putting err.Error() in a response body.
+func SanitizedBindingErrors(err error) []ValidationError {
+	if validationErrs, ok := err.(validator.ValidationErrors); ok {
+		out := make([]ValidationError, 0, len(validationErrs))
+		for _, e := range validationErrs {
+			out = append(out, ValidationError{
+				Field:   getJSONFieldName(e.Field()),
+				Tag:     e.Tag(),
+				Message: getErrorMessage(e),
+			})
+		}
+		return out
+	}
+	return []ValidationError{{Message: "invalid request body"}}
+}

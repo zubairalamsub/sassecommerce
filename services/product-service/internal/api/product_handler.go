@@ -7,6 +7,7 @@ import (
 	"github.com/ecommerce/product-service/internal/models"
 	"github.com/ecommerce/product-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -37,7 +38,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	var req models.CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.WithError(err).Error("Invalid request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -252,7 +253,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	var req models.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.WithError(err).Error("Invalid request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -313,7 +314,7 @@ func (h *ProductHandler) UpdateProductStatus(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.WithError(err).Error("Invalid request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 

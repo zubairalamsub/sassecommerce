@@ -5,6 +5,7 @@ import (
 
 	"github.com/ecommerce/product-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -55,7 +56,7 @@ func (h *ImageHandler) PresignImageUpload(c *gin.Context) {
 
 	var req PresignImageUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -88,7 +89,7 @@ func (h *ImageHandler) ConfirmImageUpload(c *gin.Context) {
 
 	var req ConfirmImageUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -120,7 +121,7 @@ func (h *ImageHandler) RemoveImage(c *gin.Context) {
 
 	var req RemoveImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 

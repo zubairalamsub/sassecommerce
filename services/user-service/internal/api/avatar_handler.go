@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -39,7 +40,7 @@ func (h *AvatarHandler) PresignAvatarUpload(c *gin.Context) {
 	}
 	var req AvatarPresignRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 	res, err := h.avatarService.PresignUpload(c.Request.Context(), tenantID, userID, req.ContentType, req.Filename)
@@ -60,7 +61,7 @@ func (h *AvatarHandler) ConfirmAvatarUpload(c *gin.Context) {
 	}
 	var req AvatarConfirmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 	if err := h.avatarService.ConfirmUpload(c.Request.Context(), tenantID, userID, req.ImageURL); err != nil {

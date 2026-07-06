@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/ecommerce/tenant-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
+	"github.com/ecommerce/tenant-service/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -43,7 +44,7 @@ func (h *BrandingHandler) PresignBrandingUpload(c *gin.Context) {
 
 	var req BrandingPresignRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -70,7 +71,7 @@ func (h *BrandingHandler) RemoveBrandingAsset(c *gin.Context) {
 	}
 	var req BrandingRemoveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 	if err := h.brandingService.RemoveAsset(c.Request.Context(), tenantID, req.ImageURL); err != nil {

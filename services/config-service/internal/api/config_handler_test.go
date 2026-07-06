@@ -36,8 +36,8 @@ func (m *MockConfigService) SetConfig(ctx context.Context, req *models.SetConfig
 	return args.Get(0).(*models.ConfigEntryResponse), args.Error(1)
 }
 
-func (m *MockConfigService) DeleteConfig(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockConfigService) DeleteConfig(ctx context.Context, id, tenantID string) error {
+	args := m.Called(ctx, id, tenantID)
 	return args.Error(0)
 }
 
@@ -54,8 +54,8 @@ func (m *MockConfigService) ListNamespaces(ctx context.Context) (*models.Namespa
 	return args.Get(0).(*models.NamespaceListResponse), args.Error(1)
 }
 
-func (m *MockConfigService) SearchConfigs(ctx context.Context, query, namespace, environment string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error) {
-	args := m.Called(ctx, query, namespace, environment, page, pageSize)
+func (m *MockConfigService) SearchConfigs(ctx context.Context, query, namespace, environment, tenantID string, page, pageSize int) ([]models.ConfigEntryResponse, int64, error) {
+	args := m.Called(ctx, query, namespace, environment, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigEntryResponse), args.Get(1).(int64), args.Error(2)
 }
 
@@ -69,13 +69,13 @@ func (m *MockConfigService) BulkSet(ctx context.Context, req *models.BulkSetRequ
 	return args.Get(0).([]models.ConfigEntryResponse), args.Error(1)
 }
 
-func (m *MockConfigService) GetAuditLog(ctx context.Context, namespace, key string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
-	args := m.Called(ctx, namespace, key, page, pageSize)
+func (m *MockConfigService) GetAuditLog(ctx context.Context, namespace, key, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
+	args := m.Called(ctx, namespace, key, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigAuditResponse), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockConfigService) GetConfigHistory(ctx context.Context, configID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
-	args := m.Called(ctx, configID, page, pageSize)
+func (m *MockConfigService) GetConfigHistory(ctx context.Context, configID, tenantID string, page, pageSize int) ([]models.ConfigAuditResponse, int64, error) {
+	args := m.Called(ctx, configID, tenantID, page, pageSize)
 	return args.Get(0).([]models.ConfigAuditResponse), args.Get(1).(int64), args.Error(2)
 }
 
@@ -91,6 +91,12 @@ func setupRouter(mockService *MockConfigService) *gin.Engine {
 
 	handler := NewConfigHandler(mockService, logger)
 	router := gin.New()
+	// Simulate the Auth middleware by injecting a verified tenant into context so
+	// the protected handlers behave as they would behind real JWT auth.
+	router.Use(func(c *gin.Context) {
+		c.Set("tenant_id", "t-1")
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -102,7 +108,7 @@ func TestHandler_GetConfig_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := &models.ConfigEntryResponse{ID: "c-1", Namespace: "global", Key: "page_size", Value: "20"}
-	mockService.On("GetConfig", mock.Anything, "global", "page_size", "all", "").Return(resp, nil)
+	mockService.On("GetConfig", mock.Anything, "global", "page_size", "all", "t-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/get?namespace=global&key=page_size", nil)
@@ -130,7 +136,7 @@ func TestHandler_GetConfig_NotFound(t *testing.T) {
 	mockService := new(MockConfigService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetConfig", mock.Anything, "bad", "key", "all", "").Return(nil, errors.New("config not found: bad.key"))
+	mockService.On("GetConfig", mock.Anything, "bad", "key", "all", "t-1").Return(nil, errors.New("config not found: bad.key"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/get?namespace=bad&key=key", nil)
@@ -195,7 +201,7 @@ func TestHandler_DeleteConfig_Success(t *testing.T) {
 	mockService := new(MockConfigService)
 	router := setupRouter(mockService)
 
-	mockService.On("DeleteConfig", mock.Anything, "c-1").Return(nil)
+	mockService.On("DeleteConfig", mock.Anything, "c-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/config/c-1", nil)
@@ -208,7 +214,7 @@ func TestHandler_DeleteConfig_NotFound(t *testing.T) {
 	mockService := new(MockConfigService)
 	router := setupRouter(mockService)
 
-	mockService.On("DeleteConfig", mock.Anything, "bad").Return(errors.New("config not found"))
+	mockService.On("DeleteConfig", mock.Anything, "bad", "t-1").Return(errors.New("config not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/config/bad", nil)
@@ -224,12 +230,12 @@ func TestHandler_ListByNamespace_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	configs := []models.ConfigEntryResponse{
-		{ID: "c-1", Namespace: "kafka", Key: "topics.order_events", Value: "order-events"},
+		{ID: "c-1", Namespace: "storefront", Key: "banners", Value: "[]"},
 	}
-	mockService.On("ListByNamespace", mock.Anything, "kafka", "", "").Return(configs, nil)
+	mockService.On("ListByNamespace", mock.Anything, "storefront", "", "t-1").Return(configs, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/namespace/kafka", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/config/namespace/storefront?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -269,7 +275,7 @@ func TestHandler_SearchConfigs_Success(t *testing.T) {
 	configs := []models.ConfigEntryResponse{
 		{ID: "c-1", Key: "carrier.fedex.base_rate", Value: "7.99"},
 	}
-	mockService.On("SearchConfigs", mock.Anything, "fedex", "", "", 1, 50).Return(configs, int64(1), nil)
+	mockService.On("SearchConfigs", mock.Anything, "fedex", "", "", "t-1", 1, 50).Return(configs, int64(1), nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/search?q=fedex", nil)
@@ -291,7 +297,7 @@ func TestHandler_BulkGet_Success(t *testing.T) {
 	configs := []models.ConfigEntryResponse{
 		{ID: "c-1", Key: "page_size", Value: "20"},
 	}
-	mockService.On("BulkGet", mock.Anything, mock.AnythingOfType("*models.BulkGetRequest"), "all", "").Return(configs, nil)
+	mockService.On("BulkGet", mock.Anything, mock.AnythingOfType("*models.BulkGetRequest"), "all", "t-1").Return(configs, nil)
 
 	body := `{"keys":[{"namespace":"global","key":"page_size"}]}`
 
@@ -334,7 +340,7 @@ func TestHandler_ExportNamespace_Success(t *testing.T) {
 		{ID: "c-1", Key: "carrier.fedex.base_rate", Value: "7.99"},
 		{ID: "c-2", Key: "carrier.ups.base_rate", Value: "7.49"},
 	}
-	mockService.On("ExportNamespace", mock.Anything, "business.shipping", "", "").Return(configs, nil)
+	mockService.On("ExportNamespace", mock.Anything, "business.shipping", "", "t-1").Return(configs, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/export/business.shipping", nil)
@@ -357,7 +363,7 @@ func TestHandler_GetAuditLog_Success(t *testing.T) {
 	logs := []models.ConfigAuditResponse{
 		{ID: "a-1", Action: "create", NewValue: "10"},
 	}
-	mockService.On("GetAuditLog", mock.Anything, "test", "", 1, 50).Return(logs, int64(1), nil)
+	mockService.On("GetAuditLog", mock.Anything, "test", "", "t-1", 1, 50).Return(logs, int64(1), nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/audit?namespace=test", nil)
@@ -375,7 +381,7 @@ func TestHandler_GetConfigHistory_Success(t *testing.T) {
 	logs := []models.ConfigAuditResponse{
 		{ID: "a-1", Action: "update", OldValue: "10", NewValue: "15"},
 	}
-	mockService.On("GetConfigHistory", mock.Anything, "c-1", 1, 50).Return(logs, int64(1), nil)
+	mockService.On("GetConfigHistory", mock.Anything, "c-1", "t-1", 1, 50).Return(logs, int64(1), nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/config/audit/c-1", nil)

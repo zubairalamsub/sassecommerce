@@ -28,8 +28,8 @@ func (m *MockMenuService) CreateMenu(ctx context.Context, req *models.CreateMenu
 	return args.Get(0).(*models.MenuResponse), args.Error(1)
 }
 
-func (m *MockMenuService) GetMenu(ctx context.Context, id string) (*models.MenuResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockMenuService) GetMenu(ctx context.Context, id, tenantID string) (*models.MenuResponse, error) {
+	args := m.Called(ctx, id, tenantID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -44,16 +44,16 @@ func (m *MockMenuService) GetMenuBySlug(ctx context.Context, tenantID, slug stri
 	return args.Get(0).(*models.MenuResponse), args.Error(1)
 }
 
-func (m *MockMenuService) UpdateMenu(ctx context.Context, id string, req *models.UpdateMenuRequest) (*models.MenuResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockMenuService) UpdateMenu(ctx context.Context, id, tenantID string, req *models.UpdateMenuRequest) (*models.MenuResponse, error) {
+	args := m.Called(ctx, id, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.MenuResponse), args.Error(1)
 }
 
-func (m *MockMenuService) DeleteMenu(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockMenuService) DeleteMenu(ctx context.Context, id, tenantID string) error {
+	args := m.Called(ctx, id, tenantID)
 	return args.Error(0)
 }
 
@@ -67,29 +67,29 @@ func (m *MockMenuService) ListMenusByLocation(ctx context.Context, tenantID, loc
 	return args.Get(0).([]models.MenuResponse), args.Error(1)
 }
 
-func (m *MockMenuService) CreateMenuItem(ctx context.Context, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockMenuService) CreateMenuItem(ctx context.Context, tenantID string, req *models.CreateMenuItemRequest) (*models.MenuItemResponse, error) {
+	args := m.Called(ctx, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.MenuItemResponse), args.Error(1)
 }
 
-func (m *MockMenuService) UpdateMenuItem(ctx context.Context, id string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *MockMenuService) UpdateMenuItem(ctx context.Context, id, tenantID string, req *models.UpdateMenuItemRequest) (*models.MenuItemResponse, error) {
+	args := m.Called(ctx, id, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.MenuItemResponse), args.Error(1)
 }
 
-func (m *MockMenuService) DeleteMenuItem(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockMenuService) DeleteMenuItem(ctx context.Context, id, tenantID string) error {
+	args := m.Called(ctx, id, tenantID)
 	return args.Error(0)
 }
 
-func (m *MockMenuService) ReorderItems(ctx context.Context, menuID string, req *models.ReorderItemsRequest) error {
-	args := m.Called(ctx, menuID, req)
+func (m *MockMenuService) ReorderItems(ctx context.Context, menuID, tenantID string, req *models.ReorderItemsRequest) error {
+	args := m.Called(ctx, menuID, tenantID, req)
 	return args.Error(0)
 }
 
@@ -100,6 +100,12 @@ func setupMenuRouter(mockService *MockMenuService) *gin.Engine {
 
 	handler := NewMenuHandler(mockService, logger)
 	router := gin.New()
+	// Simulate the Auth middleware by injecting a verified tenant into context so
+	// the protected handlers behave as they would behind real JWT auth.
+	router.Use(func(c *gin.Context) {
+		c.Set("tenant_id", "t-1")
+		c.Next()
+	})
 	RegisterMenuRoutes(router, handler)
 	return router
 }
@@ -165,10 +171,10 @@ func TestMenuHandler_GetMenu_Success(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	resp := &models.MenuResponse{ID: "m-1", Name: "Main Nav", Items: []models.MenuItemResponse{}}
-	mockService.On("GetMenu", mock.Anything, "m-1").Return(resp, nil)
+	mockService.On("GetMenu", mock.Anything, "m-1", "t-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/m-1", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/menus/m-1?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -178,10 +184,10 @@ func TestMenuHandler_GetMenu_NotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("GetMenu", mock.Anything, "bad").Return(nil, errors.New("menu not found"))
+	mockService.On("GetMenu", mock.Anything, "bad", "t-1").Return(nil, errors.New("menu not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/bad", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/menus/bad?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -221,7 +227,7 @@ func TestMenuHandler_UpdateMenu_Success(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	resp := &models.MenuResponse{ID: "m-1", Name: "Updated Nav"}
-	mockService.On("UpdateMenu", mock.Anything, "m-1", mock.AnythingOfType("*models.UpdateMenuRequest")).Return(resp, nil)
+	mockService.On("UpdateMenu", mock.Anything, "m-1", "t-1", mock.AnythingOfType("*models.UpdateMenuRequest")).Return(resp, nil)
 
 	body := `{"name":"Updated Nav"}`
 
@@ -237,7 +243,7 @@ func TestMenuHandler_UpdateMenu_NotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("UpdateMenu", mock.Anything, "bad", mock.AnythingOfType("*models.UpdateMenuRequest")).
+	mockService.On("UpdateMenu", mock.Anything, "bad", "t-1", mock.AnythingOfType("*models.UpdateMenuRequest")).
 		Return(nil, errors.New("menu not found"))
 
 	body := `{"name":"test"}`
@@ -256,7 +262,7 @@ func TestMenuHandler_DeleteMenu_Success(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("DeleteMenu", mock.Anything, "m-1").Return(nil)
+	mockService.On("DeleteMenu", mock.Anything, "m-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/menus/m-1", nil)
@@ -269,7 +275,7 @@ func TestMenuHandler_DeleteMenu_NotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("DeleteMenu", mock.Anything, "bad").Return(errors.New("menu not found"))
+	mockService.On("DeleteMenu", mock.Anything, "bad", "t-1").Return(errors.New("menu not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/menus/bad", nil)
@@ -348,7 +354,7 @@ func TestMenuHandler_CreateMenuItem_Success(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	resp := &models.MenuItemResponse{ID: "i-1", MenuID: "m-1", Label: "Home", URL: "/", Target: "_self"}
-	mockService.On("CreateMenuItem", mock.Anything, mock.AnythingOfType("*models.CreateMenuItemRequest")).Return(resp, nil)
+	mockService.On("CreateMenuItem", mock.Anything, "t-1", mock.AnythingOfType("*models.CreateMenuItemRequest")).Return(resp, nil)
 
 	body := `{"label":"Home","url":"/"}`
 
@@ -385,7 +391,7 @@ func TestMenuHandler_UpdateMenuItem_Success(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	resp := &models.MenuItemResponse{ID: "i-1", Label: "Updated", URL: "/new"}
-	mockService.On("UpdateMenuItem", mock.Anything, "i-1", mock.AnythingOfType("*models.UpdateMenuItemRequest")).Return(resp, nil)
+	mockService.On("UpdateMenuItem", mock.Anything, "i-1", "t-1", mock.AnythingOfType("*models.UpdateMenuItemRequest")).Return(resp, nil)
 
 	body := `{"label":"Updated","url":"/new"}`
 
@@ -401,7 +407,7 @@ func TestMenuHandler_UpdateMenuItem_NotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("UpdateMenuItem", mock.Anything, "bad", mock.AnythingOfType("*models.UpdateMenuItemRequest")).
+	mockService.On("UpdateMenuItem", mock.Anything, "bad", "t-1", mock.AnythingOfType("*models.UpdateMenuItemRequest")).
 		Return(nil, errors.New("menu item not found"))
 
 	body := `{"label":"test"}`
@@ -420,7 +426,7 @@ func TestMenuHandler_DeleteMenuItem_Success(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("DeleteMenuItem", mock.Anything, "i-1").Return(nil)
+	mockService.On("DeleteMenuItem", mock.Anything, "i-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/menu-items/i-1", nil)
@@ -433,7 +439,7 @@ func TestMenuHandler_DeleteMenuItem_NotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("DeleteMenuItem", mock.Anything, "bad").Return(errors.New("menu item not found"))
+	mockService.On("DeleteMenuItem", mock.Anything, "bad", "t-1").Return(errors.New("menu item not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/menu-items/bad", nil)
@@ -448,7 +454,7 @@ func TestMenuHandler_ReorderItems_Success(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("ReorderItems", mock.Anything, "m-1", mock.AnythingOfType("*models.ReorderItemsRequest")).Return(nil)
+	mockService.On("ReorderItems", mock.Anything, "m-1", "t-1", mock.AnythingOfType("*models.ReorderItemsRequest")).Return(nil)
 
 	body := `{"items":[{"id":"i-1","position":1},{"id":"i-2","position":0}]}`
 
@@ -464,7 +470,7 @@ func TestMenuHandler_ReorderItems_MenuNotFound(t *testing.T) {
 	mockService := new(MockMenuService)
 	router := setupMenuRouter(mockService)
 
-	mockService.On("ReorderItems", mock.Anything, "bad", mock.AnythingOfType("*models.ReorderItemsRequest")).
+	mockService.On("ReorderItems", mock.Anything, "bad", "t-1", mock.AnythingOfType("*models.ReorderItemsRequest")).
 		Return(errors.New("menu not found"))
 
 	body := `{"items":[{"id":"i-1","position":0}]}`

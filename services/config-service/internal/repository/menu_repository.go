@@ -10,7 +10,7 @@ import (
 type MenuRepository interface {
 	// Menus
 	CreateMenu(ctx context.Context, menu *models.Menu) error
-	GetMenu(ctx context.Context, id string) (*models.Menu, error)
+	GetMenu(ctx context.Context, id, tenantID string) (*models.Menu, error)
 	GetMenuBySlug(ctx context.Context, tenantID, slug string) (*models.Menu, error)
 	UpdateMenu(ctx context.Context, menu *models.Menu) error
 	DeleteMenu(ctx context.Context, id string) error
@@ -38,9 +38,11 @@ func (r *menuRepository) CreateMenu(ctx context.Context, menu *models.Menu) erro
 	return r.db.WithContext(ctx).Create(menu).Error
 }
 
-func (r *menuRepository) GetMenu(ctx context.Context, id string) (*models.Menu, error) {
+func (r *menuRepository) GetMenu(ctx context.Context, id, tenantID string) (*models.Menu, error) {
 	var menu models.Menu
-	if err := r.db.WithContext(ctx).First(&menu, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ?", id, tenantID).
+		First(&menu).Error; err != nil {
 		return nil, err
 	}
 	return &menu, nil

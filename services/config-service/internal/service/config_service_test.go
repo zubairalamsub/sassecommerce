@@ -218,13 +218,13 @@ func TestDeleteConfig_Success(t *testing.T) {
 
 	entry := &models.ConfigEntry{
 		ID: "c-1", Namespace: "test", Key: "key1",
-		Value: "val", Environment: "all",
+		Value: "val", Environment: "all", TenantID: "tenant-1",
 	}
 	mockRepo.On("GetByID", ctx, "c-1").Return(entry, nil)
-	mockRepo.On("Delete", ctx, "c-1").Return(nil)
+	mockRepo.On("Delete", ctx, "c-1", "tenant-1").Return(nil)
 	mockRepo.On("RecordAudit", ctx, mock.AnythingOfType("*models.ConfigAuditLog")).Return(nil)
 
-	err := svc.DeleteConfig(ctx, "c-1")
+	err := svc.DeleteConfig(ctx, "c-1", "tenant-1")
 
 	assert.NoError(t, err)
 }
@@ -235,10 +235,29 @@ func TestDeleteConfig_NotFound(t *testing.T) {
 
 	mockRepo.On("GetByID", ctx, "bad").Return(nil, errors.New("not found"))
 
-	err := svc.DeleteConfig(ctx, "bad")
+	err := svc.DeleteConfig(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestDeleteConfig_WrongTenant(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	// Entry belongs to tenant-1; a tenant-2 caller must get a not-found result
+	// and the repository Delete must never be invoked.
+	entry := &models.ConfigEntry{
+		ID: "c-1", Namespace: "test", Key: "key1",
+		Value: "val", Environment: "all", TenantID: "tenant-1",
+	}
+	mockRepo.On("GetByID", ctx, "c-1").Return(entry, nil)
+
+	err := svc.DeleteConfig(ctx, "c-1", "tenant-2")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	mockRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // === ListByNamespace Tests ===
@@ -299,9 +318,9 @@ func TestSearchConfigs_Success(t *testing.T) {
 	entries := []models.ConfigEntry{
 		{ID: "c-1", Namespace: "business.shipping", Key: "carrier.fedex.base_rate", Value: "7.99"},
 	}
-	mockRepo.On("Search", ctx, "fedex", "", "", 1, 50).Return(entries, int64(1), nil)
+	mockRepo.On("Search", ctx, "fedex", "", "", "tenant-1", 1, 50).Return(entries, int64(1), nil)
 
-	results, total, err := svc.SearchConfigs(ctx, "fedex", "", "", 1, 50)
+	results, total, err := svc.SearchConfigs(ctx, "fedex", "", "", "tenant-1", 1, 50)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), total)
@@ -312,9 +331,9 @@ func TestSearchConfigs_DefaultPagination(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("Search", ctx, "test", "", "", 1, 50).Return([]models.ConfigEntry{}, int64(0), nil)
+	mockRepo.On("Search", ctx, "test", "", "", "tenant-1", 1, 50).Return([]models.ConfigEntry{}, int64(0), nil)
 
-	results, total, err := svc.SearchConfigs(ctx, "test", "", "", 0, 0)
+	results, total, err := svc.SearchConfigs(ctx, "test", "", "", "tenant-1", 0, 0)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), total)
@@ -408,9 +427,9 @@ func TestGetAuditLog_Success(t *testing.T) {
 	logs := []models.ConfigAuditLog{
 		{ID: "a-1", ConfigID: "c-1", Namespace: "test", Key: "k1", Action: "create", NewValue: "v1", CreatedAt: time.Now()},
 	}
-	mockRepo.On("GetAuditLog", ctx, "test", "k1", 1, 50).Return(logs, int64(1), nil)
+	mockRepo.On("GetAuditLog", ctx, "test", "k1", "tenant-1", 1, 50).Return(logs, int64(1), nil)
 
-	results, total, err := svc.GetAuditLog(ctx, "test", "k1", 1, 50)
+	results, total, err := svc.GetAuditLog(ctx, "test", "k1", "tenant-1", 1, 50)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), total)
@@ -428,9 +447,9 @@ func TestGetConfigHistory_Success(t *testing.T) {
 		{ID: "a-1", ConfigID: "c-1", Action: "update", OldValue: "10", NewValue: "15"},
 		{ID: "a-2", ConfigID: "c-1", Action: "create", NewValue: "10"},
 	}
-	mockRepo.On("GetAuditByConfigID", ctx, "c-1", 1, 50).Return(logs, int64(2), nil)
+	mockRepo.On("GetAuditByConfigID", ctx, "c-1", "tenant-1", 1, 50).Return(logs, int64(2), nil)
 
-	results, total, err := svc.GetConfigHistory(ctx, "c-1", 1, 50)
+	results, total, err := svc.GetConfigHistory(ctx, "c-1", "tenant-1", 1, 50)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), total)

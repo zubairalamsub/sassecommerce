@@ -53,7 +53,8 @@ type MenuItem struct {
 // === Request DTOs ===
 
 type CreateMenuRequest struct {
-	TenantID    string `json:"tenant_id" binding:"required"`
+	// TenantID is derived from the authenticated JWT, never from the request body.
+	TenantID    string `json:"-"`
 	Name        string `json:"name" binding:"required"`
 	Slug        string `json:"slug" binding:"required"`
 	Location    string `json:"location" binding:"required"`
@@ -117,16 +118,16 @@ type MenuResponse struct {
 }
 
 type MenuItemResponse struct {
-	ID        string             `json:"id"`
-	MenuID    string             `json:"menu_id"`
-	ParentID  string             `json:"parent_id,omitempty"`
-	Label     string             `json:"label"`
-	URL       string             `json:"url,omitempty"`
-	Icon      string             `json:"icon,omitempty"`
-	Target    string             `json:"target"`
-	CSSClass  string             `json:"css_class,omitempty"`
-	Position  int                `json:"position"`
-	IsActive  bool               `json:"is_active"`
-	Metadata  string             `json:"metadata,omitempty"`
-	Children  []MenuItemResponse `json:"children,omitempty"`
+	ID       string             `json:"id"`
+	MenuID   string             `json:"menu_id"`
+	ParentID string             `json:"parent_id,omitempty"`
+	Label    string             `json:"label"`
+	URL      string             `json:"url,omitempty"`
+	Icon     string             `json:"icon,omitempty"`
+	Target   string             `json:"target"`
+	CSSClass string             `json:"css_class,omitempty"`
+	Position int                `json:"position"`
+	IsActive bool               `json:"is_active"`
+	Metadata string             `json:"metadata,omitempty"`
+	Children []MenuItemResponse `json:"children,omitempty"`
 }

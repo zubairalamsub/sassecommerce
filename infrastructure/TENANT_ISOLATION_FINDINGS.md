@@ -41,6 +41,19 @@ service from the JWT**, never trusted from transport.
 - Staff mutations: add `RequireRole(...)` on the route.
 - tenant-service: register `sharedmiddleware.Auth` and derive tenant from JWT.
 
+## Remediation status (2026-07-06)
+
+All 16 backend services are fixed on branch `claude/remaining-tasks-x3aeu2`
+(one commit per service). Every handler now derives the tenant (and user)
+from the verified JWT, request DTOs no longer bind `tenant_id`/`user_id`,
+by-id repository lookups carry a tenant predicate (404 cross-tenant), and
+staff mutations are gated with `RequireRole`. The 12 Go services were each
+built and tested green. The 2 .NET services (payment, inventory) were edited
+to the same pattern but **not compiled here** (no dotnet SDK) — the per-service
+CI must run `dotnet build`/`dotnet test` to confirm. The frontend BFF item
+remains open and is tracked as B03 (JWT → HttpOnly cookie / server-side
+tenant enforcement).
+
 ## Status legend
 ✅ fixed on branch · ⬜ open
 
@@ -51,14 +64,14 @@ All 5 handlers read `tenant_id`/`user_id` from query/body despite JWT auth →
 full cross-user/cross-tenant cart read & write. Fixed: handlers derive both
 from JWT; `AddItemRequest.TenantID/UserID` are `json:"-"`; 401 when unauth.
 
-## tenant-service — ⬜ OPEN (CRITICAL)
+## tenant-service — ✅ FIXED (was CRITICAL)
 No `Auth` middleware anywhere. Unauthenticated exposure of:
 - `GET /api/v1/audit-logs`, `/audit-logs/:id` — any tenant's audit logs (tenant_id optional in repo `GetByID`)
 - `GET /api/v1/admin/usage` — per-tenant usage for all tenants
 - full `/api/v1/tenants` CRUD — create/read/update/config/delete tenants
 Fix: add Auth; require tenant from JWT; make repo `tenant_id` mandatory.
 
-## payment-service (.NET) — ⬜ OPEN (CRITICAL)
+## payment-service (.NET) — ✅ FIXED (was CRITICAL)
 All 14 `[Authorize]` endpoints derive tenant from `[FromQuery] tenantId`, body,
 or by-PK lookups with no tenant predicate. Financial data (amounts, gateway
 txn ids, saved payment methods) fully cross-tenant. Refund/cancel by id alone.
@@ -66,7 +79,7 @@ Repo `GetByIdAsync`/`GetByIdWithDetailsAsync`/`GetByIdempotencyKeyAsync`/
 `GetByGatewayTransactionIdAsync` lack tenant filters. Fix: tenant from JWT
 claims; add tenant predicate to every lookup.
 
-## order-service — ⬜ OPEN (HIGH)
+## order-service — ✅ FIXED (was HIGH)
 No authenticated handler calls GetTenantID. `GET /tenants/:tenantId/orders`
 trusts the path; `GET /customers/:customerId/orders` has no tenant filter;
 all state mutations (`/orders/:id/{confirm,cancel,ship,deliver,items}`) load by
@@ -74,19 +87,19 @@ id alone. `POST /orders/:id/send-receipt` emails any order's contents to a
 caller-supplied address (exfil). Guest `POST /orders` and `GET /orders/:id`
 are intentionally public (INFO). Fix: assert `order.TenantID == JWT` on load.
 
-## inventory-service (.NET) — ⬜ OPEN (HIGH)
+## inventory-service (.NET) — ✅ FIXED (was HIGH)
 Same pattern: create/list from body/query tenant; get/update/delete/adjust/
 transfer/reserve/fulfill by id alone. Cross-tenant stock tamper & DoS. Repo
 `GetByIdAsync`/`GetByWarehouseAsync` lack tenant filters. Fix: tenant from JWT.
 
-## user-service — ⬜ OPEN (HIGH, partial)
+## user-service — ✅ FIXED (was HIGH)
 Wishlist is clean (already fixed). But `GET/PUT /users/:id`,
 `PATCH /users/:id/role`, `PATCH /users/:id/status` act on path id with no
 tenant check, and repo `GetByID`/`Update`/`Delete`/`UpdatePassword` key on id
 alone — a tenant-A admin can read/edit/promote tenant-B users. `ListUsers`
 is clean (JWT tenant). Fix: scope user CRUD to JWT tenant.
 
-## product-service — ⬜ OPEN (HIGH)
+## product-service — ✅ FIXED (was HIGH)
 Write routes have Auth+RequireRole but `CreateProduct`/`CreateCategory` take
 tenant from body, and `Update`/`Delete`/`UpdateStatus` (product & category)
 filter `_id` only → cross-tenant write IDOR. Public `GetProduct`/`GetCategory`
@@ -94,57 +107,57 @@ read any tenant's draft/archived items. Image routes are CLEAN (service-layer
 tenant check). Fix: JWT tenant on create; `_id AND tenant_id` on mutations;
 scope public reads to header tenant + active status.
 
-## review-service — ⬜ OPEN (HIGH)
+## review-service — ✅ FIXED (was HIGH)
 No role enforcement at all. `CreateReview` trusts body tenant/user (spoof
 author). `UpdateReview`/`DeleteReview` check ownership via `c.Query("user_id")`
 (attacker-controlled; empty = admin → delete any review). `ModerateReview`/
 `RespondToReview` unprotected. Repo `GetByID`/`Update` `_id` only. Fix: JWT
 identity, RequireRole on moderation, tenant-scoped repo lookups.
 
-## search-service — ⬜ OPEN (HIGH)
+## search-service — ✅ FIXED (was HIGH)
 `POST /search/reindex` trusts body `TenantID`/`ID`, no role → any user can
 overwrite/pollute another tenant's ES documents. Search/autocomplete reads are
 tenant-scoped (INFO). Fix: RequireRole, force JWT tenant, verify doc ownership.
 
-## promotion-service — ⬜ OPEN (HIGH)
+## promotion-service — ✅ FIXED (was HIGH)
 No roles. `CreatePromotion`/`CreateCoupon` trust body tenant; `CreateCoupon`
 attaches to any promotion (unscoped `GetPromotionByID`). `ProcessLoyaltyPoints`
 credits/redeems points for any user in any tenant (financial). `GetPromotion`/
 `GetLoyaltyAccount` cross-tenant IDOR. Fix: JWT tenant/user, RequireRole,
 tenant-scoped lookups.
 
-## vendor-service — ⬜ OPEN (HIGH)
+## vendor-service — ✅ FIXED (was HIGH)
 No roles. `RegisterVendor` trusts body tenant; `UpdateVendor`/
 `UpdateVendorStatus` (approve/suspend) load by id alone. `GetVendor`/
 `GetVendorOrders`/`GetVendorAnalytics` cross-tenant reads of vendor PII &
 revenue. Fix: JWT tenant, RequireRole on status, tenant-scoped repo.
 
-## analytics-service — ⬜ OPEN (HIGH)
+## analytics-service — ✅ FIXED (was HIGH)
 Auth is global (good) but all report handlers take tenant from query; `GetReport`
 has no tenant filter → any custom report by id. `POST /reports` trusts body
 tenant. Fix: JWT tenant; add tenant filter to `GetReport`.
 
-## config-service — ⬜ OPEN (HIGH)
+## config-service — ✅ FIXED (was HIGH)
 Reads are public by design, which leaks tenant data: `/config/search`
 (`ILIKE` over all tenants' values incl. secrets), `/config/audit[/:id]`
 (no tenant filter), `/config/get`/`export` (client tenant). `DELETE /config/:id`
 and menu update/delete act by id with no tenant check. Fix: move audit/search/
 export/get behind Auth; add tenant filters; ownership-check menu mutations.
 
-## notification-service — ⬜ OPEN (HIGH)
+## notification-service — ✅ FIXED (was HIGH)
 Auth global, but tenant from query/`X-Tenant-Id`. `GET /notifications/user/:id`
 & `/preferences/:id` cross-tenant (message content/PII). `GetByID`/`MarkAsRead`
 `_id` only. Template `GetTemplate`/`Update`/`Delete` `{_id}` only;
 `test-send` renders a template to a caller-supplied email (exfil). Fix: JWT
 tenant everywhere; tenant-scoped template & notification lookups.
 
-## shipping-service — ⬜ OPEN (HIGH)
+## shipping-service — ✅ FIXED (was HIGH)
 Auth global, tenant from query. `GET /shipments/:id` (ship-to PII) and
 status/cancel mutations load by id with no tenant filter. Repo `GetByID`/
 `GetByIDWithDetails`/`GetByTrackingNumber` unscoped. Fix: JWT tenant; scope
 `GetByID`; ownership-check mutations.
 
-## recommendation-service — ⬜ OPEN (MEDIUM)
+## recommendation-service — ✅ FIXED (was MEDIUM)
 Auth global, tenant from query/body. `GET /recommendations/user/:id` leaks
 per-user behavior cross-tenant; `POST /train` trusts body tenant (resource
 abuse); `GetTrainingJob` unscoped. Lower data sensitivity. Fix: JWT tenant.

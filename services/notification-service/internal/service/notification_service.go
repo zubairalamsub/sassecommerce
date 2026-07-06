@@ -13,9 +13,9 @@ import (
 
 type NotificationService interface {
 	SendNotification(ctx context.Context, req *models.SendNotificationRequest) (*models.NotificationResponse, error)
-	GetNotification(ctx context.Context, id string) (*models.NotificationResponse, error)
+	GetNotification(ctx context.Context, tenantID, id string) (*models.NotificationResponse, error)
 	GetUserNotifications(ctx context.Context, tenantID, userID string, page, pageSize int) ([]models.NotificationResponse, int64, error)
-	MarkAsRead(ctx context.Context, id string) error
+	MarkAsRead(ctx context.Context, tenantID, id string) error
 	GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreferenceResponse, error)
 	UpdatePreference(ctx context.Context, tenantID, userID string, req *models.UpdatePreferenceRequest) (*models.UserPreferenceResponse, error)
 }
@@ -112,8 +112,8 @@ func (s *notificationService) SendNotification(ctx context.Context, req *models.
 	return toNotificationResponse(notification), nil
 }
 
-func (s *notificationService) GetNotification(ctx context.Context, id string) (*models.NotificationResponse, error) {
-	notification, err := s.repo.GetByID(ctx, id)
+func (s *notificationService) GetNotification(ctx context.Context, tenantID, id string) (*models.NotificationResponse, error) {
+	notification, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -134,14 +134,14 @@ func (s *notificationService) GetUserNotifications(ctx context.Context, tenantID
 	return responses, total, nil
 }
 
-func (s *notificationService) MarkAsRead(ctx context.Context, id string) error {
-	// Verify notification exists
-	_, err := s.repo.GetByID(ctx, id)
+func (s *notificationService) MarkAsRead(ctx context.Context, tenantID, id string) error {
+	// Verify notification exists within the caller's tenant
+	_, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
 
-	return s.repo.MarkAsRead(ctx, id)
+	return s.repo.MarkAsRead(ctx, tenantID, id)
 }
 
 func (s *notificationService) GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreferenceResponse, error) {

@@ -30,8 +30,8 @@ func (m *MockNotificationService) SendNotification(ctx context.Context, req *mod
 	return args.Get(0).(*models.NotificationResponse), args.Error(1)
 }
 
-func (m *MockNotificationService) GetNotification(ctx context.Context, id string) (*models.NotificationResponse, error) {
-	args := m.Called(ctx, id)
+func (m *MockNotificationService) GetNotification(ctx context.Context, tenantID, id string) (*models.NotificationResponse, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -43,8 +43,8 @@ func (m *MockNotificationService) GetUserNotifications(ctx context.Context, tena
 	return args.Get(0).([]models.NotificationResponse), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *MockNotificationService) MarkAsRead(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
+func (m *MockNotificationService) MarkAsRead(ctx context.Context, tenantID, id string) error {
+	args := m.Called(ctx, tenantID, id)
 	return args.Error(0)
 }
 
@@ -65,12 +65,29 @@ func (m *MockNotificationService) UpdatePreference(ctx context.Context, tenantID
 }
 
 func setupRouter(mockService *MockNotificationService) *gin.Engine {
+	return setupRouterWithTenant(mockService, "tenant-1", "user-1")
+}
+
+// setupRouterWithTenant builds the router with a middleware that injects the
+// given tenant/user into the gin context, standing in for the JWT auth
+// middleware used in production. Pass an empty tenantID to simulate an
+// unauthenticated request (no tenant claim).
+func setupRouterWithTenant(mockService *MockNotificationService, tenantID, userID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	logger := logrus.New()
 	logger.SetLevel(logrus.PanicLevel)
 
 	handler := NewNotificationHandler(mockService, logger)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if tenantID != "" {
+			c.Set("tenant_id", tenantID)
+		}
+		if userID != "" {
+			c.Set("user_id", userID)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
 }
@@ -172,7 +189,7 @@ func TestHandler_GetNotification_Success(t *testing.T) {
 	router := setupRouter(mockService)
 
 	resp := createTestNotificationResponse()
-	mockService.On("GetNotification", mock.Anything, "notif-1").Return(resp, nil)
+	mockService.On("GetNotification", mock.Anything, "tenant-1", "notif-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/notifications/notif-1", nil)
@@ -189,7 +206,7 @@ func TestHandler_GetNotification_NotFound(t *testing.T) {
 	mockService := new(MockNotificationService)
 	router := setupRouter(mockService)
 
-	mockService.On("GetNotification", mock.Anything, "nonexistent").Return(nil, errors.New("notification not found"))
+	mockService.On("GetNotification", mock.Anything, "tenant-1", "nonexistent").Return(nil, errors.New("notification not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/notifications/nonexistent", nil)
@@ -219,15 +236,16 @@ func TestHandler_GetUserNotifications_Success(t *testing.T) {
 	assert.Equal(t, int64(1), result.Pagination.Total)
 }
 
-func TestHandler_GetUserNotifications_MissingTenantID(t *testing.T) {
+func TestHandler_GetUserNotifications_Unauthenticated(t *testing.T) {
 	mockService := new(MockNotificationService)
-	router := setupRouter(mockService)
+	// No tenant claim in context → request is unauthenticated.
+	router := setupRouterWithTenant(mockService, "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/notifications/user/user-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetUserNotifications_Pagination(t *testing.T) {
@@ -257,7 +275,7 @@ func TestHandler_MarkAsRead_Success(t *testing.T) {
 	mockService := new(MockNotificationService)
 	router := setupRouter(mockService)
 
-	mockService.On("MarkAsRead", mock.Anything, "notif-1").Return(nil)
+	mockService.On("MarkAsRead", mock.Anything, "tenant-1", "notif-1").Return(nil)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/v1/notifications/notif-1/read", nil)
@@ -270,7 +288,7 @@ func TestHandler_MarkAsRead_NotFound(t *testing.T) {
 	mockService := new(MockNotificationService)
 	router := setupRouter(mockService)
 
-	mockService.On("MarkAsRead", mock.Anything, "nonexistent").Return(errors.New("notification not found"))
+	mockService.On("MarkAsRead", mock.Anything, "tenant-1", "nonexistent").Return(errors.New("notification not found"))
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/api/v1/notifications/nonexistent/read", nil)
@@ -308,15 +326,15 @@ func TestHandler_GetPreference_Success(t *testing.T) {
 	assert.False(t, result.SMSEnabled)
 }
 
-func TestHandler_GetPreference_MissingTenantID(t *testing.T) {
+func TestHandler_GetPreference_Unauthenticated(t *testing.T) {
 	mockService := new(MockNotificationService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "", "")
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/preferences/user-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // === UpdatePreference Handler Tests ===
@@ -350,9 +368,9 @@ func TestHandler_UpdatePreference_Success(t *testing.T) {
 	assert.False(t, result.EmailEnabled)
 }
 
-func TestHandler_UpdatePreference_MissingTenantID(t *testing.T) {
+func TestHandler_UpdatePreference_Unauthenticated(t *testing.T) {
 	mockService := new(MockNotificationService)
-	router := setupRouter(mockService)
+	router := setupRouterWithTenant(mockService, "", "")
 
 	body := `{"email_enabled": false}`
 
@@ -361,7 +379,7 @@ func TestHandler_UpdatePreference_MissingTenantID(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_UpdatePreference_ServiceError(t *testing.T) {

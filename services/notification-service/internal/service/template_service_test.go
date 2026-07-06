@@ -107,7 +107,7 @@ func TestInstallDefaults_ForceOverwrites(t *testing.T) {
 		{ID: "t-1", TenantID: tenantID, Type: models.TypeWelcome, Channel: models.ChannelEmail, Name: "Custom welcome"},
 	}
 	mockRepo.On("ListTemplates", ctx, tenantID).Return(preexisting, nil)
-	mockRepo.On("UpdateTemplate", ctx, "t-1", mock.AnythingOfType("*models.NotificationTemplate")).Return(nil).Once()
+	mockRepo.On("UpdateTemplate", ctx, tenantID, "t-1", mock.AnythingOfType("*models.NotificationTemplate")).Return(nil).Once()
 	mockRepo.On("CreateTemplate", ctx, mock.AnythingOfType("*models.NotificationTemplate")).
 		Return(nil).Times(len(expected) - len(preexisting))
 

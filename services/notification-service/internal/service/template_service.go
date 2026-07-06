@@ -24,15 +24,15 @@ import (
 // TemplateService is the admin-facing API for managing notification templates.
 type TemplateService interface {
 	List(ctx context.Context, tenantID string) ([]models.NotificationTemplate, error)
-	Get(ctx context.Context, id string) (*models.NotificationTemplate, error)
+	Get(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error)
 	Create(ctx context.Context, tenantID string, req *models.CreateTemplateRequest) (*models.NotificationTemplate, error)
-	Update(ctx context.Context, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error)
-	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, tenantID, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error)
+	Delete(ctx context.Context, tenantID, id string) error
 	// Preview renders the template with sample values; returns subject + body.
-	Preview(ctx context.Context, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error)
+	Preview(ctx context.Context, tenantID, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error)
 	// TestSend renders the template with sample values and dispatches an email
 	// to the test address via the email provider.
-	TestSend(ctx context.Context, id, email string, sampleVars map[string]interface{}) error
+	TestSend(ctx context.Context, tenantID, id, email string, sampleVars map[string]interface{}) error
 	// InstallDefaults seeds the tenant's template collection with the
 	// pre-designed starter pack. When force=true any existing template for the
 	// same (tenant_id, type, channel) tuple is overwritten; otherwise it is
@@ -44,10 +44,10 @@ type TemplateService interface {
 // We return the touched templates so the admin UI can refresh the list
 // without re-fetching from the API.
 type InstallDefaultsResult struct {
-	Created   int                            `json:"created"`
-	Updated   int                            `json:"updated"`
-	Skipped   int                            `json:"skipped"`
-	Templates []models.NotificationTemplate  `json:"templates"`
+	Created   int                           `json:"created"`
+	Updated   int                           `json:"updated"`
+	Skipped   int                           `json:"skipped"`
+	Templates []models.NotificationTemplate `json:"templates"`
 }
 
 type templateService struct {
@@ -74,8 +74,8 @@ func (s *templateService) List(ctx context.Context, tenantID string) ([]models.N
 	return s.repo.ListTemplates(ctx, tenantID)
 }
 
-func (s *templateService) Get(ctx context.Context, id string) (*models.NotificationTemplate, error) {
-	return s.repo.GetTemplate(ctx, id)
+func (s *templateService) Get(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error) {
+	return s.repo.GetTemplate(ctx, tenantID, id)
 }
 
 func (s *templateService) Create(ctx context.Context, tenantID string, req *models.CreateTemplateRequest) (*models.NotificationTemplate, error) {
@@ -106,8 +106,8 @@ func (s *templateService) Create(ctx context.Context, tenantID string, req *mode
 	return t, nil
 }
 
-func (s *templateService) Update(ctx context.Context, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error) {
-	existing, err := s.repo.GetTemplate(ctx, id)
+func (s *templateService) Update(ctx context.Context, tenantID, id string, req *models.UpdateTemplateRequest) (*models.NotificationTemplate, error) {
+	existing, err := s.repo.GetTemplate(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -139,18 +139,18 @@ func (s *templateService) Update(ctx context.Context, id string, req *models.Upd
 	if req.IsActive != nil {
 		existing.IsActive = *req.IsActive
 	}
-	if err := s.repo.UpdateTemplate(ctx, id, existing); err != nil {
+	if err := s.repo.UpdateTemplate(ctx, tenantID, id, existing); err != nil {
 		return nil, err
 	}
 	return existing, nil
 }
 
-func (s *templateService) Delete(ctx context.Context, id string) error {
-	return s.repo.DeleteTemplate(ctx, id)
+func (s *templateService) Delete(ctx context.Context, tenantID, id string) error {
+	return s.repo.DeleteTemplate(ctx, tenantID, id)
 }
 
-func (s *templateService) Preview(ctx context.Context, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error) {
-	t, err := s.repo.GetTemplate(ctx, id)
+func (s *templateService) Preview(ctx context.Context, tenantID, id string, sampleVars map[string]interface{}) (*models.RenderedTemplate, error) {
+	t, err := s.repo.GetTemplate(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -162,11 +162,14 @@ func (s *templateService) Preview(ctx context.Context, id string, sampleVars map
 	return &models.RenderedTemplate{Subject: subject, Body: body}, nil
 }
 
-func (s *templateService) TestSend(ctx context.Context, id, email string, sampleVars map[string]interface{}) error {
+func (s *templateService) TestSend(ctx context.Context, tenantID, id, email string, sampleVars map[string]interface{}) error {
 	if email == "" {
 		return errors.New("email is required")
 	}
-	t, err := s.repo.GetTemplate(ctx, id)
+	// GetTemplate is tenant-scoped, so a template belonging to another tenant
+	// resolves to "not found" — this prevents rendering another tenant's
+	// template content to a caller-supplied address (exfiltration).
+	t, err := s.repo.GetTemplate(ctx, tenantID, id)
 	if err != nil {
 		return err
 	}
@@ -257,7 +260,7 @@ func (s *templateService) InstallDefaults(ctx context.Context, tenantID string, 
 			dup.SubjectTemplate = def.SubjectTemplate
 			dup.BodyTemplate = def.BodyTemplate
 			dup.IsActive = true
-			if err := s.repo.UpdateTemplate(ctx, dup.ID, dup); err != nil {
+			if err := s.repo.UpdateTemplate(ctx, tenantID, dup.ID, dup); err != nil {
 				s.logger.WithError(err).WithField("type", def.Type).Warn("Failed to update default template")
 				continue
 			}

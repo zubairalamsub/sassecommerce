@@ -14,10 +14,10 @@ import (
 
 type NotificationRepository interface {
 	Create(ctx context.Context, notification *models.Notification) error
-	GetByID(ctx context.Context, id string) (*models.Notification, error)
+	GetByID(ctx context.Context, tenantID, id string) (*models.Notification, error)
 	GetByUserID(ctx context.Context, tenantID, userID string, page, pageSize int) ([]models.Notification, int64, error)
 	Update(ctx context.Context, notification *models.Notification) error
-	MarkAsRead(ctx context.Context, id string) error
+	MarkAsRead(ctx context.Context, tenantID, id string) error
 
 	// User preferences
 	GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreference, error)
@@ -25,11 +25,11 @@ type NotificationRepository interface {
 
 	// Templates
 	ListTemplates(ctx context.Context, tenantID string) ([]models.NotificationTemplate, error)
-	GetTemplate(ctx context.Context, id string) (*models.NotificationTemplate, error)
+	GetTemplate(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error)
 	GetTemplateByType(ctx context.Context, tenantID, channel, notifType string) (*models.NotificationTemplate, error)
 	CreateTemplate(ctx context.Context, t *models.NotificationTemplate) error
-	UpdateTemplate(ctx context.Context, id string, t *models.NotificationTemplate) error
-	DeleteTemplate(ctx context.Context, id string) error
+	UpdateTemplate(ctx context.Context, tenantID, id string, t *models.NotificationTemplate) error
+	DeleteTemplate(ctx context.Context, tenantID, id string) error
 }
 
 type notificationRepository struct {
@@ -58,9 +58,9 @@ func (r *notificationRepository) Create(ctx context.Context, notification *model
 	return err
 }
 
-func (r *notificationRepository) GetByID(ctx context.Context, id string) (*models.Notification, error) {
+func (r *notificationRepository) GetByID(ctx context.Context, tenantID, id string) (*models.Notification, error) {
 	var notification models.Notification
-	err := r.notifications.FindOne(ctx, bson.M{"_id": id}).Decode(&notification)
+	err := r.notifications.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenantID}).Decode(&notification)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("notification not found")
@@ -107,11 +107,11 @@ func (r *notificationRepository) Update(ctx context.Context, notification *model
 	return err
 }
 
-func (r *notificationRepository) MarkAsRead(ctx context.Context, id string) error {
+func (r *notificationRepository) MarkAsRead(ctx context.Context, tenantID, id string) error {
 	now := time.Now().UTC()
-	_, err := r.notifications.UpdateOne(
+	res, err := r.notifications.UpdateOne(
 		ctx,
-		bson.M{"_id": id},
+		bson.M{"_id": id, "tenant_id": tenantID},
 		bson.M{
 			"$set": bson.M{
 				"status":     models.StatusRead,
@@ -120,7 +120,13 @@ func (r *notificationRepository) MarkAsRead(ctx context.Context, id string) erro
 			},
 		},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("notification not found")
+	}
+	return nil
 }
 
 func (r *notificationRepository) GetPreference(ctx context.Context, tenantID, userID string) (*models.UserPreference, error) {
@@ -181,9 +187,9 @@ func (r *notificationRepository) ListTemplates(ctx context.Context, tenantID str
 	return templates, nil
 }
 
-func (r *notificationRepository) GetTemplate(ctx context.Context, id string) (*models.NotificationTemplate, error) {
+func (r *notificationRepository) GetTemplate(ctx context.Context, tenantID, id string) (*models.NotificationTemplate, error) {
 	var t models.NotificationTemplate
-	err := r.templates.FindOne(ctx, bson.M{"_id": id}).Decode(&t)
+	err := r.templates.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenantID}).Decode(&t)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("template not found")
@@ -224,7 +230,7 @@ func (r *notificationRepository) CreateTemplate(ctx context.Context, t *models.N
 	return err
 }
 
-func (r *notificationRepository) UpdateTemplate(ctx context.Context, id string, t *models.NotificationTemplate) error {
+func (r *notificationRepository) UpdateTemplate(ctx context.Context, tenantID, id string, t *models.NotificationTemplate) error {
 	t.UpdatedAt = time.Now().UTC()
 	set := bson.M{
 		"updated_at": t.UpdatedAt,
@@ -245,7 +251,7 @@ func (r *notificationRepository) UpdateTemplate(ctx context.Context, id string, 
 	}
 	set["is_active"] = t.IsActive
 
-	res, err := r.templates.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
+	res, err := r.templates.UpdateOne(ctx, bson.M{"_id": id, "tenant_id": tenantID}, bson.M{"$set": set})
 	if err != nil {
 		return err
 	}
@@ -255,8 +261,8 @@ func (r *notificationRepository) UpdateTemplate(ctx context.Context, id string, 
 	return nil
 }
 
-func (r *notificationRepository) DeleteTemplate(ctx context.Context, id string) error {
-	res, err := r.templates.DeleteOne(ctx, bson.M{"_id": id})
+func (r *notificationRepository) DeleteTemplate(ctx context.Context, tenantID, id string) error {
+	res, err := r.templates.DeleteOne(ctx, bson.M{"_id": id, "tenant_id": tenantID})
 	if err != nil {
 		return err
 	}

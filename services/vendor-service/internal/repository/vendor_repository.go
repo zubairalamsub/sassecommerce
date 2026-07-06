@@ -11,8 +11,8 @@ import (
 // VendorRepository defines the interface for vendor data access
 type VendorRepository interface {
 	Create(ctx context.Context, vendor *models.Vendor) error
-	GetByID(ctx context.Context, id string) (*models.Vendor, error)
-	GetByEmail(ctx context.Context, email string) (*models.Vendor, error)
+	GetByID(ctx context.Context, id string, tenantID string) (*models.Vendor, error)
+	GetByEmail(ctx context.Context, email string, tenantID string) (*models.Vendor, error)
 	List(ctx context.Context, tenantID string, status string, page, pageSize int) ([]models.Vendor, int64, error)
 	Update(ctx context.Context, vendor *models.Vendor) error
 
@@ -33,9 +33,9 @@ func (r *gormVendorRepository) Create(ctx context.Context, vendor *models.Vendor
 	return r.db.WithContext(ctx).Create(vendor).Error
 }
 
-func (r *gormVendorRepository) GetByID(ctx context.Context, id string) (*models.Vendor, error) {
+func (r *gormVendorRepository) GetByID(ctx context.Context, id string, tenantID string) (*models.Vendor, error) {
 	var vendor models.Vendor
-	if err := r.db.WithContext(ctx).First(&vendor, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&vendor, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("vendor not found")
 		}
@@ -44,9 +44,9 @@ func (r *gormVendorRepository) GetByID(ctx context.Context, id string) (*models.
 	return &vendor, nil
 }
 
-func (r *gormVendorRepository) GetByEmail(ctx context.Context, email string) (*models.Vendor, error) {
+func (r *gormVendorRepository) GetByEmail(ctx context.Context, email string, tenantID string) (*models.Vendor, error) {
 	var vendor models.Vendor
-	if err := r.db.WithContext(ctx).First(&vendor, "email = ?", email).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&vendor, "email = ? AND tenant_id = ?", email, tenantID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("vendor not found")
 		}

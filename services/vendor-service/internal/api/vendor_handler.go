@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/vendor-service/internal/models"
 	"github.com/ecommerce/vendor-service/internal/service"
 	"github.com/gin-gonic/gin"
@@ -30,20 +31,27 @@ func RegisterRoutes(router *gin.Engine, handler *VendorHandler) {
 		v1.GET("", handler.ListVendors)
 		v1.GET("/:vendorId", handler.GetVendor)
 		v1.PUT("/:vendorId", handler.UpdateVendor)
-		v1.PUT("/:vendorId/status", handler.UpdateVendorStatus)
+		// Vendor approval / suspension / rejection is a staff-only operation.
+		v1.PUT("/:vendorId/status", sharedmiddleware.RequireRole("admin", "moderator"), handler.UpdateVendorStatus)
 		v1.GET("/:vendorId/orders", handler.GetVendorOrders)
 		v1.GET("/:vendorId/analytics", handler.GetVendorAnalytics)
 	}
 }
 
 func (h *VendorHandler) RegisterVendor(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var req models.RegisterVendorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	result, err := h.service.RegisterVendor(c.Request.Context(), &req)
+	result, err := h.service.RegisterVendor(c.Request.Context(), tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -58,9 +66,15 @@ func (h *VendorHandler) RegisterVendor(c *gin.Context) {
 }
 
 func (h *VendorHandler) GetVendor(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	vendorID := c.Param("vendorId")
 
-	result, err := h.service.GetVendor(c.Request.Context(), vendorID)
+	result, err := h.service.GetVendor(c.Request.Context(), vendorID, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -75,9 +89,9 @@ func (h *VendorHandler) GetVendor(c *gin.Context) {
 }
 
 func (h *VendorHandler) ListVendors(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id is required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -93,14 +107,20 @@ func (h *VendorHandler) ListVendors(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  results,
-		"total": total,
-		"page":  page,
+		"data":      results,
+		"total":     total,
+		"page":      page,
 		"page_size": pageSize,
 	})
 }
 
 func (h *VendorHandler) UpdateVendor(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	vendorID := c.Param("vendorId")
 
 	var req models.UpdateVendorRequest
@@ -109,7 +129,7 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateVendor(c.Request.Context(), vendorID, &req)
+	result, err := h.service.UpdateVendor(c.Request.Context(), vendorID, tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -124,6 +144,12 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 }
 
 func (h *VendorHandler) UpdateVendorStatus(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	vendorID := c.Param("vendorId")
 
 	var req models.UpdateVendorStatusRequest
@@ -132,7 +158,7 @@ func (h *VendorHandler) UpdateVendorStatus(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateVendorStatus(c.Request.Context(), vendorID, &req)
+	result, err := h.service.UpdateVendorStatus(c.Request.Context(), vendorID, tenantID, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -151,29 +177,45 @@ func (h *VendorHandler) UpdateVendorStatus(c *gin.Context) {
 }
 
 func (h *VendorHandler) GetVendorOrders(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	vendorID := c.Param("vendorId")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	results, total, err := h.service.GetVendorOrders(c.Request.Context(), vendorID, page, pageSize)
+	results, total, err := h.service.GetVendorOrders(c.Request.Context(), vendorID, tenantID, page, pageSize)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 		h.logger.WithError(err).Error("Failed to get vendor orders")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get vendor orders"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  results,
-		"total": total,
-		"page":  page,
+		"data":      results,
+		"total":     total,
+		"page":      page,
 		"page_size": pageSize,
 	})
 }
 
 func (h *VendorHandler) GetVendorAnalytics(c *gin.Context) {
+	tenantID := sharedmiddleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	vendorID := c.Param("vendorId")
 
-	result, err := h.service.GetVendorAnalytics(c.Request.Context(), vendorID)
+	result, err := h.service.GetVendorAnalytics(c.Request.Context(), vendorID, tenantID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

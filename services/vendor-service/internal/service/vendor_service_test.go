@@ -52,18 +52,17 @@ func TestRegisterVendor_Success(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByEmail", ctx, "new@vendor.com").Return(nil, errors.New("vendor not found"))
+	mockRepo.On("GetByEmail", ctx, "new@vendor.com", "tenant-1").Return(nil, errors.New("vendor not found"))
 	mockRepo.On("Create", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.RegisterVendorRequest{
-		TenantID: "tenant-1",
-		Name:     "New Vendor",
-		Email:    "new@vendor.com",
-		Phone:    "+1234567890",
-		Country:  "US",
+		Name:    "New Vendor",
+		Email:   "new@vendor.com",
+		Phone:   "+1234567890",
+		Country: "US",
 	}
 
-	result, err := svc.RegisterVendor(ctx, req)
+	result, err := svc.RegisterVendor(ctx, "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -76,17 +75,16 @@ func TestRegisterVendor_CustomCommission(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByEmail", ctx, "new@vendor.com").Return(nil, errors.New("not found"))
+	mockRepo.On("GetByEmail", ctx, "new@vendor.com", "tenant-1").Return(nil, errors.New("not found"))
 	mockRepo.On("Create", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.RegisterVendorRequest{
-		TenantID:       "tenant-1",
 		Name:           "Premium Vendor",
 		Email:          "new@vendor.com",
 		CommissionRate: 5,
 	}
 
-	result, err := svc.RegisterVendor(ctx, req)
+	result, err := svc.RegisterVendor(ctx, "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 5.0, result.CommissionRate)
@@ -97,15 +95,14 @@ func TestRegisterVendor_DuplicateEmail(t *testing.T) {
 	ctx := context.Background()
 
 	existing := createTestVendor()
-	mockRepo.On("GetByEmail", ctx, "vendor@acme.com").Return(existing, nil)
+	mockRepo.On("GetByEmail", ctx, "vendor@acme.com", "tenant-1").Return(existing, nil)
 
 	req := &models.RegisterVendorRequest{
-		TenantID: "tenant-1",
-		Name:     "Duplicate",
-		Email:    "vendor@acme.com",
+		Name:  "Duplicate",
+		Email: "vendor@acme.com",
 	}
 
-	result, err := svc.RegisterVendor(ctx, req)
+	result, err := svc.RegisterVendor(ctx, "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -116,16 +113,15 @@ func TestRegisterVendor_RepoFailure(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByEmail", ctx, "new@vendor.com").Return(nil, errors.New("not found"))
+	mockRepo.On("GetByEmail", ctx, "new@vendor.com", "tenant-1").Return(nil, errors.New("not found"))
 	mockRepo.On("Create", ctx, mock.AnythingOfType("*models.Vendor")).Return(errors.New("db error"))
 
 	req := &models.RegisterVendorRequest{
-		TenantID: "tenant-1",
-		Name:     "Vendor",
-		Email:    "new@vendor.com",
+		Name:  "Vendor",
+		Email: "new@vendor.com",
 	}
 
-	result, err := svc.RegisterVendor(ctx, req)
+	result, err := svc.RegisterVendor(ctx, "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -138,9 +134,9 @@ func TestGetVendor_Success(t *testing.T) {
 	ctx := context.Background()
 
 	vendor := createTestVendor()
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 
-	result, err := svc.GetVendor(ctx, "vendor-1")
+	result, err := svc.GetVendor(ctx, "vendor-1", "tenant-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Acme Corp", result.Name)
@@ -151,9 +147,9 @@ func TestGetVendor_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "bad").Return(nil, errors.New("vendor not found"))
+	mockRepo.On("GetByID", ctx, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
-	result, err := svc.GetVendor(ctx, "bad")
+	result, err := svc.GetVendor(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -195,12 +191,12 @@ func TestUpdateVendor_Success(t *testing.T) {
 	ctx := context.Background()
 
 	vendor := createTestVendor()
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.UpdateVendorRequest{Name: "Updated Name", City: "New York"}
 
-	result, err := svc.UpdateVendor(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendor(ctx, "vendor-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Updated Name", result.Name)
@@ -211,11 +207,11 @@ func TestUpdateVendor_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "bad").Return(nil, errors.New("vendor not found"))
+	mockRepo.On("GetByID", ctx, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	req := &models.UpdateVendorRequest{Name: "Test"}
 
-	result, err := svc.UpdateVendor(ctx, "bad", req)
+	result, err := svc.UpdateVendor(ctx, "bad", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -229,12 +225,12 @@ func TestUpdateVendorStatus_Approve(t *testing.T) {
 
 	vendor := createTestVendor()
 	vendor.Status = models.StatusPending
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.UpdateVendorStatusRequest{Status: models.StatusApproved}
 
-	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusApproved, result.Status)
@@ -247,12 +243,12 @@ func TestUpdateVendorStatus_Suspend(t *testing.T) {
 
 	vendor := createTestVendor()
 	vendor.Status = models.StatusApproved
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.UpdateVendorStatusRequest{Status: models.StatusSuspended, Reason: "Policy violation"}
 
-	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusSuspended, result.Status)
@@ -264,11 +260,11 @@ func TestUpdateVendorStatus_InvalidTransition(t *testing.T) {
 
 	vendor := createTestVendor()
 	vendor.Status = models.StatusPending
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 
 	req := &models.UpdateVendorStatusRequest{Status: models.StatusSuspended}
 
-	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", "tenant-1", req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -281,12 +277,12 @@ func TestUpdateVendorStatus_Reject(t *testing.T) {
 
 	vendor := createTestVendor()
 	vendor.Status = models.StatusPending
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.UpdateVendorStatusRequest{Status: models.StatusRejected, Reason: "Incomplete docs"}
 
-	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusRejected, result.Status)
@@ -298,12 +294,12 @@ func TestUpdateVendorStatus_Reactivate(t *testing.T) {
 
 	vendor := createTestVendor()
 	vendor.Status = models.StatusSuspended
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
 	req := &models.UpdateVendorStatusRequest{Status: models.StatusApproved}
 
-	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", req)
+	result, err := svc.UpdateVendorStatus(ctx, "vendor-1", "tenant-1", req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, models.StatusApproved, result.Status)
@@ -318,9 +314,10 @@ func TestGetVendorOrders_Success(t *testing.T) {
 	orders := []models.VendorOrder{
 		{ID: "vo-1", VendorID: "vendor-1", OrderID: "order-1", Amount: 100, Commission: 10, NetAmount: 90},
 	}
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(createTestVendor(), nil)
 	mockRepo.On("GetOrdersByVendor", ctx, "vendor-1", 1, 20).Return(orders, int64(1), nil)
 
-	results, total, err := svc.GetVendorOrders(ctx, "vendor-1", 1, 20)
+	results, total, err := svc.GetVendorOrders(ctx, "vendor-1", "tenant-1", 1, 20)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), total)
@@ -343,9 +340,10 @@ func TestGetVendorAnalytics_Success(t *testing.T) {
 		NetEarnings:    4500,
 		Rating:         4.5,
 	}
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(createTestVendor(), nil)
 	mockRepo.On("GetVendorAnalytics", ctx, "vendor-1").Return(analytics, nil)
 
-	result, err := svc.GetVendorAnalytics(ctx, "vendor-1")
+	result, err := svc.GetVendorAnalytics(ctx, "vendor-1", "tenant-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 5000.0, result.TotalRevenue)
@@ -356,9 +354,9 @@ func TestGetVendorAnalytics_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetVendorAnalytics", ctx, "bad").Return(nil, errors.New("vendor not found"))
+	mockRepo.On("GetByID", ctx, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
-	result, err := svc.GetVendorAnalytics(ctx, "bad")
+	result, err := svc.GetVendorAnalytics(ctx, "bad", "tenant-1")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -371,7 +369,7 @@ func TestRecordOrder_Success(t *testing.T) {
 	ctx := context.Background()
 
 	vendor := createTestVendor()
-	mockRepo.On("GetByID", ctx, "vendor-1").Return(vendor, nil)
+	mockRepo.On("GetByID", ctx, "vendor-1", "tenant-1").Return(vendor, nil)
 	mockRepo.On("CreateOrder", ctx, mock.AnythingOfType("*models.VendorOrder")).Return(nil)
 	mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Vendor")).Return(nil)
 
@@ -385,7 +383,7 @@ func TestRecordOrder_VendorNotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetByID", ctx, "bad").Return(nil, errors.New("vendor not found"))
+	mockRepo.On("GetByID", ctx, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	err := svc.RecordOrder(ctx, "bad", "tenant-1", "order-1", 200)
 

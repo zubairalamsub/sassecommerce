@@ -6,6 +6,7 @@ import (
 
 	"github.com/ecommerce/cart-service/internal/models"
 	"github.com/ecommerce/cart-service/internal/service"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -39,6 +40,9 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// Tenant and user come from the verified JWT, never the request body.
+	req.TenantID = sharedmiddleware.GetTenantID(c)
+	req.UserID = sharedmiddleware.GetUserID(c)
 
 	result, err := h.service.AddItem(c.Request.Context(), &req)
 	if err != nil {
@@ -51,11 +55,11 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 }
 
 func (h *CartHandler) GetCart(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
-	userID := c.Query("user_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
 
 	if tenantID == "" || userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id and user_id are required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
@@ -71,11 +75,11 @@ func (h *CartHandler) GetCart(c *gin.Context) {
 
 func (h *CartHandler) UpdateItem(c *gin.Context) {
 	itemID := c.Param("itemId")
-	tenantID := c.Query("tenant_id")
-	userID := c.Query("user_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
 
 	if tenantID == "" || userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id and user_id are required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
@@ -101,11 +105,11 @@ func (h *CartHandler) UpdateItem(c *gin.Context) {
 
 func (h *CartHandler) RemoveItem(c *gin.Context) {
 	itemID := c.Param("itemId")
-	tenantID := c.Query("tenant_id")
-	userID := c.Query("user_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
 
 	if tenantID == "" || userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id and user_id are required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 
@@ -124,11 +128,11 @@ func (h *CartHandler) RemoveItem(c *gin.Context) {
 }
 
 func (h *CartHandler) ClearCart(c *gin.Context) {
-	tenantID := c.Query("tenant_id")
-	userID := c.Query("user_id")
+	tenantID := sharedmiddleware.GetTenantID(c)
+	userID := sharedmiddleware.GetUserID(c)
 
 	if tenantID == "" || userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id and user_id are required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
 

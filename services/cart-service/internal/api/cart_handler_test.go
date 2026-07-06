@@ -76,8 +76,29 @@ func setupRouter(mockService *MockCartService) *gin.Engine {
 
 	handler := NewCartHandler(mockService, logger)
 	router := gin.New()
+	// Stub the shared Auth middleware: populate tenant_id/user_id in context
+	// from test headers so handlers read the JWT-derived identity, never the
+	// query string. Requests without these headers simulate an anonymous
+	// caller (context empty), which handlers reject with 401.
+	router.Use(func(c *gin.Context) {
+		if t := c.GetHeader("X-Test-Tenant"); t != "" {
+			c.Set("tenant_id", t)
+		}
+		if u := c.GetHeader("X-Test-User"); u != "" {
+			c.Set("user_id", u)
+		}
+		c.Next()
+	})
 	RegisterRoutes(router, handler)
 	return router
+}
+
+// authed sets the test auth headers that the stub middleware turns into
+// JWT-derived context values.
+func authed(req *http.Request, tenant, user string) *http.Request {
+	req.Header.Set("X-Test-Tenant", tenant)
+	req.Header.Set("X-Test-User", user)
+	return req
 }
 
 func createTestCartResponse() *models.CartResponse {
@@ -122,6 +143,7 @@ func TestHandler_AddItem_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/cart/items", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = authed(req, "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -140,6 +162,7 @@ func TestHandler_AddItem_BadRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/cart/items", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = authed(req, "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -160,6 +183,7 @@ func TestHandler_AddItem_ServiceError(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/cart/items", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req = authed(req, "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -175,7 +199,7 @@ func TestHandler_GetCart_Success(t *testing.T) {
 	mockService.On("GetCart", mock.Anything, "tenant-1", "user-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("GET", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -194,7 +218,7 @@ func TestHandler_GetCart_MissingParams(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/v1/cart", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetCart_MissingUserID(t *testing.T) {
@@ -205,7 +229,7 @@ func TestHandler_GetCart_MissingUserID(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/v1/cart?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_GetCart_ServiceError(t *testing.T) {
@@ -215,7 +239,7 @@ func TestHandler_GetCart_ServiceError(t *testing.T) {
 	mockService.On("GetCart", mock.Anything, "tenant-1", "user-1").Return(nil, errors.New("redis error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("GET", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -234,7 +258,7 @@ func TestHandler_UpdateItem_Success(t *testing.T) {
 	body := `{"quantity": 5}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body))
+	req := authed(httptest.NewRequest("PUT", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body)), "tenant-1", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -252,7 +276,7 @@ func TestHandler_UpdateItem_MissingParams(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_UpdateItem_BadRequest(t *testing.T) {
@@ -262,7 +286,7 @@ func TestHandler_UpdateItem_BadRequest(t *testing.T) {
 	body := `{"quantity": 0}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body))
+	req := authed(httptest.NewRequest("PUT", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body)), "tenant-1", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -279,7 +303,7 @@ func TestHandler_UpdateItem_NotFound(t *testing.T) {
 	body := `{"quantity": 5}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/cart/items/bad?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body))
+	req := authed(httptest.NewRequest("PUT", "/api/v1/cart/items/bad?tenant_id=tenant-1&user_id=user-1", bytes.NewBufferString(body)), "tenant-1", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -299,7 +323,7 @@ func TestHandler_RemoveItem_Success(t *testing.T) {
 	mockService.On("RemoveItem", mock.Anything, "tenant-1", "user-1", "item-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("DELETE", "/api/v1/cart/items/item-1?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -313,7 +337,7 @@ func TestHandler_RemoveItem_MissingParams(t *testing.T) {
 	req, _ := http.NewRequest("DELETE", "/api/v1/cart/items/item-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_RemoveItem_NotFound(t *testing.T) {
@@ -324,7 +348,7 @@ func TestHandler_RemoveItem_NotFound(t *testing.T) {
 		Return(nil, errors.New("item not found in cart"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/cart/items/bad?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("DELETE", "/api/v1/cart/items/bad?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -339,7 +363,7 @@ func TestHandler_ClearCart_Success(t *testing.T) {
 	mockService.On("ClearCart", mock.Anything, "tenant-1", "user-1").Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("DELETE", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
@@ -353,7 +377,7 @@ func TestHandler_ClearCart_MissingParams(t *testing.T) {
 	req, _ := http.NewRequest("DELETE", "/api/v1/cart", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestHandler_ClearCart_ServiceError(t *testing.T) {
@@ -363,7 +387,7 @@ func TestHandler_ClearCart_ServiceError(t *testing.T) {
 	mockService.On("ClearCart", mock.Anything, "tenant-1", "user-1").Return(errors.New("redis error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil)
+	req := authed(httptest.NewRequest("DELETE", "/api/v1/cart?tenant_id=tenant-1&user_id=user-1", nil), "tenant-1", "user-1")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

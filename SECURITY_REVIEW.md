@@ -30,11 +30,26 @@ The following findings were fixed on branch `claude/current-repo-review-2x6afd`
 | A02-3 2FA secrets unencrypted fallback (HIGH) | **PARTIAL** | user-service now fatals in production without TWO_FACTOR_ENCRYPTION_KEY and warns in dev |
 | A07-2 no login brute-force protection (MEDIUM) | **FIXED** (prior work + this branch) | Lockout windows per email/IP plus the new per-endpoint limits |
 
-Still open: A01-3 (tenant-scope middleware), A02-2 (bcrypt cost), A02-5/A05-3
-(security headers everywhere), A04-2 (compose default DB passwords), A04-4
-(password min length), A05-4 (/metrics auth), A08-1/2/3 (event signing, image
-signing, CI), A09-1 (security alerts), B03 (JWT in localStorage), B04 (verbose
-validator errors), Go toolchain + pgx bump, .NET package upgrades.
+Second remediation pass on branch `claude/remaining-tasks-x3aeu2`
+(one commit per finding):
+
+| Finding | Status | Fix |
+| ------- | ------ | --- |
+| A02-5 / A05-3 security headers everywhere (MEDIUM) | **FIXED** | Shared SecurityHeaders middleware registered after Recovery in all 14 Go services; equivalent inline middleware in both .NET services |
+| A01-3 tenant scope not enforced in middleware (MEDIUM) | **FIXED** | RequireTenant middleware on wishlist routes; query-string tenant_id fallback removed |
+| A04-2 default credentials in docker-compose (MEDIUM) | **FIXED** | POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET, GRAFANA_ADMIN_PASSWORD are required env vars; .env.example added |
+| A05-4 unauthenticated /metrics (MEDIUM) | **FIXED** | Shared MetricsAuth middleware: bearer METRICS_TOKEN when set; 404 in production when unset; open only in dev |
+| A02-2 bcrypt cost (LOW) | **FIXED** | Password hashing cost 10 → 12 |
+| A04-4 password minimum length (LOW) | **FIXED** | min=12 at binding + service layers, common-password denylist, frontend forms synced |
+| B04 verbose validator errors (LOW) | **FIXED** | validator.SanitizedBindingErrors replaces details:err.Error() on all ShouldBindJSON sites |
+| A06 Go pgx + stdlib advisories | **FIXED** | pgx v5.5.1 → v5.10.0 in all 8 services pinning it; builder image golang:1.24-alpine → 1.25-alpine. gin-contrib/cors already removed in pass 1 |
+| A06 .NET vulnerable packages | **FIXED** | AutoMapper 13.0.1, Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5 (not compile-verified — no dotnet SDK in the fix environment) |
+
+Still open: A02-3 remains PARTIAL (secrets stored before the encryption key
+existed are still plaintext — needs a re-encryption migration), A08-1/2/3
+(event signing, image signing, CI), A09-1 (security alerts), B03 (JWT in
+localStorage), plus the audit follow-ups (tenant-isolation cross-check,
+git-history secrets scan, CI/CD review).
 
 ---
 

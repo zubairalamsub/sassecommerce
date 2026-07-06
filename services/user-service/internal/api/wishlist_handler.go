@@ -28,9 +28,6 @@ func NewWishlistHandler(wishlistRepo repository.WishlistRepository, logger *logr
 func (h *WishlistHandler) GetWishlist(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	tenantID := middleware.GetTenantID(c)
-	if tenantID == "" {
-		tenantID = c.Query("tenant_id")
-	}
 
 	items, err := h.wishlistRepo.List(c.Request.Context(), userID, tenantID)
 	if err != nil {

@@ -234,6 +234,9 @@ func setupRouter(
 
 	// Global middleware
 	router.Use(gin.Recovery())
+	// Security headers land early so they apply to every response — including
+	// errors raised by middleware further down the chain.
+	router.Use(sharedmiddleware.SecurityHeaders(sharedmiddleware.SecurityHeadersConfig{}))
 	router.Use(metrics.Middleware("user-service"))
 	router.Use(sharedmiddleware.HardenedCORS(sharedmiddleware.CORSConfig{
 		AllowCredentials: true,
@@ -255,7 +258,7 @@ func setupRouter(
 	})
 
 	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
-	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
 
 	// Rate limiting (after /metrics so Prometheus scrapes aren't throttled)
 	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{
@@ -345,6 +348,7 @@ func setupRouter(
 		// Wishlist routes (require auth)
 		wishlist := v1.Group("/wishlist")
 		wishlist.Use(middleware.AuthMiddleware(authService))
+		wishlist.Use(middleware.RequireTenant())
 		{
 			wishlist.GET("", wishlistHandler.GetWishlist)
 			wishlist.POST("/items", wishlistHandler.AddWishlistItem)

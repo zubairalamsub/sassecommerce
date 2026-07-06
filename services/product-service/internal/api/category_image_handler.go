@@ -5,6 +5,7 @@ import (
 
 	"github.com/ecommerce/product-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -50,7 +51,7 @@ func (h *CategoryImageHandler) PresignImageUpload(c *gin.Context) {
 
 	var req PresignCategoryImageUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 
@@ -83,7 +84,7 @@ func (h *CategoryImageHandler) ConfirmImageUpload(c *gin.Context) {
 
 	var req ConfirmCategoryImageUploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 

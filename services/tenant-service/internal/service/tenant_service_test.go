@@ -261,6 +261,8 @@ func (suite *TenantServiceTestSuite) TestUpdateTenantConfig_Success() {
 
 	suite.mockRepo.On("GetByID", ctx, tenantID).Return(existingTenant, nil)
 	suite.mockRepo.On("Update", ctx, mock.AnythingOfType("*models.Tenant")).Return(nil)
+	// UpdateTenantConfig publishes a TenantConfigChanged security event
+	suite.mockKafka.On("Publish", ctx, "tenant-events", mock.AnythingOfType("string"), mock.AnythingOfType("[]uint8")).Return(nil)
 
 	err := suite.service.UpdateTenantConfig(ctx, tenantID, newConfig)
 

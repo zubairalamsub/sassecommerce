@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/service"
@@ -145,7 +146,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -226,7 +227,7 @@ func (h *UserHandler) UpdateUserRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -268,7 +269,7 @@ func (h *UserHandler) UpdateUserStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}

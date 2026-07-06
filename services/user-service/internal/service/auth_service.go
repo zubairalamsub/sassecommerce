@@ -197,6 +197,10 @@ func NewAuthServiceWithOptions(
 
 // Register registers a new user
 func (s *authService) Register(ctx context.Context, req *models.RegisterRequest) (*models.UserResponse, error) {
+	if err := validatePasswordPolicy(req.Password); err != nil {
+		return nil, err
+	}
+
 	// Check if email already exists
 	emailExists, err := s.userRepo.EmailExists(ctx, req.TenantID, req.Email)
 	if err != nil {
@@ -534,6 +538,10 @@ func (s *authService) VerifyToken(ctx context.Context, tokenString string) (*mod
 
 // ChangePassword changes a user's password
 func (s *authService) ChangePassword(ctx context.Context, userID string, req *models.ChangePasswordRequest) error {
+	if err := validatePasswordPolicy(req.NewPassword); err != nil {
+		return err
+	}
+
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -768,6 +776,10 @@ func (s *authService) RequestPasswordReset(ctx context.Context, req *models.Forg
 
 // ResetPassword resets a user's password using the provided token
 func (s *authService) ResetPassword(ctx context.Context, req *models.ResetPasswordRequest) error {
+	if err := validatePasswordPolicy(req.NewPassword); err != nil {
+		return err
+	}
+
 	// Look up the token
 	prt, err := s.tokenRepo.GetPasswordResetTokenByToken(ctx, req.Token)
 	if err != nil {
@@ -856,9 +868,14 @@ func (s *authService) generateToken(user *models.User) (string, time.Time, error
 	return tokenString, expiresAt, nil
 }
 
+// passwordHashCost is the bcrypt work factor for account passwords. 12 is
+// deliberately above bcrypt.DefaultCost (10): ~4x slower per guess for
+// offline cracking while still fast enough for interactive login.
+const passwordHashCost = 12
+
 // hashPassword hashes a password using bcrypt
 func hashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), passwordHashCost)
 	if err != nil {
 		return "", err
 	}

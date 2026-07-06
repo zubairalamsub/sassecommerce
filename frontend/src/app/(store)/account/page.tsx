@@ -98,8 +98,8 @@ function AccountContent() {
     if (!token) return;
     setPasswordError('');
 
-    if (newPassword.length < 8) {
-      setPasswordError('New password must be at least 8 characters.');
+    if (newPassword.length < 12) {
+      setPasswordError('New password must be at least 12 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {

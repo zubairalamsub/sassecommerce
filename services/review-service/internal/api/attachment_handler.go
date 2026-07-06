@@ -5,6 +5,7 @@ import (
 
 	"github.com/ecommerce/review-service/internal/service"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
@@ -38,7 +39,7 @@ func (h *AttachmentHandler) PresignAttachmentUpload(c *gin.Context) {
 	}
 	var req AttachmentPresignRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 	res, err := h.attachmentService.PresignUpload(c.Request.Context(), tenantID, userID, req.ContentType, req.Filename)
@@ -58,7 +59,7 @@ func (h *AttachmentHandler) RemoveAttachment(c *gin.Context) {
 	}
 	var req AttachmentRemoveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": sharedvalidator.SanitizedBindingErrors(err)})
 		return
 	}
 	if err := h.attachmentService.Remove(c.Request.Context(), tenantID, req.ImageURL); err != nil {

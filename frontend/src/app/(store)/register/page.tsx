@@ -38,8 +38,8 @@ export default function RegisterPage() {
     }
     if (!password) {
       errs.password = 'Password is required';
-    } else if (password.length < 6) {
-      errs.password = 'Password must be at least 6 characters';
+    } else if (password.length < 12) {
+      errs.password = 'Password must be at least 12 characters';
     }
     if (!confirmPassword) {
       errs.confirmPassword = 'Please confirm your password';

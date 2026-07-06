@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	sharedvalidator "github.com/ecommerce/shared/go/pkg/validator"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/service"
@@ -43,7 +44,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -87,7 +88,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -149,7 +150,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -217,7 +218,7 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -255,7 +256,7 @@ func (h *AuthHandler) ResendVerification(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -289,7 +290,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}
@@ -332,7 +333,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Invalid request body",
-			"details": err.Error(),
+			"details": sharedvalidator.SanitizedBindingErrors(err),
 		})
 		return
 	}

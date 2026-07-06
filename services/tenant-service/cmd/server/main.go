@@ -76,6 +76,9 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	// Security headers land early so they apply to every response — including
+	// errors raised by middleware further down the chain.
+	router.Use(sharedmiddleware.SecurityHeaders(sharedmiddleware.SecurityHeadersConfig{}))
 	router.Use(metrics.Middleware("tenant-service"))
 	router.Use(sharedmiddleware.RequestLogger(sharedmiddleware.RequestLoggerConfig{
 		Logger:          log,
@@ -105,7 +108,7 @@ func main() {
 	})
 
 	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
-	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

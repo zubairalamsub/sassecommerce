@@ -258,7 +258,7 @@ func setupRouter(
 	})
 
 	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
-	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
 
 	// Rate limiting (after /metrics so Prometheus scrapes aren't throttled)
 	router.Use(sharedmiddleware.RateLimit(sharedmiddleware.RateLimitConfig{

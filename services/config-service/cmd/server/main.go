@@ -103,7 +103,7 @@ func main() {
 	})
 
 	// Prometheus metrics endpoint — registered before Auth so scrapes are not blocked.
-	router.GET("/metrics", gin.WrapH(metrics.Handler()))
+	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
 
 	// JWT Auth middleware (applied only to write endpoints)
 	jwtSecret := sharedconfig.MustGetJWTSecret()

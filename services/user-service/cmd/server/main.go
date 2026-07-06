@@ -348,6 +348,7 @@ func setupRouter(
 		// Wishlist routes (require auth)
 		wishlist := v1.Group("/wishlist")
 		wishlist.Use(middleware.AuthMiddleware(authService))
+		wishlist.Use(middleware.RequireTenant())
 		{
 			wishlist.GET("", wishlistHandler.GetWishlist)
 			wishlist.POST("/items", wishlistHandler.AddWishlistItem)

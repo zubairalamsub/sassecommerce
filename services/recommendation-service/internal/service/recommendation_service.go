@@ -19,7 +19,7 @@ type RecommendationService interface {
 
 	// Training
 	TrainModel(ctx context.Context, tenantID string) (*models.TrainingJobResponse, error)
-	GetTrainingJob(ctx context.Context, id string) (*models.TrainingJobResponse, error)
+	GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJobResponse, error)
 
 	// Event ingestion
 	RecordInteraction(ctx context.Context, tenantID, userID, productID, interactionType string) error
@@ -213,14 +213,14 @@ func (s *recommendationService) runTraining(ctx context.Context, job *models.Tra
 	s.repo.UpdateTrainingJob(ctx, job)
 
 	s.logger.WithFields(logrus.Fields{
-		"tenant_id":     job.TenantID,
-		"products":      job.ItemsProcessed,
-		"similarities":  job.SimilaritiesGenerated,
+		"tenant_id":    job.TenantID,
+		"products":     job.ItemsProcessed,
+		"similarities": job.SimilaritiesGenerated,
 	}).Info("Training completed")
 }
 
-func (s *recommendationService) GetTrainingJob(ctx context.Context, id string) (*models.TrainingJobResponse, error) {
-	job, err := s.repo.GetTrainingJob(ctx, id)
+func (s *recommendationService) GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJobResponse, error) {
+	job, err := s.repo.GetTrainingJob(ctx, tenantID, id)
 	if err != nil {
 		return nil, fmt.Errorf("training job not found")
 	}

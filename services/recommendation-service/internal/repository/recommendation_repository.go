@@ -29,7 +29,7 @@ type RecommendationRepository interface {
 	// Training jobs
 	CreateTrainingJob(ctx context.Context, job *models.TrainingJob) error
 	UpdateTrainingJob(ctx context.Context, job *models.TrainingJob) error
-	GetTrainingJob(ctx context.Context, id string) (*models.TrainingJob, error)
+	GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJob, error)
 }
 
 type CoPurchasePair struct {
@@ -161,9 +161,9 @@ func (r *recommendationRepository) UpdateTrainingJob(ctx context.Context, job *m
 	return r.db.WithContext(ctx).Save(job).Error
 }
 
-func (r *recommendationRepository) GetTrainingJob(ctx context.Context, id string) (*models.TrainingJob, error) {
+func (r *recommendationRepository) GetTrainingJob(ctx context.Context, tenantID, id string) (*models.TrainingJob, error) {
 	var job models.TrainingJob
-	if err := r.db.WithContext(ctx).First(&job, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&job, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
 		return nil, err
 	}
 	return &job, nil

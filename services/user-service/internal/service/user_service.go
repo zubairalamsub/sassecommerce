@@ -14,13 +14,13 @@ import (
 
 // UserService defines the interface for user operations
 type UserService interface {
-	GetUserByID(ctx context.Context, id string) (*models.UserResponse, error)
+	GetUserByID(ctx context.Context, tenantID, id string) (*models.UserResponse, error)
 	GetUserByEmail(ctx context.Context, tenantID, email string) (*models.UserResponse, error)
 	ListUsers(ctx context.Context, tenantID string, offset, limit int) ([]models.UserResponse, int64, error)
-	UpdateUser(ctx context.Context, userID string, req *models.UpdateUserRequest) (*models.UserResponse, error)
-	DeleteUser(ctx context.Context, userID string) error
-	UpdateUserRole(ctx context.Context, userID string, role models.UserRole) error
-	UpdateUserStatus(ctx context.Context, userID string, status models.UserStatus) error
+	UpdateUser(ctx context.Context, tenantID, userID string, req *models.UpdateUserRequest) (*models.UserResponse, error)
+	DeleteUser(ctx context.Context, tenantID, userID string) error
+	UpdateUserRole(ctx context.Context, tenantID, userID string, role models.UserRole) error
+	UpdateUserStatus(ctx context.Context, tenantID, userID string, status models.UserStatus) error
 }
 
 type userService struct {
@@ -43,8 +43,8 @@ func NewUserService(
 }
 
 // GetUserByID retrieves a user by ID
-func (s *userService) GetUserByID(ctx context.Context, id string) (*models.UserResponse, error) {
-	user, err := s.userRepo.GetByID(ctx, id)
+func (s *userService) GetUserByID(ctx context.Context, tenantID, id string) (*models.UserResponse, error) {
+	user, err := s.userRepo.GetByIDForTenant(ctx, tenantID, id)
 	if err != nil {
 		s.logger.WithError(err).WithField("user_id", id).Error("Failed to get user")
 		return nil, errors.New("user not found")
@@ -84,9 +84,10 @@ func (s *userService) ListUsers(ctx context.Context, tenantID string, offset, li
 }
 
 // UpdateUser updates a user's profile
-func (s *userService) UpdateUser(ctx context.Context, userID string, req *models.UpdateUserRequest) (*models.UserResponse, error) {
-	// Get existing user
-	user, err := s.userRepo.GetByID(ctx, userID)
+func (s *userService) UpdateUser(ctx context.Context, tenantID, userID string, req *models.UpdateUserRequest) (*models.UserResponse, error) {
+	// Get existing user (tenant-scoped so a caller cannot update another
+	// tenant's user by supplying its id).
+	user, err := s.userRepo.GetByIDForTenant(ctx, tenantID, userID)
 	if err != nil {
 		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to get user for update")
 		return nil, errors.New("user not found")
@@ -126,8 +127,8 @@ func (s *userService) UpdateUser(ctx context.Context, userID string, req *models
 }
 
 // DeleteUser deletes a user (soft delete)
-func (s *userService) DeleteUser(ctx context.Context, userID string) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
+func (s *userService) DeleteUser(ctx context.Context, tenantID, userID string) error {
+	user, err := s.userRepo.GetByIDForTenant(ctx, tenantID, userID)
 	if err != nil {
 		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to get user for delete")
 		return errors.New("user not found")
@@ -154,8 +155,8 @@ func (s *userService) DeleteUser(ctx context.Context, userID string) error {
 // Always publishes a UserRoleChanged event so the audit log captures the
 // privilege change. The old/new role values are included so the consumer
 // can render a clean before/after diff.
-func (s *userService) UpdateUserRole(ctx context.Context, userID string, role models.UserRole) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
+func (s *userService) UpdateUserRole(ctx context.Context, tenantID, userID string, role models.UserRole) error {
+	user, err := s.userRepo.GetByIDForTenant(ctx, tenantID, userID)
 	if err != nil {
 		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to get user for role update")
 		return errors.New("user not found")
@@ -193,8 +194,8 @@ func (s *userService) UpdateUserRole(ctx context.Context, userID string, role mo
 // Publishes a status-specific security event so the audit log gets a clean
 // action label (e.g. "user.suspended.changed"). Transitions other than
 // suspend/reactivate fall back to the generic UserUpdated event.
-func (s *userService) UpdateUserStatus(ctx context.Context, userID string, status models.UserStatus) error {
-	user, err := s.userRepo.GetByID(ctx, userID)
+func (s *userService) UpdateUserStatus(ctx context.Context, tenantID, userID string, status models.UserStatus) error {
+	user, err := s.userRepo.GetByIDForTenant(ctx, tenantID, userID)
 	if err != nil {
 		s.logger.WithError(err).WithField("user_id", userID).Error("Failed to get user for status update")
 		return errors.New("user not found")

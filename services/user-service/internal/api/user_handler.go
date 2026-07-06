@@ -38,8 +38,16 @@ func NewUserHandler(userService service.UserService, logger *logrus.Logger) *Use
 // @Router /api/v1/users/{id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
 	userID := c.Param("id")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tenant ID required",
+		})
+		return
+	}
 
-	user, err := h.userService.GetUserByID(c.Request.Context(), userID)
+	user, err := h.userService.GetUserByID(c.Request.Context(), tenantID, userID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -128,6 +136,14 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 // @Router /api/v1/users/{id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	userID := c.Param("id")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tenant ID required",
+		})
+		return
+	}
 	currentUserID := middleware.GetUserID(c)
 	currentUserRole := middleware.GetUserRole(c)
 
@@ -151,8 +167,15 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.UpdateUser(c.Request.Context(), userID, &req)
+	user, err := h.userService.UpdateUser(c.Request.Context(), tenantID, userID, &req)
 	if err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -179,6 +202,14 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Router /api/v1/users/{id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	userID := c.Param("id")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tenant ID required",
+		})
+		return
+	}
 	currentUserID := middleware.GetUserID(c)
 
 	// Users can only delete their own account
@@ -190,7 +221,14 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.DeleteUser(c.Request.Context(), userID); err != nil {
+	if err := h.userService.DeleteUser(c.Request.Context(), tenantID, userID); err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -218,6 +256,14 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 // @Router /api/v1/users/{id}/role [patch]
 func (h *UserHandler) UpdateUserRole(c *gin.Context) {
 	userID := c.Param("id")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tenant ID required",
+		})
+		return
+	}
 
 	var req struct {
 		Role models.UserRole `json:"role" binding:"required,oneof=admin moderator customer guest"`
@@ -232,7 +278,14 @@ func (h *UserHandler) UpdateUserRole(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.UpdateUserRole(c.Request.Context(), userID, req.Role); err != nil {
+	if err := h.userService.UpdateUserRole(c.Request.Context(), tenantID, userID, req.Role); err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -260,6 +313,14 @@ func (h *UserHandler) UpdateUserRole(c *gin.Context) {
 // @Router /api/v1/users/{id}/status [patch]
 func (h *UserHandler) UpdateUserStatus(c *gin.Context) {
 	userID := c.Param("id")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tenant ID required",
+		})
+		return
+	}
 
 	var req struct {
 		Status models.UserStatus `json:"status" binding:"required,oneof=active inactive suspended deleted"`
@@ -274,7 +335,14 @@ func (h *UserHandler) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.UpdateUserStatus(c.Request.Context(), userID, req.Status); err != nil {
+	if err := h.userService.UpdateUserStatus(c.Request.Context(), tenantID, userID, req.Status); err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),

@@ -16,8 +16,8 @@ func (m *MockPromotionRepository) CreatePromotion(ctx context.Context, promotion
 	return args.Error(0)
 }
 
-func (m *MockPromotionRepository) GetPromotionByID(ctx context.Context, id string) (*models.Promotion, error) {
-	args := m.Called(ctx, id)
+func (m *MockPromotionRepository) GetPromotionByID(ctx context.Context, tenantID, id string) (*models.Promotion, error) {
+	args := m.Called(ctx, tenantID, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -39,8 +39,8 @@ func (m *MockPromotionRepository) CreateCoupon(ctx context.Context, coupon *mode
 	return args.Error(0)
 }
 
-func (m *MockPromotionRepository) GetCouponByCode(ctx context.Context, code string) (*models.Coupon, error) {
-	args := m.Called(ctx, code)
+func (m *MockPromotionRepository) GetCouponByCode(ctx context.Context, tenantID, code string) (*models.Coupon, error) {
+	args := m.Called(ctx, tenantID, code)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

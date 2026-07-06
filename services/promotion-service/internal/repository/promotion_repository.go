@@ -13,13 +13,13 @@ import (
 type PromotionRepository interface {
 	// Promotions
 	CreatePromotion(ctx context.Context, promotion *models.Promotion) error
-	GetPromotionByID(ctx context.Context, id string) (*models.Promotion, error)
+	GetPromotionByID(ctx context.Context, tenantID, id string) (*models.Promotion, error)
 	GetActivePromotions(ctx context.Context, tenantID string) ([]models.Promotion, error)
 	UpdatePromotion(ctx context.Context, promotion *models.Promotion) error
 
 	// Coupons
 	CreateCoupon(ctx context.Context, coupon *models.Coupon) error
-	GetCouponByCode(ctx context.Context, code string) (*models.Coupon, error)
+	GetCouponByCode(ctx context.Context, tenantID, code string) (*models.Coupon, error)
 	GetCouponsByPromotion(ctx context.Context, promotionID string) ([]models.Coupon, error)
 	UpdateCoupon(ctx context.Context, coupon *models.Coupon) error
 
@@ -50,9 +50,9 @@ func (r *gormPromotionRepository) CreatePromotion(ctx context.Context, promotion
 	return r.db.WithContext(ctx).Create(promotion).Error
 }
 
-func (r *gormPromotionRepository) GetPromotionByID(ctx context.Context, id string) (*models.Promotion, error) {
+func (r *gormPromotionRepository) GetPromotionByID(ctx context.Context, tenantID, id string) (*models.Promotion, error) {
 	var promotion models.Promotion
-	if err := r.db.WithContext(ctx).First(&promotion, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&promotion, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("promotion not found")
 		}
@@ -82,9 +82,9 @@ func (r *gormPromotionRepository) CreateCoupon(ctx context.Context, coupon *mode
 	return r.db.WithContext(ctx).Create(coupon).Error
 }
 
-func (r *gormPromotionRepository) GetCouponByCode(ctx context.Context, code string) (*models.Coupon, error) {
+func (r *gormPromotionRepository) GetCouponByCode(ctx context.Context, tenantID, code string) (*models.Coupon, error) {
 	var coupon models.Coupon
-	if err := r.db.WithContext(ctx).First(&coupon, "code = ?", code).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&coupon, "code = ? AND tenant_id = ?", code, tenantID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("coupon not found")
 		}

@@ -177,9 +177,9 @@ func TestGetPromotion_Success(t *testing.T) {
 	ctx := context.Background()
 
 	promo := createTestPromotion()
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 
-	result, err := svc.GetPromotion(ctx, "promo-1")
+	result, err := svc.GetPromotion(ctx, "tenant-1", "promo-1")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "promo-1", result.ID)
@@ -190,9 +190,9 @@ func TestGetPromotion_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetPromotionByID", ctx, "bad").Return(nil, errors.New("promotion not found"))
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "bad").Return(nil, errors.New("promotion not found"))
 
-	result, err := svc.GetPromotion(ctx, "bad")
+	result, err := svc.GetPromotion(ctx, "tenant-1", "bad")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -232,7 +232,7 @@ func TestCreateCoupon_Success(t *testing.T) {
 	ctx := context.Background()
 
 	promo := createTestPromotion()
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 	mockRepo.On("CreateCoupon", ctx, mock.AnythingOfType("*models.Coupon")).Return(nil)
 
 	req := &models.CreateCouponRequest{
@@ -254,7 +254,7 @@ func TestCreateCoupon_PromotionNotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetPromotionByID", ctx, "bad").Return(nil, errors.New("not found"))
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "bad").Return(nil, errors.New("not found"))
 
 	req := &models.CreateCouponRequest{
 		TenantID:    "tenant-1",
@@ -273,7 +273,7 @@ func TestCreateCoupon_DuplicateCode(t *testing.T) {
 	ctx := context.Background()
 
 	promo := createTestPromotion()
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 	mockRepo.On("CreateCoupon", ctx, mock.AnythingOfType("*models.Coupon")).Return(errors.New("duplicate key"))
 
 	req := &models.CreateCouponRequest{
@@ -298,9 +298,9 @@ func TestValidateCoupon_Success(t *testing.T) {
 	coupon := createTestCoupon()
 	promo := createTestPromotion()
 
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 	mockRepo.On("GetUserCouponUsageCount", ctx, "coupon-1", "user-1").Return(int64(0), nil)
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 
 	req := &models.ValidateCouponRequest{
 		TenantID:   "tenant-1",
@@ -319,7 +319,7 @@ func TestValidateCoupon_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetCouponByCode", ctx, "BAD").Return(nil, errors.New("coupon not found"))
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, errors.New("coupon not found"))
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
 
@@ -336,7 +336,7 @@ func TestValidateCoupon_Inactive(t *testing.T) {
 
 	coupon := createTestCoupon()
 	coupon.IsActive = false
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
 
@@ -351,8 +351,10 @@ func TestValidateCoupon_WrongTenant(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	coupon := createTestCoupon()
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	coupon := createTestCoupon() // belongs to tenant-1
+	// Defense-in-depth: even if the repo were to return a coupon from another
+	// tenant, the service-layer tenant check must still reject it.
+	mockRepo.On("GetCouponByCode", ctx, "tenant-2", "SUMMER20").Return(coupon, nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-2", UserID: "user-1", OrderTotal: 100}
 
@@ -369,7 +371,7 @@ func TestValidateCoupon_UsageLimitReached(t *testing.T) {
 
 	coupon := createTestCoupon()
 	coupon.UsedCount = 100
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
 
@@ -385,7 +387,7 @@ func TestValidateCoupon_AlreadyUsedByUser(t *testing.T) {
 	ctx := context.Background()
 
 	coupon := createTestCoupon()
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 	mockRepo.On("GetUserCouponUsageCount", ctx, "coupon-1", "user-1").Return(int64(1), nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
@@ -405,9 +407,9 @@ func TestValidateCoupon_BelowMinOrder(t *testing.T) {
 	promo := createTestPromotion()
 	promo.MinOrderAmount = 100
 
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 	mockRepo.On("GetUserCouponUsageCount", ctx, "coupon-1", "user-1").Return(int64(0), nil)
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 30}
 
@@ -426,9 +428,9 @@ func TestValidateCoupon_MaxDiscountCapped(t *testing.T) {
 	promo := createTestPromotion()
 	promo.MaxDiscount = 30
 
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 	mockRepo.On("GetUserCouponUsageCount", ctx, "coupon-1", "user-1").Return(int64(0), nil)
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 200}
 
@@ -448,9 +450,9 @@ func TestApplyCoupon_Success(t *testing.T) {
 	coupon := createTestCoupon()
 	promo := createTestPromotion()
 
-	mockRepo.On("GetCouponByCode", ctx, "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
 	mockRepo.On("GetUserCouponUsageCount", ctx, "coupon-1", "user-1").Return(int64(0), nil)
-	mockRepo.On("GetPromotionByID", ctx, "promo-1").Return(promo, nil)
+	mockRepo.On("GetPromotionByID", ctx, "tenant-1", "promo-1").Return(promo, nil)
 	mockRepo.On("CreateCouponUsage", ctx, mock.AnythingOfType("*models.CouponUsage")).Return(nil)
 	mockRepo.On("UpdateCoupon", ctx, mock.AnythingOfType("*models.Coupon")).Return(nil)
 
@@ -473,7 +475,7 @@ func TestApplyCoupon_InvalidCoupon(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetCouponByCode", ctx, "BAD").Return(nil, errors.New("coupon not found"))
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, errors.New("coupon not found"))
 
 	req := &models.ApplyCouponRequest{
 		TenantID: "tenant-1", UserID: "user-1", OrderID: "order-1",

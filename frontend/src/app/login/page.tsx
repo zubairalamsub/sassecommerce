@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, type AuthUser } from '@/stores/auth';
 import { ApiError } from '@/lib/api';
 import { DEFAULT_TENANT_ID as TENANT_ID } from '@/lib/tenant';
+import { TwoFactorPrompt } from '@/components/auth/two-factor-prompt';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +17,15 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(false);
+
+  function completeLogin(user: AuthUser) {
+    if (user.role === 'customer') {
+      router.push('/products');
+    } else {
+      setError('Please use the admin login for staff accounts');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,11 +34,11 @@ export default function LoginPage() {
 
     try {
       const result = await login(email, password, TENANT_ID);
-      if (result.user.role === 'customer') {
-        router.push('/products');
-      } else {
-        setError('Please use the admin login for staff accounts');
+      if ('twoFactorRequired' in result) {
+        setTwoFactor(true);
+        return;
       }
+      completeLogin(result.user);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || 'Invalid email or password');
@@ -56,6 +66,9 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-xl border border-border bg-surface p-8 shadow-sm">
+          {twoFactor ? (
+            <TwoFactorPrompt onVerified={completeLogin} />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="rounded-lg bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
@@ -122,14 +135,18 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+          )}
 
+          {!twoFactor && (
           <p className="mt-4 text-center text-sm text-text-secondary">
             Don&apos;t have an account?{' '}
             <Link href="/register" className="font-medium text-primary hover:text-primary-dark">
               Create account
             </Link>
           </p>
+          )}
 
+          {!twoFactor && (
           <div className="mt-4 rounded-lg bg-surface-secondary px-4 py-3 text-xs text-text-secondary">
             <p className="mb-2 font-medium text-text-secondary">Demo credentials:</p>
             <div className="flex items-center justify-between">
@@ -143,6 +160,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

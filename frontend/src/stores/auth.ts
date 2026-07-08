@@ -25,13 +25,20 @@ export interface AuthUser {
   updated_at: string;
 }
 
+// login()/verifyTwoFactor() resolve to either a completed session or a signal
+// that a second factor is still required (A04-3).
+export type LoginResult =
+  | { user: AuthUser; token: string }
+  | { twoFactorRequired: true };
+
 interface AuthState {
   user: AuthUser | null;
   token: string | null;
   tenantId: string | null;
   setAuth: (user: AuthUser, token: string, tenantId: string | null) => void;
-  login: (email: string, password: string, tenantId: string) => Promise<{ user: AuthUser; token: string }>;
-  register: (data: { email: string; username: string; password: string; first_name: string; last_name: string; phone?: string }, tenantId: string) => Promise<{ user: AuthUser; token: string }>;
+  login: (email: string, password: string, tenantId: string) => Promise<LoginResult>;
+  verifyTwoFactor: (code: string) => Promise<{ user: AuthUser; token: string }>;
+  register: (data: { email: string; username: string; password: string; first_name: string; last_name: string; phone?: string }, tenantId: string) => Promise<LoginResult>;
   logout: () => void;
   isAuthenticated: () => boolean;
   hasRole: (role: UserRole) => boolean;
@@ -55,10 +62,24 @@ const ROLE_LEVEL: Record<UserRole, number> = {
 // never sent as one — the BFF proxy injects the real token from the cookie.
 const SESSION_TOKEN = 'cookie';
 
+// Normalises a user payload from a server auth route into an AuthUser.
+function toAuthUser(raw: Record<string, unknown>, fallbackTenant: string | null): AuthUser {
+  return {
+    ...(raw as unknown as AuthUser),
+    tenant_id: (raw.tenant_id as string) || fallbackTenant,
+    role: raw.role as UserRole,
+  };
+}
+
 // Establishes a session by POSTing credentials to the server login route, which
-// calls the user-service, sets the JWT as an HttpOnly cookie, and returns only
-// the (non-secret) user. Throws ApiError on failure.
-async function serverLogin(email: string, password: string, tenantId: string): Promise<AuthUser> {
+// calls the user-service and sets the JWT as an HttpOnly cookie. Returns the
+// (non-secret) user, or a 2FA-required signal when the account is enrolled in
+// two-factor auth. Throws ApiError on failure.
+async function serverLogin(
+  email: string,
+  password: string,
+  tenantId: string,
+): Promise<{ user: AuthUser } | { twoFactorRequired: true }> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -70,11 +91,8 @@ async function serverLogin(email: string, password: string, tenantId: string): P
     throw new ApiError(res.status, err.error || 'Login failed', err);
   }
   const data = await res.json();
-  return {
-    ...data.user,
-    tenant_id: data.user.tenant_id || tenantId,
-    role: data.user.role as UserRole,
-  };
+  if (data.twoFactorRequired) return { twoFactorRequired: true };
+  return { user: toAuthUser(data.user, tenantId) };
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -87,9 +105,10 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email, password, tenantId) => {
         try {
-          const authUser = await serverLogin(email, password, tenantId);
-          set({ user: authUser, token: SESSION_TOKEN, tenantId: authUser.tenant_id });
-          return { user: authUser, token: SESSION_TOKEN };
+          const result = await serverLogin(email, password, tenantId);
+          if ('twoFactorRequired' in result) return result;
+          set({ user: result.user, token: SESSION_TOKEN, tenantId: result.user.tenant_id });
+          return { user: result.user, token: SESSION_TOKEN };
         } catch {
           // Backend auth failed or unreachable — fall back to demo login
           // (also cookie-based via /api/auth/demo-token).
@@ -102,13 +121,33 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      // Completes a 2FA-gated login: submits the code to the server route, which
+      // validates it against the challenge cookie and sets the auth cookie.
+      verifyTwoFactor: async (code) => {
+        const res = await fetch('/api/auth/login/2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new ApiError(res.status, err.error || 'Invalid code', err);
+        }
+        const data = await res.json();
+        const authUser = toAuthUser(data.user, get().tenantId ?? DEFAULT_TENANT_ID);
+        set({ user: authUser, token: SESSION_TOKEN, tenantId: authUser.tenant_id });
+        return { user: authUser, token: SESSION_TOKEN };
+      },
+
       register: async (data, tenantId) => {
         try {
           await authApi.register({ ...data, tenant_id: tenantId }, tenantId);
           // After registration, establish the session (sets the HttpOnly cookie).
-          const authUser = await serverLogin(data.email, data.password, tenantId);
-          set({ user: authUser, token: SESSION_TOKEN, tenantId: authUser.tenant_id });
-          return { user: authUser, token: SESSION_TOKEN };
+          const result = await serverLogin(data.email, data.password, tenantId);
+          if ('twoFactorRequired' in result) return result;
+          set({ user: result.user, token: SESSION_TOKEN, tenantId: result.user.tenant_id });
+          return { user: result.user, token: SESSION_TOKEN };
         } catch (err) {
           // If API is unreachable, create a demo user
           if (err instanceof ApiError) throw err;

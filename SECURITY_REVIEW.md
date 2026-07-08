@@ -43,7 +43,7 @@ Second remediation pass on branch `claude/remaining-tasks-x3aeu2`
 | A04-4 password minimum length (LOW) | **FIXED** | min=12 at binding + service layers, common-password denylist, frontend forms synced |
 | B04 verbose validator errors (LOW) | **FIXED** | validator.SanitizedBindingErrors replaces details:err.Error() on all ShouldBindJSON sites |
 | A06 Go pgx + stdlib advisories | **FIXED** | pgx v5.5.1 → v5.10.0 in all 8 services pinning it; builder image golang:1.24-alpine → 1.25-alpine. gin-contrib/cors already removed in pass 1 |
-| A06 .NET vulnerable packages | **FIXED** | AutoMapper 13.0.1, Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5 (not compile-verified — no dotnet SDK in the fix environment) |
+| A06 .NET vulnerable packages | **PARTIAL** | Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5. AutoMapper 13.0.1 is **still vulnerable** (GHSA-rvv3-g6hj-g44x recursive-mapping DoS) — the only patched line (≥15.1.1) is the commercial build with a JWT-stack cascade, so it is instead an **accepted risk** (services map flat internal DTOs; DoS not reachable) suppressed per-advisory via NuGetAuditSuppress. Now compile-verified locally: payment 94/94, inventory 5/5 tests green. Also fixed a test-project restore break (stale AutoMapper.Extensions ref → NU1107) that had kept payment-service CI red. |
 
 Third remediation pass on the same branch (one commit per finding):
 

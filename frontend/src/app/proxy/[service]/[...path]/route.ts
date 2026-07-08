@@ -60,19 +60,18 @@ async function handle(
   const suffix = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
   const target = `${origin}/${suffix}${search}`;
 
-  // Rebuild the outgoing headers: copy the client's (minus hop-by-hop), then set
-  // Authorization from the HttpOnly cookie. During the B03 transition we fall
-  // back to any client-supplied Authorization so requests keep working before
-  // the cookie cutover; that fallback is removed once the client stops sending
-  // the token.
+  // Rebuild the outgoing headers: copy the client's (minus hop-by-hop and the
+  // client's own Authorization/Cookie, which are stripped), then set
+  // Authorization solely from the HttpOnly cookie. The credential is never taken
+  // from anything the browser's JavaScript can set, so an injected Authorization
+  // header cannot reach the backend. Anonymous requests (no cookie) are forwarded
+  // without one, keeping public storefront reads working.
   const headers = new Headers();
   request.headers.forEach((value, key) => {
     if (!STRIP_REQUEST_HEADERS.has(key.toLowerCase())) headers.set(key, value);
   });
 
-  const cookieToken = readAuthCookie(request);
-  const clientAuth = request.headers.get('authorization');
-  const token = cookieToken ?? (clientAuth?.startsWith('Bearer ') ? clientAuth.slice(7) : null);
+  const token = readAuthCookie(request);
   if (token) headers.set('authorization', `Bearer ${token}`);
 
   const method = request.method;

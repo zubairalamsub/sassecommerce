@@ -1,4 +1,6 @@
 import { SignJWT } from 'jose';
+import { NextResponse } from 'next/server';
+import { AUTH_COOKIE, authCookieOptions } from '@/lib/auth-cookie';
 
 // Server-side allowlist of demo accounts. The JWT claims (user_id, tenant_id,
 // role) are taken from this map — never from the request body — so a caller
@@ -53,7 +55,11 @@ export async function POST(request: Request) {
       .setExpirationTime('24h')
       .sign(secret);
 
-    return Response.json({ token });
+    // B03: the demo JWT is delivered only as an HttpOnly cookie, never in the
+    // response body — same contract as the real /api/auth/login route.
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    return res;
   } catch {
     return Response.json({ error: 'Failed to generate token' }, { status: 500 });
   }

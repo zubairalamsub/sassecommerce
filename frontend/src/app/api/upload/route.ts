@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { jwtVerify } from 'jose';
+import { readAuthCookie } from '@/lib/auth-cookie';
 
 // Configurable storage path — defaults to ./media in project root
 // In Docker: set MEDIA_STORAGE_PATH=/app/media (mounted to a named volume)
@@ -32,8 +33,9 @@ async function authorize(request: NextRequest): Promise<boolean> {
   const secret = process.env.JWT_SECRET;
   if (!secret) return false;
 
-  const header = request.headers.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  // B03: the JWT now lives in the HttpOnly auth cookie, not an Authorization
+  // header the browser sets from localStorage.
+  const token = readAuthCookie(request);
   if (!token) return false;
 
   try {

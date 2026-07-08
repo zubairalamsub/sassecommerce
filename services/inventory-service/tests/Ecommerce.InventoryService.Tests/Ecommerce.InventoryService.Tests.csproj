@@ -27,4 +27,10 @@
     <ProjectReference Include="..\..\src\Ecommerce.InventoryService\Ecommerce.InventoryService.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Mirrors the src project's accepted-risk suppression for the transitive
+         AutoMapper advisory. See Ecommerce.InventoryService.csproj for rationale. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
+  </ItemGroup>
+
 </Project>

@@ -43,7 +43,7 @@ Second remediation pass on branch `claude/remaining-tasks-x3aeu2`
 | A04-4 password minimum length (LOW) | **FIXED** | min=12 at binding + service layers, common-password denylist, frontend forms synced |
 | B04 verbose validator errors (LOW) | **FIXED** | validator.SanitizedBindingErrors replaces details:err.Error() on all ShouldBindJSON sites |
 | A06 Go pgx + stdlib advisories | **FIXED** | pgx v5.5.1 → v5.10.0 in all 8 services pinning it; builder image golang:1.24-alpine → 1.25-alpine. gin-contrib/cors already removed in pass 1 |
-| A06 .NET vulnerable packages | **FIXED** | AutoMapper 13.0.1, Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5 (not compile-verified — no dotnet SDK in the fix environment) |
+| A06 .NET vulnerable packages | **PARTIAL** | Npgsql EF/Design 8.0.11, JwtBearer 8.0.22, IdentityModel 7.5.1, Caching.Memory 8.0.1, System.Text.Json 8.0.5. AutoMapper 13.0.1 is **still vulnerable** (GHSA-rvv3-g6hj-g44x recursive-mapping DoS) — the only patched line (≥15.1.1) is the commercial build with a JWT-stack cascade, so it is instead an **accepted risk** (services map flat internal DTOs; DoS not reachable) suppressed per-advisory via NuGetAuditSuppress. Now compile-verified locally: payment 94/94, inventory 5/5 tests green. Also fixed a test-project restore break (stale AutoMapper.Extensions ref → NU1107) that had kept payment-service CI red. |
 
 Third remediation pass on the same branch (one commit per finding):
 
@@ -57,8 +57,12 @@ Third remediation pass on the same branch (one commit per finding):
 | A08-2 no container image signing (MEDIUM) | **FIXED** | deploy.yml cosign-signs every pushed image by digest (keyless/OIDC, Rekor-logged); cluster-side verifyImages policy still recommended |
 
 Still open: A08-3 (broader CI integrity review — e.g. pinning actions by
-SHA), B03 (JWT in localStorage — needs a Next.js BFF/HttpOnly-cookie
-refactor), and the tenant-isolation cross-check follow-up.
+SHA). B03 (JWT in localStorage) is now **FIXED**: the token moved to an
+HttpOnly, SameSite=Lax cookie and the transparent `/proxy` rewrite became a
+BFF Route Handler that injects the credential server-side (no JWT reachable
+from JS). B01/B02 (`/api/upload` auth + folder allowlist; `/api/media` SVG
+handling) were already fixed. The tenant-isolation cross-check is complete
+(16/16 services; frontend BFF fixed).
 
 ---
 
@@ -309,11 +313,15 @@ CVEs) since the fix is a single toolchain bump.
   `Login()` issues a full access token immediately on password match. The
   `twoFactorService` has a "challenge token" helper but `Login()` never
   calls it. Users who have enabled 2FA are not actually challenged.
-- **Status:** OPEN
-- **Fix:** In `Login()`, after password verify, check
-  `twoFactorService.IsEnabled(userID)`. If enabled, return a short-lived
-  challenge JWT (`purpose=2fa-challenge`) and require the client to call
-  `/login/2fa` with a TOTP/backup code before issuing the access token.
+- **Status:** FIXED — the login endpoint calls `LoginWithSession`, which checks
+  `twoFactor.IsEnabled` after password verify and, for enrolled users, returns a
+  short-lived challenge token instead of credentials; `/api/v1/auth/login/2fa`
+  (`VerifyTwoFactorChallenge`) completes it. The frontend now handles this end
+  to end: the BFF `/api/auth/login` keeps the challenge token in an HttpOnly
+  cookie and returns `twoFactorRequired`, `/api/auth/login/2fa` completes it, and
+  the login pages render a `<TwoFactorPrompt>`. (Fixing this also uncovered that
+  the BFF login route read the token from the wrong response-envelope level, so
+  real backend login was broken independent of 2FA — also fixed.)
 
 #### A04-4 (LOW): Password minimum length is 8 (industry minimum)
 - **Where:** `services/user-service/internal/models/user.go:104` —
@@ -478,7 +486,9 @@ See **Dependency Vulnerability Tables** below.
 
 ### B01 (HIGH): `/api/upload` Next.js route is unauthenticated and accepts caller-controlled `folder`
 - **Where:** `frontend/src/app/api/upload/route.ts:9-55`
-- **Status:** OPEN
+- **Status:** FIXED — the route now requires a verified JWT (from the HttpOnly
+  cookie) with an uploader role, whitelists `folder` to `products|avatars|tenants`,
+  derives the extension from the server-checked MIME type, and caps size at 5 MB.
 - **What:** Anyone can `POST /api/upload` with arbitrary files (only
   MIME-type checked — client-controlled). The `folder` param is joined into
   `path.join(STORAGE_PATH, folder)`. `path.join("/app/media", "../../etc")`
@@ -490,7 +500,9 @@ See **Dependency Vulnerability Tables** below.
 
 ### B02 (MEDIUM): `/api/media/[...path]` serves SVG with `image/svg+xml` MIME
 - **Where:** `frontend/src/app/api/media/[...path]/route.ts:7-15`
-- **Status:** OPEN
+- **Status:** FIXED — SVG is dropped from `MIME_TYPES`; unknown types are served
+  as `application/octet-stream` with `X-Content-Type-Options: nosniff` and
+  `Content-Disposition: attachment`, so browsers won't render them in-origin.
 - **What:** Path-traversal is blocked (line 25 — `if (relativePath.includes
   ('..'))`). However, SVGs are returned with `image/svg+xml`, and SVGs can
   contain `<script>` that executes in the browser if rendered as a page (not
@@ -505,13 +517,17 @@ See **Dependency Vulnerability Tables** below.
 - **Where:** `frontend/src/stores/auth.ts:51-149` — Zustand `persist`
   middleware with `name: 'auth-storage'`. Default zustand storage is
   `localStorage`.
-- **Status:** OPEN — informational. Trade-off vs HttpOnly cookies.
-- **What:** Any XSS (e.g. via B02) can steal the JWT. Mitigated by short
-  expiry (24h) but not by `HttpOnly`.
-- **Fix:** Long-term, move to HttpOnly Secure SameSite=Strict cookies set
-  by a Next.js route (BFF pattern). The current architecture is the
-  industry-common Bearer-token-in-localStorage pattern; this is a known
-  acceptable trade-off if XSS surface is small.
+- **Status:** FIXED — the JWT was moved to an HttpOnly, SameSite=Lax cookie set
+  by the login/demo-token route handlers. The Zustand store now persists only a
+  non-secret session marker in `token`; the JWT is not in localStorage and not
+  readable from `document.cookie`.
+- **What:** Any XSS (e.g. via B02) could previously steal the JWT from
+  localStorage. Now no JWT is reachable from JavaScript.
+- **Fix (done):** Login/logout/demo-token route handlers set/clear the HttpOnly
+  cookie; the `/proxy` BFF Route Handler injects the credential from that cookie
+  server-side (and ignores any client-supplied Authorization). `secure` is on
+  outside development; consider SameSite=Strict if no cross-site top-level POST
+  flows are needed.
 
 ### B04 (LOW): Verbose error responses include error.Error() details
 - **Where:** `auth_handler.go:43-47, 89-91, 138-143`, many other handlers.
@@ -612,9 +628,9 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
 7. **Invalidate refresh tokens on password change/reset/2FA enable**
    (A01-2, A07-1) — add `refreshTokenRepo.RevokeAllForUser` calls; add
    refresh-token rotation. ~half a day.
-8. **Enforce 2FA in the login flow** (A04-3) — wire the existing
-   `twoFactorService.IsEnabled` check into `Login()`; add `/login/2fa`
-   handler.
+8. ~~**Enforce 2FA in the login flow** (A04-3)~~ — DONE (backend gates enrolled
+   users behind a challenge + `/login/2fa`; frontend now completes the challenge
+   via an HttpOnly challenge cookie + `<TwoFactorPrompt>`).
 9. **Fix MongoDB regex injection** (A03-1) — `regexp.QuoteMeta(query)` or
    switch to `$text` index. 1-line fix.
 10. **Bump Go toolchain to 1.25.10 + upgrade pgx + gin-contrib/cors** (A06)
@@ -622,12 +638,13 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
     every service. ~half a day across 14 services.
 11. **Upgrade .NET vulnerable packages** in `inventory-service` and
     `payment-service`. ~2 hours.
-12. **Auth + sanitisation on `/api/upload`** (B01) — require session +
-    whitelist `folder` values. ~1 hour.
+12. ~~**Auth + sanitisation on `/api/upload`** (B01)~~ — DONE (JWT + role check
+    from the HttpOnly cookie, `folder` allowlist, MIME-derived extension).
 
 ### P2 — Soon
 
-13. **Disable SVG serving or sandbox it** (B02).
+13. ~~**Disable SVG serving or sandbox it** (B02)~~ — DONE (SVG dropped from
+    MIME map; unknown types served as attachment + nosniff).
 14. **Require 2FA encryption key in production** (A02-3) — fail fast if
     `ENVIRONMENT=production` and key empty.
 15. **Apply `SecurityHeaders` middleware in every service** (A05-3, A02-5).
@@ -638,7 +655,8 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
 19. **Add security-event Prometheus alerts** (A09-1).
 20. **Bump bcrypt cost to 12** (A02-2).
 21. **Bump password minimum length to 12 + denylist** (A04-4).
-22. **Move JWT to HttpOnly Secure cookie via Next.js BFF pattern** (B03).
+22. ~~**Move JWT to HttpOnly Secure cookie via Next.js BFF pattern** (B03)~~ —
+    DONE (cookie + token-injecting `/proxy` BFF Route Handler).
 23. **Remove default Postgres/Redis passwords in `docker-compose.yml`**
     (A04-2).
 

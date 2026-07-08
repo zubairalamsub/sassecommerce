@@ -27,12 +27,16 @@ async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { body, tenantId, token, headers: extraHeaders, ...fetchOptions } = options;
+  // `token` is intentionally ignored (B03): the JWT is no longer held in the
+  // browser. The BFF proxy (src/app/proxy/[service]/[...path]) injects
+  // Authorization from the HttpOnly cookie. Call sites still pass `token` as an
+  // "is authenticated" signal; we accept and discard it here.
+  const { body, tenantId, token: _token, headers: extraHeaders, ...fetchOptions } = options;
+  void _token;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(extraHeaders as Record<string, string>),
   };
 
@@ -41,6 +45,8 @@ async function request<T>(
   const res = await fetch(url, {
     ...fetchOptions,
     headers,
+    // Send the HttpOnly auth cookie on same-origin proxy calls.
+    credentials: 'same-origin',
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -53,31 +59,17 @@ async function request<T>(
   return res.json();
 }
 
-// Reads the JWT persisted by the zustand auth store. Direct localStorage
-// access (rather than importing the store) avoids a circular import:
-// stores/auth.ts already imports from this module.
-function getStoredAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem('auth-storage');
-    if (!raw) return null;
-    return JSON.parse(raw)?.state?.token ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // Image Upload (Next.js API route, staff-only — requires a valid session)
-// Returns relative paths like "products/abc123.jpg" — use mediaUrl() to build display URLs
+// Returns relative paths like "products/abc123.jpg" — use mediaUrl() to build display URLs.
+// Auth is carried by the HttpOnly cookie (B03); the route verifies it server-side.
 export async function uploadImages(files: File[], folder = 'products'): Promise<string[]> {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file));
   formData.append('folder', folder);
-  const token = getStoredAuthToken();
   const res = await fetch('/api/upload', {
     method: 'POST',
     body: formData,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'same-origin',
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Upload failed' }));

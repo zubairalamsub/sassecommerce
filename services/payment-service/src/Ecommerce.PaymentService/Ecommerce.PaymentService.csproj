@@ -25,4 +25,20 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      GHSA-rvv3-g6hj-g44x — AutoMapper recursive-mapping DoS (StackOverflow on
+      deeply-nested object graphs). Accepted risk, not upgraded:
+        * This service maps only flat, internally-produced DTOs (see
+          Mappings/MappingProfile.cs) — no attacker-controlled nested graphs
+          reach the mapper.
+        * The only patched line (AutoMapper >= 15.1.1) is the commercial
+          AutoMapper build, which adds a license-key check and forces
+          Microsoft.IdentityModel.* to 8.14 (a JWT-stack version cascade).
+      Revisit if AutoMapper is bumped or if the mapper starts handling
+      externally-shaped input. Scoped to this one advisory only.
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
+  </ItemGroup>
+
 </Project>

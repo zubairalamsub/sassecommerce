@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Eye, EyeOff } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, type AuthUser } from '@/stores/auth';
 import { ApiError } from '@/lib/api';
+import { TwoFactorPrompt } from '@/components/auth/two-factor-prompt';
 
 export default function PlatformLoginPage() {
   const router = useRouter();
@@ -15,6 +16,15 @@ export default function PlatformLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(false);
+
+  function completeLogin(user: AuthUser) {
+    if (user.role === 'super_admin') {
+      router.push('/platform/dashboard');
+    } else {
+      setError('This portal is for platform administrators only');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,11 +33,11 @@ export default function PlatformLoginPage() {
 
     try {
       const result = await login(email, password, '');
-      if (result.user.role === 'super_admin') {
-        router.push('/platform/dashboard');
-      } else {
-        setError('This portal is for platform administrators only');
+      if ('twoFactorRequired' in result) {
+        setTwoFactor(true);
+        return;
       }
+      completeLogin(result.user);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || 'Invalid credentials');
@@ -55,6 +65,9 @@ export default function PlatformLoginPage() {
 
         {/* Card */}
         <div className="rounded-xl border border-gray-800 bg-gray-900 p-8 shadow-2xl">
+          {twoFactor ? (
+            <TwoFactorPrompt onVerified={completeLogin} tone="dark" />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="rounded-lg bg-red-900/30 border border-red-800 px-4 py-3 text-sm text-red-400">
@@ -109,7 +122,9 @@ export default function PlatformLoginPage() {
               {loading ? 'Signing in...' : 'Sign in to Platform'}
             </button>
           </form>
+          )}
 
+          {!twoFactor && (
           <div className="mt-4 rounded-lg bg-gray-800 px-4 py-3 text-xs text-gray-400">
             <p className="mb-2 font-medium text-gray-300">Demo credentials:</p>
             <div className="flex items-center justify-between">
@@ -123,6 +138,7 @@ export default function PlatformLoginPage() {
               </button>
             </div>
           </div>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-600">

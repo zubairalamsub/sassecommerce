@@ -25,13 +25,20 @@ export interface AuthUser {
   updated_at: string;
 }
 
+// login()/verifyTwoFactor() resolve to either a completed session or a signal
+// that a second factor is still required (A04-3).
+export type LoginResult =
+  | { user: AuthUser; token: string }
+  | { twoFactorRequired: true };
+
 interface AuthState {
   user: AuthUser | null;
   token: string | null;
   tenantId: string | null;
   setAuth: (user: AuthUser, token: string, tenantId: string | null) => void;
-  login: (email: string, password: string, tenantId: string) => Promise<{ user: AuthUser; token: string }>;
-  register: (data: { email: string; username: string; password: string; first_name: string; last_name: string; phone?: string }, tenantId: string) => Promise<{ user: AuthUser; token: string }>;
+  login: (email: string, password: string, tenantId: string) => Promise<LoginResult>;
+  verifyTwoFactor: (code: string) => Promise<{ user: AuthUser; token: string }>;
+  register: (data: { email: string; username: string; password: string; first_name: string; last_name: string; phone?: string }, tenantId: string) => Promise<LoginResult>;
   logout: () => void;
   isAuthenticated: () => boolean;
   hasRole: (role: UserRole) => boolean;
@@ -49,6 +56,45 @@ const ROLE_LEVEL: Record<UserRole, number> = {
   guest: 0,
 };
 
+// B03: the real JWT lives in an HttpOnly cookie the browser can't read. The
+// store only keeps this non-secret marker in `token` so existing UI auth-guards
+// (`if (!token)`, `user && token`) keep working. It is NOT a credential and is
+// never sent as one — the BFF proxy injects the real token from the cookie.
+const SESSION_TOKEN = 'cookie';
+
+// Normalises a user payload from a server auth route into an AuthUser.
+function toAuthUser(raw: Record<string, unknown>, fallbackTenant: string | null): AuthUser {
+  return {
+    ...(raw as unknown as AuthUser),
+    tenant_id: (raw.tenant_id as string) || fallbackTenant,
+    role: raw.role as UserRole,
+  };
+}
+
+// Establishes a session by POSTing credentials to the server login route, which
+// calls the user-service and sets the JWT as an HttpOnly cookie. Returns the
+// (non-secret) user, or a 2FA-required signal when the account is enrolled in
+// two-factor auth. Throws ApiError on failure.
+async function serverLogin(
+  email: string,
+  password: string,
+  tenantId: string,
+): Promise<{ user: AuthUser } | { twoFactorRequired: true }> {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, password, tenant_id: tenantId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, err.error || 'Login failed', err);
+  }
+  const data = await res.json();
+  if (data.twoFactorRequired) return { twoFactorRequired: true };
+  return { user: toAuthUser(data.user, tenantId) };
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -59,37 +105,49 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email, password, tenantId) => {
         try {
-          const res = await authApi.login({ tenant_id: tenantId, email, password }, tenantId);
-          const authUser: AuthUser = {
-            ...res.user,
-            tenant_id: res.user.tenant_id || tenantId,
-            role: res.user.role as UserRole,
-          };
-          set({ user: authUser, token: res.token, tenantId: authUser.tenant_id });
-          return { user: authUser, token: res.token };
+          const result = await serverLogin(email, password, tenantId);
+          if ('twoFactorRequired' in result) return result;
+          set({ user: result.user, token: SESSION_TOKEN, tenantId: result.user.tenant_id });
+          return { user: result.user, token: SESSION_TOKEN };
         } catch {
           // Backend auth failed or unreachable — fall back to demo login
+          // (also cookie-based via /api/auth/demo-token).
           const demo = await demoLogin(email, password);
           if (demo) {
-            set({ user: demo.user, token: demo.token, tenantId: demo.user.tenant_id });
+            set({ user: demo.user, token: SESSION_TOKEN, tenantId: demo.user.tenant_id });
             return demo;
           }
           throw new Error('Invalid email or password');
         }
       },
 
+      // Completes a 2FA-gated login: submits the code to the server route, which
+      // validates it against the challenge cookie and sets the auth cookie.
+      verifyTwoFactor: async (code) => {
+        const res = await fetch('/api/auth/login/2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new ApiError(res.status, err.error || 'Invalid code', err);
+        }
+        const data = await res.json();
+        const authUser = toAuthUser(data.user, get().tenantId ?? DEFAULT_TENANT_ID);
+        set({ user: authUser, token: SESSION_TOKEN, tenantId: authUser.tenant_id });
+        return { user: authUser, token: SESSION_TOKEN };
+      },
+
       register: async (data, tenantId) => {
         try {
-          const user = await authApi.register({ ...data, tenant_id: tenantId }, tenantId);
-          // After registration, log in to get token
-          const loginRes = await authApi.login({ tenant_id: tenantId, email: data.email, password: data.password }, tenantId);
-          const authUser: AuthUser = {
-            ...loginRes.user,
-            tenant_id: loginRes.user.tenant_id || tenantId,
-            role: loginRes.user.role as UserRole,
-          };
-          set({ user: authUser, token: loginRes.token, tenantId: authUser.tenant_id });
-          return { user: authUser, token: loginRes.token };
+          await authApi.register({ ...data, tenant_id: tenantId }, tenantId);
+          // After registration, establish the session (sets the HttpOnly cookie).
+          const result = await serverLogin(data.email, data.password, tenantId);
+          if ('twoFactorRequired' in result) return result;
+          set({ user: result.user, token: SESSION_TOKEN, tenantId: result.user.tenant_id });
+          return { user: result.user, token: SESSION_TOKEN };
         } catch (err) {
           // If API is unreachable, create a demo user
           if (err instanceof ApiError) throw err;
@@ -109,13 +167,18 @@ export const useAuthStore = create<AuthState>()(
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
-          const token = 'demo-new-token-' + Date.now();
-          set({ user: newUser, token, tenantId });
-          return { user: newUser, token };
+          // Offline demo user — no server session/cookie exists for it.
+          set({ user: newUser, token: SESSION_TOKEN, tenantId });
+          return { user: newUser, token: SESSION_TOKEN };
         }
       },
 
-      logout: () => set({ user: null, token: null, tenantId: null }),
+      logout: () => {
+        // Clear the HttpOnly cookie server-side (best effort); local state is
+        // cleared regardless of the request outcome.
+        void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+        set({ user: null, token: null, tenantId: null });
+      },
       isAuthenticated: () => !!get().token,
       hasRole: (role) => {
         const user = get().user;
@@ -136,15 +199,17 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       merge: (persisted, current) => {
-        const merged = { ...current, ...(persisted as object) };
-        // Clear stale non-JWT tokens (plain strings like "demo-admin-token-t1")
-        const tok = (merged as AuthState).token;
-        if (tok && tok.split('.').length !== 3) {
-          (merged as AuthState).token = null;
-          (merged as AuthState).user = null;
-          (merged as AuthState).tenantId = null;
+        const merged = { ...current, ...(persisted as object) } as AuthState;
+        // Post-B03 the only valid persisted token is the cookie-session marker.
+        // Anything else — real JWTs or demo strings left in localStorage by
+        // older builds — is stale and, more importantly, must not be treated as
+        // a live session, since the real credential now lives in the cookie.
+        if (merged.token && merged.token !== SESSION_TOKEN) {
+          merged.token = null;
+          merged.user = null;
+          merged.tenantId = null;
         }
-        return merged as AuthState;
+        return merged;
       },
     },
   ),
@@ -238,15 +303,15 @@ export async function demoLogin(email: string, password: string): Promise<{ user
   const entry = DEMO_USERS[email];
   if (!entry || entry.password !== password) return null;
 
-  // The server route re-validates the credentials against its own allowlist
-  // and derives the JWT claims (user id, tenant, role) server-side; it is
-  // disabled entirely in production builds.
+  // The server route re-validates the credentials against its own allowlist,
+  // derives the JWT claims (user id, tenant, role) server-side, and sets the
+  // JWT as an HttpOnly cookie (never returned to JS). Disabled in production.
   const res = await fetch('/api/auth/demo-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) return null;
-  const data = await res.json();
-  return { user: entry.user, token: data.token };
+  return { user: entry.user, token: SESSION_TOKEN };
 }

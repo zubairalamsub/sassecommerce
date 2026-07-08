@@ -223,6 +223,8 @@ func runMigrations(db *gorm.DB) error {
 		&models.PasswordResetToken{},
 		&models.WishlistItem{},
 		&models.LoginAttempt{},
+		&models.TwoFactorSecret{},
+		&models.TwoFactorBackupCode{},
 	)
 }
 

@@ -18,11 +18,16 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
-    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/Ecommerce.PaymentService/Ecommerce.PaymentService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Mirrors the src project's accepted-risk suppression for the transitive
+         AutoMapper advisory. See Ecommerce.PaymentService.csproj for rationale. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
   </ItemGroup>
 
 </Project>

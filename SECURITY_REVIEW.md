@@ -313,11 +313,15 @@ CVEs) since the fix is a single toolchain bump.
   `Login()` issues a full access token immediately on password match. The
   `twoFactorService` has a "challenge token" helper but `Login()` never
   calls it. Users who have enabled 2FA are not actually challenged.
-- **Status:** OPEN
-- **Fix:** In `Login()`, after password verify, check
-  `twoFactorService.IsEnabled(userID)`. If enabled, return a short-lived
-  challenge JWT (`purpose=2fa-challenge`) and require the client to call
-  `/login/2fa` with a TOTP/backup code before issuing the access token.
+- **Status:** FIXED — the login endpoint calls `LoginWithSession`, which checks
+  `twoFactor.IsEnabled` after password verify and, for enrolled users, returns a
+  short-lived challenge token instead of credentials; `/api/v1/auth/login/2fa`
+  (`VerifyTwoFactorChallenge`) completes it. The frontend now handles this end
+  to end: the BFF `/api/auth/login` keeps the challenge token in an HttpOnly
+  cookie and returns `twoFactorRequired`, `/api/auth/login/2fa` completes it, and
+  the login pages render a `<TwoFactorPrompt>`. (Fixing this also uncovered that
+  the BFF login route read the token from the wrong response-envelope level, so
+  real backend login was broken independent of 2FA — also fixed.)
 
 #### A04-4 (LOW): Password minimum length is 8 (industry minimum)
 - **Where:** `services/user-service/internal/models/user.go:104` —
@@ -624,9 +628,9 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
 7. **Invalidate refresh tokens on password change/reset/2FA enable**
    (A01-2, A07-1) — add `refreshTokenRepo.RevokeAllForUser` calls; add
    refresh-token rotation. ~half a day.
-8. **Enforce 2FA in the login flow** (A04-3) — wire the existing
-   `twoFactorService.IsEnabled` check into `Login()`; add `/login/2fa`
-   handler.
+8. ~~**Enforce 2FA in the login flow** (A04-3)~~ — DONE (backend gates enrolled
+   users behind a challenge + `/login/2fa`; frontend now completes the challenge
+   via an HttpOnly challenge cookie + `<TwoFactorPrompt>`).
 9. **Fix MongoDB regex injection** (A03-1) — `regexp.QuoteMeta(query)` or
    switch to `$text` index. 1-line fix.
 10. **Bump Go toolchain to 1.25.10 + upgrade pgx + gin-contrib/cors** (A06)

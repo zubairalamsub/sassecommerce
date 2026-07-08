@@ -57,8 +57,12 @@ Third remediation pass on the same branch (one commit per finding):
 | A08-2 no container image signing (MEDIUM) | **FIXED** | deploy.yml cosign-signs every pushed image by digest (keyless/OIDC, Rekor-logged); cluster-side verifyImages policy still recommended |
 
 Still open: A08-3 (broader CI integrity review — e.g. pinning actions by
-SHA), B03 (JWT in localStorage — needs a Next.js BFF/HttpOnly-cookie
-refactor), and the tenant-isolation cross-check follow-up.
+SHA). B03 (JWT in localStorage) is now **FIXED**: the token moved to an
+HttpOnly, SameSite=Lax cookie and the transparent `/proxy` rewrite became a
+BFF Route Handler that injects the credential server-side (no JWT reachable
+from JS). B01/B02 (`/api/upload` auth + folder allowlist; `/api/media` SVG
+handling) were already fixed. The tenant-isolation cross-check is complete
+(16/16 services; frontend BFF fixed).
 
 ---
 
@@ -478,7 +482,9 @@ See **Dependency Vulnerability Tables** below.
 
 ### B01 (HIGH): `/api/upload` Next.js route is unauthenticated and accepts caller-controlled `folder`
 - **Where:** `frontend/src/app/api/upload/route.ts:9-55`
-- **Status:** OPEN
+- **Status:** FIXED — the route now requires a verified JWT (from the HttpOnly
+  cookie) with an uploader role, whitelists `folder` to `products|avatars|tenants`,
+  derives the extension from the server-checked MIME type, and caps size at 5 MB.
 - **What:** Anyone can `POST /api/upload` with arbitrary files (only
   MIME-type checked — client-controlled). The `folder` param is joined into
   `path.join(STORAGE_PATH, folder)`. `path.join("/app/media", "../../etc")`
@@ -490,7 +496,9 @@ See **Dependency Vulnerability Tables** below.
 
 ### B02 (MEDIUM): `/api/media/[...path]` serves SVG with `image/svg+xml` MIME
 - **Where:** `frontend/src/app/api/media/[...path]/route.ts:7-15`
-- **Status:** OPEN
+- **Status:** FIXED — SVG is dropped from `MIME_TYPES`; unknown types are served
+  as `application/octet-stream` with `X-Content-Type-Options: nosniff` and
+  `Content-Disposition: attachment`, so browsers won't render them in-origin.
 - **What:** Path-traversal is blocked (line 25 — `if (relativePath.includes
   ('..'))`). However, SVGs are returned with `image/svg+xml`, and SVGs can
   contain `<script>` that executes in the browser if rendered as a page (not
@@ -505,13 +513,17 @@ See **Dependency Vulnerability Tables** below.
 - **Where:** `frontend/src/stores/auth.ts:51-149` — Zustand `persist`
   middleware with `name: 'auth-storage'`. Default zustand storage is
   `localStorage`.
-- **Status:** OPEN — informational. Trade-off vs HttpOnly cookies.
-- **What:** Any XSS (e.g. via B02) can steal the JWT. Mitigated by short
-  expiry (24h) but not by `HttpOnly`.
-- **Fix:** Long-term, move to HttpOnly Secure SameSite=Strict cookies set
-  by a Next.js route (BFF pattern). The current architecture is the
-  industry-common Bearer-token-in-localStorage pattern; this is a known
-  acceptable trade-off if XSS surface is small.
+- **Status:** FIXED — the JWT was moved to an HttpOnly, SameSite=Lax cookie set
+  by the login/demo-token route handlers. The Zustand store now persists only a
+  non-secret session marker in `token`; the JWT is not in localStorage and not
+  readable from `document.cookie`.
+- **What:** Any XSS (e.g. via B02) could previously steal the JWT from
+  localStorage. Now no JWT is reachable from JavaScript.
+- **Fix (done):** Login/logout/demo-token route handlers set/clear the HttpOnly
+  cookie; the `/proxy` BFF Route Handler injects the credential from that cookie
+  server-side (and ignores any client-supplied Authorization). `secure` is on
+  outside development; consider SameSite=Strict if no cross-site top-level POST
+  flows are needed.
 
 ### B04 (LOW): Verbose error responses include error.Error() details
 - **Where:** `auth_handler.go:43-47, 89-91, 138-143`, many other handlers.
@@ -622,12 +634,13 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
     every service. ~half a day across 14 services.
 11. **Upgrade .NET vulnerable packages** in `inventory-service` and
     `payment-service`. ~2 hours.
-12. **Auth + sanitisation on `/api/upload`** (B01) — require session +
-    whitelist `folder` values. ~1 hour.
+12. ~~**Auth + sanitisation on `/api/upload`** (B01)~~ — DONE (JWT + role check
+    from the HttpOnly cookie, `folder` allowlist, MIME-derived extension).
 
 ### P2 — Soon
 
-13. **Disable SVG serving or sandbox it** (B02).
+13. ~~**Disable SVG serving or sandbox it** (B02)~~ — DONE (SVG dropped from
+    MIME map; unknown types served as attachment + nosniff).
 14. **Require 2FA encryption key in production** (A02-3) — fail fast if
     `ENVIRONMENT=production` and key empty.
 15. **Apply `SecurityHeaders` middleware in every service** (A05-3, A02-5).
@@ -638,7 +651,8 @@ roughly: P0 fix this week, P1 fix this sprint, P2 next sprint.
 19. **Add security-event Prometheus alerts** (A09-1).
 20. **Bump bcrypt cost to 12** (A02-2).
 21. **Bump password minimum length to 12 + denylist** (A04-4).
-22. **Move JWT to HttpOnly Secure cookie via Next.js BFF pattern** (B03).
+22. ~~**Move JWT to HttpOnly Secure cookie via Next.js BFF pattern** (B03)~~ —
+    DONE (cookie + token-injecting `/proxy` BFF Route Handler).
 23. **Remove default Postgres/Redis passwords in `docker-compose.yml`**
     (A04-2).
 

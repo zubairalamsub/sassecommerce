@@ -48,11 +48,11 @@ All 16 backend services are fixed on branch `claude/remaining-tasks-x3aeu2`
 from the verified JWT, request DTOs no longer bind `tenant_id`/`user_id`,
 by-id repository lookups carry a tenant predicate (404 cross-tenant), and
 staff mutations are gated with `RequireRole`. The 12 Go services were each
-built and tested green. The 2 .NET services (payment, inventory) were edited
-to the same pattern but **not compiled here** (no dotnet SDK) — the per-service
-CI must run `dotnet build`/`dotnet test` to confirm. The frontend BFF item
-remains open and is tracked as B03 (JWT → HttpOnly cookie / server-side
-tenant enforcement).
+built and tested green. The 2 .NET services (payment, inventory) have since been
+compile-verified locally (payment 94/94, inventory 5/5 tests green). The
+frontend BFF item (B03) is now **fixed**: the JWT moved to an HttpOnly cookie
+and the transparent proxy became a token-injecting BFF Route Handler — see the
+frontend BFF section below.
 
 ## Status legend
 ✅ fixed on branch · ⬜ open
@@ -162,9 +162,17 @@ Auth global, tenant from query/body. `GET /recommendations/user/:id` leaks
 per-user behavior cross-tenant; `POST /train` trusts body tenant (resource
 abuse); `GetTrainingJob` unscoped. Lower data sensitivity. Fix: JWT tenant.
 
-## frontend BFF — ⬜ OPEN (LOW)
-`/api/upload` ignores tenant (files land in shared folders, not partitioned);
-`/api/media` serves unpartitioned public media. No cross-tenant read of private
-data, but no tenant partitioning either. demo-token route is CLEAN. The core
-issue is the direct `/proxy/{service}` rewrite forwarding a client `X-Tenant-ID`
-— see B03 (BFF refactor) for the durable fix.
+## frontend BFF — ✅ FIXED (was LOW)
+The core issue — the transparent `/proxy/{service}` rewrite that forwarded a
+client-held JWT (from localStorage) and a client `X-Tenant-ID` — is resolved.
+The rewrite is now a BFF Route Handler (`src/app/proxy/[service]/[...path]`)
+that injects the JWT from an **HttpOnly cookie** set at login; the browser no
+longer holds or sends the token (no localStorage, no JS-readable cookie), and
+the proxy trusts only the cookie for the credential (a client-supplied
+`Authorization` is stripped). Backends already derive the tenant from the
+verified JWT, so the forwarded `X-Tenant-ID` is only honoured for anonymous
+public reads. `/api/upload` (auth + folder allowlist, B01) and `/api/media`
+(SVG excluded + nosniff/attachment, B02) were already fixed.
+Residual (minor, organizational): uploaded media is not physically partitioned
+by tenant on disk — filenames are random so there is no cross-tenant clobber and
+product media is public by design; deferred.

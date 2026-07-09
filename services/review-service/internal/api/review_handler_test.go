@@ -307,7 +307,10 @@ func TestHandler_GetProductReviews_Success(t *testing.T) {
 	mockService.On("GetProductReviews", mock.Anything, "tenant-1", "product-1", 1, 20).Return(reviews, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1?tenant_id=tenant-1", nil)
+	// Tenant comes from the JWT context, not a query param. A stray ?tenant_id
+	// must be ignored so it cannot be used to read another tenant's reviews.
+	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1?tenant_id=attacker", nil)
+	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -317,15 +320,17 @@ func TestHandler_GetProductReviews_Success(t *testing.T) {
 	assert.Len(t, result.Data, 1)
 }
 
-func TestHandler_GetProductReviews_MissingTenantID(t *testing.T) {
+func TestHandler_GetProductReviews_Unauthenticated(t *testing.T) {
 	mockService := new(MockReviewService)
 	router := setupRouter(mockService)
 
+	// No JWT context; a query ?tenant_id must not substitute for authentication.
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	mockService.AssertNotCalled(t, "GetProductReviews", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 // === UpdateReview Handler Tests ===
@@ -566,7 +571,9 @@ func TestHandler_GetProductSummary_Success(t *testing.T) {
 	mockService.On("GetProductSummary", mock.Anything, "tenant-1", "product-1").Return(summary, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary?tenant_id=tenant-1", nil)
+	// A stray ?tenant_id=attacker must be ignored in favour of the JWT tenant.
+	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary?tenant_id=attacker", nil)
+	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -577,13 +584,14 @@ func TestHandler_GetProductSummary_Success(t *testing.T) {
 	assert.Equal(t, 10, result.TotalReviews)
 }
 
-func TestHandler_GetProductSummary_MissingTenantID(t *testing.T) {
+func TestHandler_GetProductSummary_Unauthenticated(t *testing.T) {
 	mockService := new(MockReviewService)
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	mockService.AssertNotCalled(t, "GetProductSummary", mock.Anything, mock.Anything, mock.Anything)
 }

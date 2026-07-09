@@ -83,9 +83,12 @@ func (h *ReviewHandler) GetReview(c *gin.Context) {
 
 func (h *ReviewHandler) GetProductReviews(c *gin.Context) {
 	productID := c.Param("productId")
-	tenantID := c.Query("tenant_id")
+	// Tenant is derived from the verified JWT, never client input. These reads
+	// sit behind global Auth (see main.go), so a caller-supplied ?tenant_id must
+	// not be trusted — that would let a tenant-A user read tenant-B reviews.
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 
@@ -118,9 +121,12 @@ func (h *ReviewHandler) GetProductReviews(c *gin.Context) {
 
 func (h *ReviewHandler) GetUserReviews(c *gin.Context) {
 	userID := c.Param("userId")
-	tenantID := c.Query("tenant_id")
+	// Tenant is derived from the verified JWT, never client input. These reads
+	// sit behind global Auth (see main.go), so a caller-supplied ?tenant_id must
+	// not be trusted — that would let a tenant-A user read tenant-B reviews.
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 
@@ -291,9 +297,12 @@ func (h *ReviewHandler) RespondToReview(c *gin.Context) {
 
 func (h *ReviewHandler) GetProductSummary(c *gin.Context) {
 	productID := c.Param("productId")
-	tenantID := c.Query("tenant_id")
+	// Tenant is derived from the verified JWT, never client input. These reads
+	// sit behind global Auth (see main.go), so a caller-supplied ?tenant_id must
+	// not be trusted — that would let a tenant-A user read tenant-B reviews.
+	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "tenant_id query parameter is required"})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 

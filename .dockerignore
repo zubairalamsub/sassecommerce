@@ -1,0 +1,41 @@
+# Root build context is used by all 14 Go service images (context: .).
+# Everything below is never needed inside an image build, so excluding it
+# keeps the context small and stops unrelated changes from busting caches.
+
+# VCS / CI / tooling
+.git
+.github
+.claude
+.gitignore
+
+# Docs (large, not needed at build time)
+*.md
+**/*.md
+
+# Secrets / local env (never bake into an image)
+.env
+**/.env
+**/.env.local
+
+# Node / frontend artifacts (frontend builds from ./frontend with its own context)
+**/node_modules
+frontend/.next
+frontend/playwright-report
+frontend/test-results
+frontend/coverage
+
+# Go build outputs / committed binaries
+services/*/server
+**/*.test
+**/*.out
+
+# Test & coverage reports
+**/test-reports
+**/coverage
+**/coverage.html
+**/coverage.out
+
+# .NET build outputs (inventory/payment build from their own contexts, but
+# keep these out of the root context too for safety)
+**/bin
+**/obj

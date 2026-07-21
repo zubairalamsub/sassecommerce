@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL - Primary database for transactional data
   postgres:
@@ -18,9 +16,10 @@ services:
       - ecommerce-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # MongoDB - Document database for products, reviews
   mongodb:
@@ -34,9 +33,10 @@ services:
       - ecommerce-network
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   # Redis - Cache and session storage
   redis:
@@ -51,9 +51,10 @@ services:
       - ecommerce-network
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 5s
 
   # Zookeeper - Required for Kafka
   zookeeper:
@@ -88,9 +89,10 @@ services:
       - ecommerce-network
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   # Elasticsearch - Search engine
   elasticsearch:
@@ -109,9 +111,10 @@ services:
       - ecommerce-network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
   # Tenant Service (Go)
   tenant-service:
@@ -134,7 +137,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
     depends_on:
       postgres:
@@ -569,6 +571,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: ecommerce-prometheus
+    profiles: ["monitoring"]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -588,6 +591,7 @@ services:
   grafana:
     image: grafana/grafana:10.4.0
     container_name: ecommerce-grafana
+    profiles: ["monitoring"]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
@@ -609,6 +613,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.27.0
     container_name: ecommerce-alertmanager
+    profiles: ["monitoring"]
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
@@ -625,6 +630,7 @@ services:
   loki:
     image: grafana/loki:2.9.6
     container_name: ecommerce-loki
+    profiles: ["monitoring"]
     command: -config.file=/etc/loki/loki.yml
     ports:
       - "3100:3100"
@@ -639,6 +645,7 @@ services:
   promtail:
     image: grafana/promtail:2.9.6
     container_name: ecommerce-promtail
+    profiles: ["monitoring"]
     command: -config.file=/etc/promtail/promtail.yml
     volumes:
       - ./infrastructure/monitoring/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
@@ -656,6 +663,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: ecommerce-postgres-exporter
+    profiles: ["monitoring"]
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
     ports:
@@ -671,6 +679,7 @@ services:
   mongodb-exporter:
     image: percona/mongodb_exporter:0.40.0
     container_name: ecommerce-mongodb-exporter
+    profiles: ["monitoring"]
     command:
       - "--mongodb.uri=mongodb://mongodb:27017"
       - "--collect-all"
@@ -688,6 +697,7 @@ services:
   redis-exporter:
     image: oliver006/redis_exporter:v1.58.0
     container_name: ecommerce-redis-exporter
+    profiles: ["monitoring"]
     environment:
       REDIS_ADDR: "redis://redis:6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env (see .env.example)}
@@ -704,6 +714,7 @@ services:
   kafka-exporter:
     image: danielqsj/kafka-exporter:v1.7.0
     container_name: ecommerce-kafka-exporter
+    profiles: ["monitoring"]
     command:
       - "--kafka.server=kafka:29092"
     ports:
@@ -719,6 +730,7 @@ services:
   elasticsearch-exporter:
     image: quay.io/prometheuscommunity/elasticsearch-exporter:v1.7.0
     container_name: ecommerce-elasticsearch-exporter
+    profiles: ["monitoring"]
     command:
       - "--es.uri=http://elasticsearch:9200"
       - "--es.all"

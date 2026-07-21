@@ -1,4 +1,8 @@
-.PHONY: help up down build logs clean test
+.PHONY: help up up-monitoring down build logs clean test
+
+# Enable BuildKit + parallel image builds for every docker/compose invocation.
+export DOCKER_BUILDKIT := 1
+export COMPOSE_DOCKER_CLI_BUILD := 1
 
 # Default target
 help:
@@ -10,7 +14,8 @@ help:
 	@echo "  make infra-logs       - View infrastructure logs"
 	@echo ""
 	@echo "Services:"
-	@echo "  make up               - Start all services"
+	@echo "  make up               - Start app services + core infra (no monitoring stack)"
+	@echo "  make up-monitoring    - Start everything incl. Prometheus/Grafana/exporters"
 	@echo "  make down             - Stop all services"
 	@echo "  make build            - Build all services"
 	@echo "  make rebuild          - Rebuild all services from scratch"
@@ -55,9 +60,14 @@ infra-down:
 infra-logs:
 	docker-compose logs -f postgres mongodb redis kafka elasticsearch
 
-# All services
+# All services (monitoring stack is gated behind the "monitoring" profile,
+# so a normal dev bring-up skips Prometheus/Grafana/Loki/exporters).
 up:
 	docker-compose up -d
+
+# Full stack including the monitoring + exporter profile.
+up-monitoring:
+	docker-compose --profile monitoring up -d
 
 down:
 	docker-compose down

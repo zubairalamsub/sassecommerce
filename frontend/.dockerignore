@@ -1,0 +1,13 @@
+# Keep the frontend build context small and deterministic. The Dockerfile
+# runs `npm ci` inside the image, so host node_modules/.next must not leak in
+# (they also bust the COPY cache layer on every build).
+node_modules
+.next
+.git
+npm-debug.log*
+coverage
+playwright-report
+test-results
+e2e/.auth
+Dockerfile
+.dockerignore

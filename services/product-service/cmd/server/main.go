@@ -57,6 +57,13 @@ func main() {
 	productRepo := repository.NewProductRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 
+	// Ensure MongoDB indexes exist for the hot read paths (idempotent).
+	idxCtx, cancelIdx := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := productRepo.EnsureIndexes(idxCtx); err != nil {
+		logger.WithError(err).Warn("Failed to ensure product indexes; reads may be slow")
+	}
+	cancelIdx()
+
 	// Initialize Kafka consumer for inventory events
 	kafkaConsumer := messaging.NewEventConsumer(kafkaBrokers, "product-service", productRepo, logger)
 	ctx, cancelConsumer := context.WithCancel(context.Background())

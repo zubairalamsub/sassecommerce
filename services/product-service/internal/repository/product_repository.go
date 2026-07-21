@@ -28,6 +28,7 @@ type ProductRepository interface {
 	UpdateStock(ctx context.Context, tenantID, productID string, quantity int, inStock bool) error
 	AddImage(ctx context.Context, id, imageURL string) error
 	RemoveImage(ctx context.Context, id, imageURL string) error
+	EnsureIndexes(ctx context.Context) error
 }
 
 type productRepository struct {
@@ -39,6 +40,25 @@ func NewProductRepository(db *mongo.Database) ProductRepository {
 	return &productRepository{
 		collection: db.Collection("products"),
 	}
+}
+
+// EnsureIndexes creates the indexes backing the hot read paths. Without these,
+// every storefront read (List/ListByCategory/GetBySKU/Search) is a full
+// collection scan. Safe to call on every startup — CreateMany is idempotent
+// for index specs that already exist.
+func (r *productRepository) EnsureIndexes(ctx context.Context) error {
+	indexes := []mongo.IndexModel{
+		// List: filter by tenant_id + deleted_at, sort by created_at desc.
+		{Keys: bson.D{{Key: "tenant_id", Value: 1}, {Key: "deleted_at", Value: 1}, {Key: "created_at", Value: -1}}},
+		// ListByCategory.
+		{Keys: bson.D{{Key: "tenant_id", Value: 1}, {Key: "category_id", Value: 1}, {Key: "deleted_at", Value: 1}}},
+		// GetBySKU / SKUExists.
+		{Keys: bson.D{{Key: "tenant_id", Value: 1}, {Key: "sku", Value: 1}}},
+		// Status filters.
+		{Keys: bson.D{{Key: "tenant_id", Value: 1}, {Key: "status", Value: 1}}},
+	}
+	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	return err
 }
 
 // Create creates a new product

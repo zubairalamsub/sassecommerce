@@ -35,7 +35,7 @@ type Tenant struct {
 	ID          string       `gorm:"primaryKey" json:"id"`
 	Name        string       `gorm:"not null" json:"name"`
 	Slug        string       `gorm:"uniqueIndex;not null" json:"slug"`
-	Domain      string       `json:"domain,omitempty"`
+	Domain      string       `gorm:"index" json:"domain,omitempty"`
 	Email       string       `gorm:"not null" json:"email"`
 	Status      TenantStatus `gorm:"not null;default:pending" json:"status"`
 	Tier        TenantTier   `gorm:"not null;default:free" json:"tier"`

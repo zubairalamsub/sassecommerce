@@ -30,7 +30,7 @@ type AuditLog struct {
 	ErrorMessage string    `gorm:"type:text" json:"error_message,omitempty"`
 	Duration     int64     `json:"duration_ms"` // Request duration in milliseconds
 
-	CreatedAt    time.Time `json:"created_at"`
+	CreatedAt    time.Time `gorm:"index" json:"created_at"`
 }
 
 // TableName specifies the table name for GORM

@@ -25,6 +25,13 @@ on:
         required: false
         type: boolean
         default: false
+      race:
+        # The race detector makes test build+run ~2-10x slower (worst for the
+        # CGO/SQLite services). Off by default for fast PR feedback; enable on a
+        # nightly/scheduled run or by passing race: true from the caller.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,14 +63,24 @@ jobs:
       - name: Start MongoDB
         if: inputs.needs-mongodb
         run: |
-          docker run -d --name mongodb -p 27017:27017 mongo:7
-          sleep 3
+          docker run -d --name mongodb -p 27017:27017 \
+            --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'" \
+            --health-interval 3s \
+            --health-timeout 3s \
+            --health-retries 15 \
+            mongo:7
+          until docker inspect --format='{{.State.Health.Status}}' mongodb 2>/dev/null | grep -q healthy; do sleep 1; done
 
       - name: Start Redis
         if: inputs.needs-redis
         run: |
-          docker run -d --name redis -p 6379:6379 redis:7-alpine
-          sleep 2
+          docker run -d --name redis -p 6379:6379 \
+            --health-cmd "redis-cli ping" \
+            --health-interval 2s \
+            --health-timeout 3s \
+            --health-retries 15 \
+            redis:7-alpine
+          until docker inspect --format='{{.State.Health.Status}}' redis 2>/dev/null | grep -q healthy; do sleep 1; done
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -92,7 +109,9 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
         run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic -timeout 120s ./...
+          RACE=""
+          if [ "${{ inputs.race }}" = "true" ]; then RACE="-race"; fi
+          go test -v $RACE -coverprofile=coverage.out -covermode=atomic -timeout 120s ./...
 
       - name: Coverage summary
         if: always()

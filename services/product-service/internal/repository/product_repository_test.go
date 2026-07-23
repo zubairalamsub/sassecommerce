@@ -1,3 +1,8 @@
+//go:build integration
+
+// This suite requires a real MongoDB. It is excluded from the default
+// `go test ./...` build and runs only under `go test -tags=integration ./...`.
+
 package repository
 
 import (
@@ -41,7 +46,7 @@ func (suite *ProductRepositoryTestSuite) SetupSuite() {
 
 	suite.client = client
 	suite.db = client.Database("product_test_db")
-	suite.repository = NewProductRepository(suite.db)
+	suite.repository = NewProductRepository(suite.db, nil)
 }
 
 func (suite *ProductRepositoryTestSuite) TearDownSuite() {

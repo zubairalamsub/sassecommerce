@@ -21,4 +21,4 @@ jobs:
     with:
       service-name: config-service
       service-path: services/config-service
-      needs-postgres: true
+      # Tests are mock-based; no Postgres container needed.

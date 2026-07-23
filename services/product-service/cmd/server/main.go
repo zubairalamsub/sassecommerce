@@ -20,6 +20,7 @@ import (
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	sharedstorage "github.com/ecommerce/shared/go/pkg/storage"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -53,9 +54,39 @@ func main() {
 	kafkaProducer := messaging.NewProducer(kafkaBrokers, logger)
 	defer kafkaProducer.Close()
 
+	// Optional Redis cache for the product read path. If REDIS_HOST is unset
+	// the service runs without caching (repo is passed a nil client).
+	var redisClient *redis.Client
+	if redisHost := getEnv("REDIS_HOST", ""); redisHost != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     redisHost + ":" + getEnv("REDIS_PORT", "6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+		})
+		pingCtx, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := redisClient.Ping(pingCtx).Err(); err != nil {
+			logger.WithError(err).Warn("Redis unavailable; continuing without product cache")
+			redisClient = nil
+		} else {
+			logger.Info("Product cache enabled (Redis)")
+		}
+		cancelPing()
+		defer func() {
+			if redisClient != nil {
+				_ = redisClient.Close()
+			}
+		}()
+	}
+
 	// Initialize repositories
-	productRepo := repository.NewProductRepository(db)
+	productRepo := repository.NewProductRepository(db, redisClient)
 	categoryRepo := repository.NewCategoryRepository(db)
+
+	// Ensure MongoDB indexes exist for the hot read paths (idempotent).
+	idxCtx, cancelIdx := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := productRepo.EnsureIndexes(idxCtx); err != nil {
+		logger.WithError(err).Warn("Failed to ensure product indexes; reads may be slow")
+	}
+	cancelIdx()
 
 	// Initialize Kafka consumer for inventory events
 	kafkaConsumer := messaging.NewEventConsumer(kafkaBrokers, "product-service", productRepo, logger)
@@ -133,17 +164,17 @@ func main() {
 
 // Config holds the application configuration
 type Config struct {
-	Port     string
-	MongoURI string
-	DBName   string
+	Port      string
+	MongoURI  string
+	DBName    string
 	JWTSecret string
 }
 
 func loadConfig() *Config {
 	return &Config{
-		Port:     getEnv("PORT", "8083"),
-		MongoURI: getEnv("MONGO_URI", "mongodb://mongodb:27017"),
-		DBName:   getEnv("DB_NAME", "product_db"),
+		Port:      getEnv("PORT", "8083"),
+		MongoURI:  getEnv("MONGO_URI", "mongodb://mongodb:27017"),
+		DBName:    getEnv("DB_NAME", "product_db"),
 		JWTSecret: sharedconfig.MustGetJWTSecret(),
 	}
 }

@@ -90,3 +90,8 @@ func (m *MockProductRepository) RemoveImage(ctx context.Context, id, imageURL st
 	args := m.Called(ctx, id, imageURL)
 	return args.Error(0)
 }
+
+func (m *MockProductRepository) EnsureIndexes(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}

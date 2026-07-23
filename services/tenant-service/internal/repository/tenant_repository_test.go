@@ -29,7 +29,7 @@ func (suite *TenantRepositoryTestSuite) SetupTest() {
 	assert.NoError(suite.T(), err)
 
 	suite.db = db
-	suite.repo = NewTenantRepository(db)
+	suite.repo = NewTenantRepository(db, nil)
 }
 
 func (suite *TenantRepositoryTestSuite) TearDownTest() {

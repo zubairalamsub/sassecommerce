@@ -21,4 +21,4 @@ jobs:
     with:
       service-name: review-service
       service-path: services/review-service
-      needs-postgres: true
+      # Tests are mock-based; no Postgres container needed.

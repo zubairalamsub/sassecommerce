@@ -57,6 +57,15 @@ func main() {
 		BatchSize:    100,
 		BatchTimeout: 10 * time.Millisecond,
 		RequiredAcks: kafka.RequireOne,
+		// Async so cart mutations (AddItem/UpdateItem/RemoveItem) don't block on
+		// the broker RTT. cart-updated events are best-effort; log failures.
+		Async: true,
+		Completion: func(messages []kafka.Message, err error) {
+			if err != nil {
+				log.WithError(err).WithField("message_count", len(messages)).
+					Error("Async Kafka publish failed")
+			}
+		},
 	}
 	defer kafkaWriter.Close()
 

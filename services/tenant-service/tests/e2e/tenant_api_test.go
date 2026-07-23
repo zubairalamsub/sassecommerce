@@ -27,9 +27,9 @@ import (
 
 type E2ETestSuite struct {
 	suite.Suite
-	router       *gin.Engine
-	db           *gorm.DB
-	logger       *logrus.Logger
+	router          *gin.Engine
+	db              *gorm.DB
+	logger          *logrus.Logger
 	createdTenantID string
 }
 
@@ -53,7 +53,7 @@ func (suite *E2ETestSuite) SetupSuite() {
 	suite.db = db
 
 	// Setup repositories
-	tenantRepo := repository.NewTenantRepository(db)
+	tenantRepo := repository.NewTenantRepository(db, nil)
 	auditRepo := repository.NewAuditRepository(db)
 
 	// Setup services with mock Kafka

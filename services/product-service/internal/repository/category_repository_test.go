@@ -1,3 +1,8 @@
+//go:build integration
+
+// This suite requires a real MongoDB. It is excluded from the default
+// `go test ./...` build and runs only under `go test -tags=integration ./...`.
+
 package repository
 
 import (

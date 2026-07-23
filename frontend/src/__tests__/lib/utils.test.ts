@@ -1,3 +1,11 @@
+/**
+ * These are pure-logic helpers (no DOM). Run them in the lighter `node`
+ * environment instead of the project-default jsdom to avoid per-file jsdom
+ * construction. NOTE: the zustand store tests deliberately stay on jsdom —
+ * they rely on localStorage (persist middleware) and @testing-library/react.
+ *
+ * @jest-environment node
+ */
 import { cn, formatCurrency, formatDate, formatDateTime, statusColor } from '@/lib/utils';
 
 describe('cn', () => {

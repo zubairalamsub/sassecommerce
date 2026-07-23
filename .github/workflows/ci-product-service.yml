@@ -22,3 +22,5 @@ jobs:
       service-name: product-service
       service-path: services/product-service
       needs-mongodb: true
+      # Include the MongoDB-backed repository suites in CI.
+      test-tags: integration

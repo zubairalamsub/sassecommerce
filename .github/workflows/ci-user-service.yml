@@ -22,4 +22,4 @@ jobs:
       service-name: user-service
       service-path: services/user-service
       go-version: '1.23'
-      needs-postgres: true
+      # Tests use in-memory SQLite; no Postgres container needed.

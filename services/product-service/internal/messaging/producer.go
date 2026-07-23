@@ -21,6 +21,16 @@ func NewProducer(brokers []string, logger *logrus.Logger) *Producer {
 	writer := &kafka.Writer{
 		Addr:     kafka.TCP(brokers...),
 		Balancer: &kafka.LeastBytes{},
+		// Async so WriteMessages returns immediately instead of blocking the
+		// request handler on the broker round-trip. Publish failures are only
+		// logged (events are best-effort), so surface them via Completion.
+		Async: true,
+		Completion: func(messages []kafka.Message, err error) {
+			if err != nil {
+				logger.WithError(err).WithField("message_count", len(messages)).
+					Error("Async Kafka publish failed")
+			}
+		},
 	}
 
 	logger.WithField("brokers", brokers).Info("Kafka producer initialized")

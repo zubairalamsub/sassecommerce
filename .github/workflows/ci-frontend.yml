@@ -1,0 +1,56 @@
+name: CI - Frontend
+
+on:
+  push:
+    branches: [master, develop]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/ci-frontend.yml'
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'frontend/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, Test & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      # The ubuntu-latest runner ships Node 20+ preinstalled, which satisfies
+      # Next.js/Jest. Print the version so failures are attributable; if the
+      # runner default ever regresses below Node 20, pin via setup-node.
+      - name: Node version
+        run: node --version && npm --version
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # Non-blocking for now: the frontend carries ~62 pre-existing lint
+      # errors, dominated by behavioral react-hooks rules
+      # (set-state-in-effect, exhaustive-deps) that need careful, UI-verified
+      # fixes — not a bulk sweep. Runs for visibility; flip to blocking once
+      # the debt is cleared.
+      - name: Lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Test
+        run: npm test -- --ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # next build only needs a syntactically valid secret present; the
+          # real value is injected at runtime. 32+ bytes to satisfy startup
+          # validation if any build-time code path reads it.
+          JWT_SECRET: ci-build-placeholder-secret-0123456789abcdef

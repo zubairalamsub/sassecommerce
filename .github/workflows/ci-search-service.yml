@@ -21,4 +21,4 @@ jobs:
     with:
       service-name: search-service
       service-path: services/search-service
-      needs-postgres: true
+      # Tests are mock-based; no Postgres container needed.

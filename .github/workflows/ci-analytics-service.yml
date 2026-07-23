@@ -21,4 +21,4 @@ jobs:
     with:
       service-name: analytics-service
       service-path: services/analytics-service
-      needs-postgres: true
+      # Tests are mock-based; no Postgres container needed.

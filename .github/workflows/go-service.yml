@@ -92,9 +92,8 @@ jobs:
         working-directory: ${{ inputs.service-path }}
         run: go mod download
 
-      - name: Build
-        working-directory: ${{ inputs.service-path }}
-        run: go build ./...
+      # No separate `go build ./...`: `go test ./...` compiles every package
+      # (including test-free ones), so build errors surface in the test step.
 
       - name: Run tests
         working-directory: ${{ inputs.service-path }}

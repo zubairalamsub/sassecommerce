@@ -21,4 +21,4 @@ jobs:
     with:
       service-name: notification-service
       service-path: services/notification-service
-      needs-postgres: true
+      # Tests are mock-based; no Postgres container needed.

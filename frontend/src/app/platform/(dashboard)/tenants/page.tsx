@@ -197,7 +197,7 @@ function TenantModal({
 // ---------------------------------------------------------------------------
 
 export default function TenantsPage() {
-  const { tenants, loading, fetchTenants, addTenant, updateTenant, deleteTenant, updateTenantStatus } = useTenantStore();
+  const { tenants, loading, fetchTenants, addTenant, updateTenant, deleteTenant } = useTenantStore();
   const [activeTab, setActiveTab] = useState<TenantStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);

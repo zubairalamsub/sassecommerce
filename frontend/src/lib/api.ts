@@ -338,17 +338,17 @@ export const orderApi = {
   addItem: (orderId: string, data: AddOrderItemRequest, tenantId: string, token?: string) =>
     request<void>('order', `/api/v1/orders/${orderId}/items`, { method: 'POST', body: data, tenantId, token }),
   get: (id: string, tenantId: string, token?: string) =>
-    request<any>('order', `/api/v1/orders/${id}`, { tenantId, token }).then(mapOrder),
+    request<unknown>('order', `/api/v1/orders/${id}`, { tenantId, token }).then(mapOrder),
   listByTenant: (tenantId: string, token?: string, page = 1, pageSize = 20) =>
-    request<any>('order', `/api/v1/tenants/${tenantId}/orders?page=${page}&page_size=${pageSize}`, { tenantId, token }).then(mapOrderList),
+    request<unknown>('order', `/api/v1/tenants/${tenantId}/orders?page=${page}&page_size=${pageSize}`, { tenantId, token }).then(mapOrderList),
   listByCustomer: (customerId: string, tenantId: string, token?: string) =>
-    request<any>('order', `/api/v1/customers/${customerId}/orders`, { tenantId, token }).then(mapOrderList),
+    request<unknown>('order', `/api/v1/customers/${customerId}/orders`, { tenantId, token }).then(mapOrderList),
   confirm: (id: string, confirmedBy: string, tenantId: string, token?: string) =>
-    request<any>('order', `/api/v1/orders/${id}/confirm`, { method: 'POST', body: { confirmed_by: confirmedBy }, tenantId, token }).then(mapOrder),
+    request<unknown>('order', `/api/v1/orders/${id}/confirm`, { method: 'POST', body: { confirmed_by: confirmedBy }, tenantId, token }).then(mapOrder),
   cancel: (id: string, reason: string, cancelledBy: string, tenantId: string, token?: string) =>
-    request<any>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId, token }).then(mapOrder),
+    request<unknown>('order', `/api/v1/orders/${id}/cancel`, { method: 'POST', body: { reason, cancelled_by: cancelledBy }, tenantId, token }).then(mapOrder),
   ship: (id: string, data: { tracking_number: string; carrier: string; shipped_by: string }, tenantId: string, token?: string) =>
-    request<any>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId, token }).then(mapOrder),
+    request<unknown>('order', `/api/v1/orders/${id}/ship`, { method: 'POST', body: data, tenantId, token }).then(mapOrder),
   /** Trigger an email receipt for an order. The backend publishes a
    *  `ReceiptRequested` event onto the order-events topic; the
    *  notification-service consumer picks it up and dispatches the email. */
@@ -554,7 +554,15 @@ export const paymentApi = {
 };
 
 // Analytics mappers — normalise API response field names to frontend types
-function mapSalesReport(raw: any): SalesReport {
+interface RawSalesReport {
+  total_revenue?: number;
+  total_orders?: number;
+  avg_order_value?: number;
+  average_order_value?: number;
+  data_points?: SalesReport['data_points'];
+}
+
+function mapSalesReport(raw: RawSalesReport): SalesReport {
   return {
     total_revenue: raw.total_revenue ?? 0,
     total_orders: raw.total_orders ?? 0,
@@ -563,10 +571,26 @@ function mapSalesReport(raw: any): SalesReport {
   };
 }
 
-function mapProductPerformance(raw: any): ProductPerformance {
+interface RawProductPerformanceItem {
+  id?: string;
+  product_id?: string;
+  name?: string;
+  product_name?: string;
+  revenue?: number;
+  units_sold?: number;
+  quantity_sold?: number;
+}
+
+interface RawProductPerformance {
+  top_products?: RawProductPerformanceItem[];
+  top_selling?: RawProductPerformanceItem[];
+  categories_breakdown?: ProductPerformance['categories_breakdown'];
+}
+
+function mapProductPerformance(raw: RawProductPerformance): ProductPerformance {
   const items = raw.top_products ?? raw.top_selling ?? [];
   return {
-    top_products: items.map((p: any) => ({
+    top_products: items.map((p) => ({
       id: p.id ?? p.product_id ?? '',
       name: p.name ?? p.product_name ?? '',
       revenue: p.revenue ?? 0,
@@ -579,11 +603,11 @@ function mapProductPerformance(raw: any): ProductPerformance {
 // Analytics Service
 export const analyticsApi = {
   sales: (tenantId: string, startDate: string, endDate: string, granularity = 'daily', token?: string) =>
-    request<any>('analytics', `/api/v1/analytics/sales?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}&granularity=${granularity}`, { tenantId, token }).then(mapSalesReport),
+    request<RawSalesReport>('analytics', `/api/v1/analytics/sales?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}&granularity=${granularity}`, { tenantId, token }).then(mapSalesReport),
   customers: (tenantId: string, startDate: string, endDate: string, token?: string) =>
     request<CustomerInsights>('analytics', `/api/v1/analytics/customers?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId, token }),
   products: (tenantId: string, startDate: string, endDate: string, token?: string) =>
-    request<any>('analytics', `/api/v1/analytics/products?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId, token }).then(mapProductPerformance),
+    request<RawProductPerformance>('analytics', `/api/v1/analytics/products?tenant_id=${tenantId}&start_date=${startDate}&end_date=${endDate}`, { tenantId, token }).then(mapProductPerformance),
 };
 
 // Review Service

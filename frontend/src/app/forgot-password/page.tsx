@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Forgot Password?</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Enter your email and we'll send you a reset link
+            Enter your email and we&apos;ll send you a reset link
           </p>
         </div>
 
@@ -47,11 +47,11 @@ export default function ForgotPasswordPage() {
               <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
               <h2 className="mt-4 text-lg font-semibold text-gray-900">Check your email</h2>
               <p className="mt-2 text-sm text-gray-600">
-                We've sent a password reset link to <span className="font-medium">{email}</span>.
+                We&apos;ve sent a password reset link to <span className="font-medium">{email}</span>.
                 Check your inbox and follow the instructions.
               </p>
               <p className="mt-4 text-xs text-gray-400">
-                Didn't receive it? Check your spam folder or{' '}
+                Didn&apos;t receive it? Check your spam folder or{' '}
                 <button
                   onClick={() => setSent(false)}
                   className="text-primary underline hover:text-primary-dark"

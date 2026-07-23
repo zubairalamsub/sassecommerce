@@ -10,7 +10,6 @@ import { useAuthStore } from '@/stores/auth';
 import { tenantApi, type TenantConfig } from '@/lib/api';
 import { useStoreConfigStore, type BannerSlide, type StoreSection, type StorefrontConfig, type AnnouncementPopup } from '@/stores/store-config';
 import { useDeliveryProfileStore } from '@/stores/delivery-profiles';
-import type { DeliveryProfile } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type SettingsTab = 'general' | 'branding' | 'storefront' | 'features' | 'payment' | 'shipping' | 'email' | 'security';

@@ -8,7 +8,6 @@ import { useAuthStore, demoLogin } from '@/stores/auth';
 export default function SuperAdminLoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

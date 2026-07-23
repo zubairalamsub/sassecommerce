@@ -14,7 +14,6 @@ import {
   Receipt,
   Clock,
   Filter,
-  Smartphone,
   Globe,
   BarChart3,
   Code,
@@ -282,7 +281,7 @@ export default function PlansPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Billing state
-  const [invoices, setInvoices] = useState<Invoice[]>(demoInvoices);
+  const [invoices] = useState<Invoice[]>(demoInvoices);
   const [invoiceFilter, setInvoiceFilter] = useState<InvoiceStatus | 'all'>('all');
   const [billingSettings, setBillingSettings] = useState<BillingSettings>({
     taxRate: 15,

@@ -49,7 +49,7 @@ func main() {
 
 	// Initialize Kafka producer
 	kafkaProducer := kafka.NewProducer(cfg.Kafka.Brokers, log)
-	defer kafkaProducer.Close()
+	defer func() { _ = kafkaProducer.Close() }()
 
 	// Optional Redis cache for tenant lookups (id/slug/domain). If Redis is
 	// unreachable the service runs without caching (repo gets a nil client).

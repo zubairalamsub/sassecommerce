@@ -129,7 +129,7 @@ func TestMenuHandler_CreateMenu_Success(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var result models.MenuResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "Main Nav", result.Name)
 }
 
@@ -303,7 +303,7 @@ func TestMenuHandler_ListMenus_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, float64(2), result["count"])
 }
 
@@ -366,7 +366,7 @@ func TestMenuHandler_CreateMenuItem_Success(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var result models.MenuItemResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "Home", result.Label)
 }
 

@@ -104,7 +104,7 @@ func TestRemoveItem(t *testing.T) {
 	order := createTestOrder()
 
 	// Add item first
-	order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 2, 99.99)
+	_ = order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 2, 99.99)
 	itemID := ""
 	for id := range order.Items {
 		itemID = id
@@ -121,7 +121,7 @@ func TestRemoveItem(t *testing.T) {
 
 func TestConfirm(t *testing.T) {
 	order := createTestOrder()
-	order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
+	_ = order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
 
 	err := order.Confirm("admin@example.com")
 
@@ -149,8 +149,8 @@ func TestCancel(t *testing.T) {
 
 func TestShip(t *testing.T) {
 	order := createTestOrder()
-	order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
-	order.Confirm("admin@example.com")
+	_ = order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
+	_ = order.Confirm("admin@example.com")
 
 	err := order.Ship("TRACK123", "FedEx", "warehouse@example.com")
 
@@ -171,9 +171,9 @@ func TestShip_NotConfirmed(t *testing.T) {
 
 func TestDeliver(t *testing.T) {
 	order := createTestOrder()
-	order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
-	order.Confirm("admin@example.com")
-	order.Ship("TRACK123", "FedEx", "warehouse@example.com")
+	_ = order.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 1, 99.99)
+	_ = order.Confirm("admin@example.com")
+	_ = order.Ship("TRACK123", "FedEx", "warehouse@example.com")
 
 	err := order.Deliver("customer@example.com")
 
@@ -193,8 +193,8 @@ func TestDeliver_NotShipped(t *testing.T) {
 func TestLoadFromHistory(t *testing.T) {
 	// Create order and add items
 	order1 := createTestOrder()
-	order1.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 2, 99.99)
-	order1.Confirm("admin@example.com")
+	_ = order1.AddItem("product-123", "variant-123", "SKU-001", "Test Product", 2, 99.99)
+	_ = order1.Confirm("admin@example.com")
 
 	// Get events
 	eventHistory := order1.UncommittedEvents

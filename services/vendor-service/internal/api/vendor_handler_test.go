@@ -198,7 +198,7 @@ func TestHandler_ListVendors_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, float64(1), result["total"])
 }
 
@@ -335,7 +335,7 @@ func TestHandler_GetVendorAnalytics_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.VendorAnalyticsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 5000.0, result.TotalRevenue)
 }
 

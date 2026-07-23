@@ -92,7 +92,7 @@ func (suite *E2ETestSuite) SetupSuite() {
 
 func (suite *E2ETestSuite) TearDownSuite() {
 	sqlDB, _ := suite.db.DB()
-	sqlDB.Close()
+	_ = sqlDB.Close()
 }
 
 func (suite *E2ETestSuite) TestCreateTenant_Success() {
@@ -387,7 +387,8 @@ func (suite *E2ETestSuite) TestListTenantsWithPagination() {
 			TotalPages int64 `json:"total_pages"`
 		} `json:"pagination"`
 	}
-	json.Unmarshal(w.Body.Bytes(), &response1)
+	err := json.Unmarshal(w.Body.Bytes(), &response1)
+	assert.NoError(suite.T(), err)
 	assert.LessOrEqual(suite.T(), len(response1.Data), 10)
 
 	// Test second page

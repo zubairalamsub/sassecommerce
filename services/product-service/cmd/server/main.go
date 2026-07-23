@@ -52,7 +52,11 @@ func main() {
 	// Initialize Kafka producer
 	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
 	kafkaProducer := messaging.NewProducer(kafkaBrokers, logger)
-	defer kafkaProducer.Close()
+	defer func() {
+		if err := kafkaProducer.Close(); err != nil {
+			logger.WithError(err).Error("Error closing Kafka producer")
+		}
+	}()
 
 	// Optional Redis cache for the product read path. If REDIS_HOST is unset
 	// the service runs without caching (repo is passed a nil client).
@@ -293,25 +297,4 @@ func readinessCheck(c *gin.Context) {
 		"status":  "ready",
 		"service": "product-service",
 	})
-}
-
-func requestLogger(logger *logrus.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		startTime := time.Now()
-
-		// Process request
-		c.Next()
-
-		// Log request details
-		duration := time.Since(startTime)
-		logger.WithFields(logrus.Fields{
-			"method":     c.Request.Method,
-			"path":       c.Request.URL.Path,
-			"status":     c.Writer.Status(),
-			"duration":   duration.Milliseconds(),
-			"client_ip":  c.ClientIP(),
-			"user_agent": c.Request.UserAgent(),
-			"tenant_id":  c.GetString("tenant_id"),
-		}).Info("Request processed")
-	}
 }

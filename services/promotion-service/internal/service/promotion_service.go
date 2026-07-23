@@ -269,7 +269,9 @@ func (s *promotionService) ApplyCoupon(ctx context.Context, req *models.ApplyCou
 	// Increment usage count
 	coupon.UsedCount++
 	coupon.UpdatedAt = time.Now().UTC()
-	s.repo.UpdateCoupon(ctx, coupon)
+	if err := s.repo.UpdateCoupon(ctx, coupon); err != nil {
+		s.logger.WithError(err).Error("Failed to update coupon usage count")
+	}
 
 	s.publishEvent("CouponApplied", req.TenantID, map[string]interface{}{
 		"coupon_code":     code,

@@ -20,7 +20,6 @@ type EventConsumer struct {
 	stop    chan struct{}
 
 	defaultCarrier  string
-	defaultFromName string
 	defaultFromAddr models.AddressRequest
 }
 

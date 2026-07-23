@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	logger.Info("Starting Order Service",
 		zap.String("version", "1.0.0"),
@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to connect to database", zap.Error(err))
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	logger.Info("Database connection established")
 
@@ -76,7 +76,7 @@ func main() {
 			cfg.Kafka.Topic,
 			logger,
 		)
-		defer publisher.Close()
+		defer func() { _ = publisher.Close() }()
 
 		// Lightweight, non-domain publisher for one-shot events (e.g.
 		// ReceiptRequested fired from the POS flow). Publishes onto the
@@ -87,7 +87,7 @@ func main() {
 			cfg.Kafka.Topic,
 			logger,
 		)
-		defer notificationPublisher.Close()
+		defer func() { _ = notificationPublisher.Close() }()
 
 		logger.Info("Kafka publisher initialized",
 			zap.Strings("brokers", cfg.Kafka.Brokers),
@@ -115,7 +115,7 @@ func main() {
 		if err := consumer.Start(ctx); err != nil {
 			logger.Fatal("Failed to start Kafka consumer", zap.Error(err))
 		}
-		defer consumer.Stop()
+		defer func() { _ = consumer.Stop() }()
 
 		logger.Info("Kafka consumer started",
 			zap.String("group_id", cfg.Kafka.ConsumerGroup),
@@ -183,10 +183,14 @@ func main() {
 
 	// Cleanup
 	if consumer != nil {
-		consumer.Stop()
+		if err := consumer.Stop(); err != nil {
+			logger.Error("Failed to stop Kafka consumer", zap.Error(err))
+		}
 	}
 	if externalConsumer != nil {
-		externalConsumer.Stop()
+		if err := externalConsumer.Stop(); err != nil {
+			logger.Error("Failed to stop external event consumer", zap.Error(err))
+		}
 	}
 
 	logger.Info("Server shutdown complete")

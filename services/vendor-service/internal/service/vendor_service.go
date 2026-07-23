@@ -182,9 +182,10 @@ func (s *vendorService) UpdateVendorStatus(ctx context.Context, id string, tenan
 	}
 
 	eventType := "VendorApproved"
-	if req.Status == models.StatusSuspended {
+	switch req.Status {
+	case models.StatusSuspended:
 		eventType = "VendorSuspended"
-	} else if req.Status == models.StatusRejected {
+	case models.StatusRejected:
 		eventType = "VendorRejected"
 	}
 
@@ -273,7 +274,9 @@ func (s *vendorService) RecordOrder(ctx context.Context, vendorID, tenantID, ord
 	vendor.TotalRevenue += amount
 	vendor.TotalOrders++
 	vendor.UpdatedAt = time.Now().UTC()
-	s.repo.Update(ctx, vendor)
+	if err := s.repo.Update(ctx, vendor); err != nil {
+		s.logger.WithError(err).Error("Failed to update vendor totals")
+	}
 
 	return nil
 }

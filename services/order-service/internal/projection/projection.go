@@ -138,7 +138,7 @@ func (p *OrderProjection) projectOrderItemAdded(e events.OrderItemAdded) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Upsert order item (idempotent for duplicate event processing)
 	_, err = tx.Exec(`
@@ -177,7 +177,7 @@ func (p *OrderProjection) projectOrderItemRemoved(e events.OrderItemRemoved) err
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete order item
 	_, err = tx.Exec(`DELETE FROM order_item_read_model WHERE id = $1 AND order_id = $2`, e.ItemID, e.AggregateID)
@@ -307,7 +307,7 @@ func (p *OrderProjection) GetOrderItems(orderID string) ([]*queries.OrderItemRea
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]*queries.OrderItemReadModel, 0)
 	for rows.Next() {
@@ -354,7 +354,7 @@ func (p *OrderProjection) GetOrdersByCustomer(tenantID, customerID string, limit
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return p.scanOrderSummaries(rows)
 }
@@ -384,7 +384,7 @@ func (p *OrderProjection) GetOrdersByTenant(tenantID string, limit, offset int) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return p.scanOrderSummaries(rows)
 }

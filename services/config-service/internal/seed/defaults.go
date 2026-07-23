@@ -50,7 +50,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	// Main Navigation (header)
 	mainNavID := uuid.New().String()
-	menuRepo.CreateMenu(ctx, &models.Menu{
+	_ = menuRepo.CreateMenu(ctx, &models.Menu{
 		ID: mainNavID, TenantID: tenantID,
 		Name: "Main Navigation", Slug: "main-navigation",
 		Location: "header", Description: "Primary site navigation", IsActive: true,
@@ -93,13 +93,13 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	for _, mi := range mainItems {
 		parentID := uuid.New().String()
-		menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+		_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 			ID: parentID, MenuID: mainNavID, Label: mi.Label,
 			URL: mi.URL, Icon: mi.Icon, Target: "_self",
 			Position: mi.Position, IsActive: true,
 		})
 		for _, child := range mi.Children {
-			menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+			_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 				ID: uuid.New().String(), MenuID: mainNavID, ParentID: parentID,
 				Label: child.Label, URL: child.URL, Target: "_self",
 				Position: child.Position, IsActive: true,
@@ -109,7 +109,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	// Footer Menu
 	footerID := uuid.New().String()
-	menuRepo.CreateMenu(ctx, &models.Menu{
+	_ = menuRepo.CreateMenu(ctx, &models.Menu{
 		ID: footerID, TenantID: tenantID,
 		Name: "Footer Links", Slug: "footer-links",
 		Location: "footer", Description: "Footer navigation columns", IsActive: true,
@@ -156,12 +156,12 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	for _, col := range footerColumns {
 		colID := uuid.New().String()
-		menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+		_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 			ID: colID, MenuID: footerID, Label: col.Label,
 			URL: "", Target: "_self", Position: col.Position, IsActive: true,
 		})
 		for _, link := range col.Links {
-			menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+			_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 				ID: uuid.New().String(), MenuID: footerID, ParentID: colID,
 				Label: link.Label, URL: link.URL, Target: "_self",
 				Position: link.Position, IsActive: true,
@@ -171,7 +171,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	// Sidebar Menu
 	sidebarID := uuid.New().String()
-	menuRepo.CreateMenu(ctx, &models.Menu{
+	_ = menuRepo.CreateMenu(ctx, &models.Menu{
 		ID: sidebarID, TenantID: tenantID,
 		Name: "Account Sidebar", Slug: "account-sidebar",
 		Location: "sidebar", Description: "User account navigation", IsActive: true,
@@ -192,7 +192,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 	}
 
 	for _, si := range sidebarItems {
-		menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+		_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 			ID: uuid.New().String(), MenuID: sidebarID, Label: si.Label,
 			URL: si.URL, Icon: si.Icon, Target: "_self",
 			Position: si.Position, IsActive: true,
@@ -201,7 +201,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 
 	// Mobile Menu
 	mobileID := uuid.New().String()
-	menuRepo.CreateMenu(ctx, &models.Menu{
+	_ = menuRepo.CreateMenu(ctx, &models.Menu{
 		ID: mobileID, TenantID: tenantID,
 		Name: "Mobile Navigation", Slug: "mobile-navigation",
 		Location: "mobile", Description: "Mobile hamburger menu", IsActive: true,
@@ -221,7 +221,7 @@ func SeedDefaultMenus(ctx context.Context, menuRepo repository.MenuRepository, t
 	}
 
 	for _, mi := range mobileItems {
-		menuRepo.CreateMenuItem(ctx, &models.MenuItem{
+		_ = menuRepo.CreateMenuItem(ctx, &models.MenuItem{
 			ID: uuid.New().String(), MenuID: mobileID, Label: mi.Label,
 			URL: mi.URL, Icon: mi.Icon, Target: "_self",
 			Position: mi.Position, IsActive: true,

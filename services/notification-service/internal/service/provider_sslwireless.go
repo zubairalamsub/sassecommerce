@@ -108,7 +108,7 @@ func (p *SSLWirelessSMSProvider) Send(notification *models.Notification) (*Provi
 			Error:        fmt.Sprintf("SSL Wireless request failed: %v", err),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 

@@ -130,7 +130,7 @@ func TestHandler_SearchProducts_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.SearchResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, int64(1), result.Total)
 	assert.Equal(t, 1, len(result.Products))
 }
@@ -222,7 +222,7 @@ func TestHandler_Autocomplete_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.AutocompleteResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 1, len(result.Suggestions))
 }
 

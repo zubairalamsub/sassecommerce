@@ -138,7 +138,7 @@ func TestHandler_SendNotification_Success(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var result models.NotificationResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "notif-1", result.ID)
 	assert.Equal(t, models.StatusSent, result.Status)
 }
@@ -198,7 +198,7 @@ func TestHandler_GetNotification_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.NotificationResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "notif-1", result.ID)
 }
 
@@ -231,7 +231,7 @@ func TestHandler_GetUserNotifications_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result ListNotificationsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Len(t, result.Data, 1)
 	assert.Equal(t, int64(1), result.Pagination.Total)
 }
@@ -262,7 +262,7 @@ func TestHandler_GetUserNotifications_Pagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result ListNotificationsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 2, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.PageSize)
 	assert.Equal(t, int64(25), result.Pagination.Total)
@@ -321,7 +321,7 @@ func TestHandler_GetPreference_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.UserPreferenceResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.True(t, result.EmailEnabled)
 	assert.False(t, result.SMSEnabled)
 }
@@ -364,7 +364,7 @@ func TestHandler_UpdatePreference_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.UserPreferenceResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.False(t, result.EmailEnabled)
 }
 

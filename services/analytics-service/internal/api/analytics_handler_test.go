@@ -124,7 +124,8 @@ func TestHandler_GetSalesReport_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.SalesReportResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	assert.NoError(t, err)
 	assert.Equal(t, 50000.0, result.TotalRevenue)
 }
 
@@ -334,7 +335,8 @@ func TestHandler_ListReports_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	assert.NoError(t, err)
 	assert.Equal(t, float64(1), result["total"])
 }
 

@@ -80,7 +80,7 @@ func (es *PostgresEventStore) Save(aggregateID string, eventsToSave []events.Eve
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Check current version for optimistic concurrency control
 	var currentVersion int
@@ -106,7 +106,7 @@ func (es *PostgresEventStore) Save(aggregateID string, eventsToSave []events.Eve
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, event := range eventsToSave {
 		eventData, err := events.Serialize(event)
@@ -146,7 +146,7 @@ func (es *PostgresEventStore) GetEvents(aggregateID string) ([]events.Event, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return es.scanEvents(rows)
 }
@@ -163,7 +163,7 @@ func (es *PostgresEventStore) GetEventsByType(eventType events.EventType, limit 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events by type: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return es.scanEvents(rows)
 }
@@ -179,7 +179,7 @@ func (es *PostgresEventStore) GetAllEvents(offset, limit int) ([]events.Event, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return es.scanEvents(rows)
 }

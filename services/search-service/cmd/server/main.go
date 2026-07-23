@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to Elasticsearch: %v", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	log.Info("Successfully connected to Elasticsearch")
 
 	// Initialize repository

@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
+	"github.com/ecommerce/shared/go/pkg/metrics"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/shipping-service/internal/api"
 	"github.com/ecommerce/shipping-service/internal/config"
 	"github.com/ecommerce/shipping-service/internal/messaging"
@@ -18,9 +21,6 @@ import (
 	"github.com/ecommerce/shipping-service/internal/service"
 	"github.com/ecommerce/shipping-service/pkg/database"
 	"github.com/ecommerce/shipping-service/pkg/logger"
-	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
-	"github.com/ecommerce/shared/go/pkg/metrics"
-	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -48,7 +48,11 @@ func main() {
 	// Initialize Kafka producer
 	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
 	kafkaProducer := messaging.NewProducer(kafkaBrokers, log)
-	defer kafkaProducer.Close()
+	defer func() {
+		if err := kafkaProducer.Close(); err != nil {
+			log.Errorf("Failed to close Kafka producer: %v", err)
+		}
+	}()
 
 	// Initialize repository
 	shipmentRepo := repository.NewShipmentRepository(db)

@@ -44,7 +44,7 @@ func (r *esSearchRepository) EnsureIndex(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to check index existence: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode == 200 {
 		r.logger.Infof("Index '%s' already exists", r.indexName)
@@ -64,7 +64,7 @@ func (r *esSearchRepository) EnsureIndex(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() {
 		bodyBytes, _ := io.ReadAll(res.Body)
@@ -90,7 +90,7 @@ func (r *esSearchRepository) IndexProduct(ctx context.Context, product *models.P
 	if err != nil {
 		return fmt.Errorf("failed to index product: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() {
 		bodyBytes, _ := io.ReadAll(res.Body)
@@ -112,7 +112,7 @@ func (r *esSearchRepository) GetProductByID(ctx context.Context, productID strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode == 404 {
 		return nil, nil
@@ -147,7 +147,7 @@ func (r *esSearchRepository) DeleteProduct(ctx context.Context, productID string
 	if err != nil {
 		return fmt.Errorf("failed to delete product: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() && res.StatusCode != 404 {
 		bodyBytes, _ := io.ReadAll(res.Body)
@@ -172,7 +172,7 @@ func (r *esSearchRepository) Search(ctx context.Context, req *models.SearchReque
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute search: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() {
 		bodyBytes, _ := io.ReadAll(res.Body)
@@ -231,7 +231,7 @@ func (r *esSearchRepository) Autocomplete(ctx context.Context, req *models.Autoc
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute autocomplete: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.IsError() {
 		bodyBytes, _ := io.ReadAll(res.Body)

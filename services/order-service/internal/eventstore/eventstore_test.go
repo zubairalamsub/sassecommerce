@@ -202,7 +202,7 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 
 	err = db.Ping()
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Skipf("Skipping integration test: database not available: %v", err)
 	}
 

@@ -145,7 +145,9 @@ func (s *recommendationService) runTraining(ctx context.Context, job *models.Tra
 		s.logger.WithError(err).Error("Failed to clear old similarities")
 		job.Status = "failed"
 		job.Error = err.Error()
-		s.repo.UpdateTrainingJob(ctx, job)
+		if updateErr := s.repo.UpdateTrainingJob(ctx, job); updateErr != nil {
+			s.logger.WithError(updateErr).Error("Failed to update training job")
+		}
 		return
 	}
 
@@ -155,7 +157,9 @@ func (s *recommendationService) runTraining(ctx context.Context, job *models.Tra
 		s.logger.WithError(err).Error("Failed to get co-purchase pairs")
 		job.Status = "failed"
 		job.Error = err.Error()
-		s.repo.UpdateTrainingJob(ctx, job)
+		if updateErr := s.repo.UpdateTrainingJob(ctx, job); updateErr != nil {
+			s.logger.WithError(updateErr).Error("Failed to update training job")
+		}
 		return
 	}
 
@@ -165,7 +169,9 @@ func (s *recommendationService) runTraining(ctx context.Context, job *models.Tra
 		s.logger.WithError(err).Error("Failed to get distinct products")
 		job.Status = "failed"
 		job.Error = err.Error()
-		s.repo.UpdateTrainingJob(ctx, job)
+		if updateErr := s.repo.UpdateTrainingJob(ctx, job); updateErr != nil {
+			s.logger.WithError(updateErr).Error("Failed to update training job")
+		}
 		return
 	}
 
@@ -210,7 +216,9 @@ func (s *recommendationService) runTraining(ctx context.Context, job *models.Tra
 	now := time.Now().UTC()
 	job.CompletedAt = &now
 
-	s.repo.UpdateTrainingJob(ctx, job)
+	if updateErr := s.repo.UpdateTrainingJob(ctx, job); updateErr != nil {
+		s.logger.WithError(updateErr).Error("Failed to update training job")
+	}
 
 	s.logger.WithFields(logrus.Fields{
 		"tenant_id":    job.TenantID,

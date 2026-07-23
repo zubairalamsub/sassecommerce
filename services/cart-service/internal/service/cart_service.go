@@ -80,7 +80,9 @@ func (s *cartService) AddItem(ctx context.Context, req *models.AddItemRequest) (
 
 	// Track product-cart mapping
 	cartKey := fmt.Sprintf("cart:%s:%s", req.TenantID, req.UserID)
-	s.repo.AddProductCartMapping(ctx, req.ProductID, cartKey)
+	if err := s.repo.AddProductCartMapping(ctx, req.ProductID, cartKey); err != nil {
+		s.logger.WithError(err).Error("Failed to add product-cart mapping")
+	}
 
 	s.publishCartUpdated(cart)
 
@@ -163,7 +165,9 @@ func (s *cartService) RemoveItem(ctx context.Context, tenantID, userID, itemID s
 		}
 		if !hasProduct {
 			cartKey := fmt.Sprintf("cart:%s:%s", tenantID, userID)
-			s.repo.RemoveProductCartMapping(ctx, removedProductID, cartKey)
+			if err := s.repo.RemoveProductCartMapping(ctx, removedProductID, cartKey); err != nil {
+				s.logger.WithError(err).Error("Failed to remove product-cart mapping")
+			}
 		}
 	}
 
@@ -251,7 +255,9 @@ func (s *cartService) RemoveProduct(ctx context.Context, productID string) error
 	}
 
 	// Clean up the product-cart mapping set
-	s.repo.RemoveProductCartMapping(ctx, productID, "")
+	if err := s.repo.RemoveProductCartMapping(ctx, productID, ""); err != nil {
+		s.logger.WithError(err).Error("Failed to remove product-cart mapping")
+	}
 
 	return nil
 }

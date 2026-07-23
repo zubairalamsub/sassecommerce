@@ -32,6 +32,12 @@ on:
         required: false
         type: boolean
         default: false
+      test-tags:
+        # Extra Go build tags for the test run (e.g. "integration" to include
+        # suites that require a real datastore). Empty by default.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -110,7 +116,9 @@ jobs:
         run: |
           RACE=""
           if [ "${{ inputs.race }}" = "true" ]; then RACE="-race"; fi
-          go test -v $RACE -coverprofile=coverage.out -covermode=atomic -timeout 120s ./...
+          TAGS=""
+          if [ -n "${{ inputs.test-tags }}" ]; then TAGS="-tags=${{ inputs.test-tags }}"; fi
+          go test -v $RACE $TAGS -coverprofile=coverage.out -covermode=atomic -timeout 120s ./...
 
       - name: Coverage summary
         if: always()

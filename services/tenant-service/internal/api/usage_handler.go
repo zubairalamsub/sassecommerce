@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/ecommerce/tenant-service/internal/repository"
 	"github.com/ecommerce/tenant-service/internal/service"
@@ -28,11 +30,26 @@ func NewUsageHandler(svc service.UsageService, logger *logrus.Logger) *UsageHand
 // @Description Gated by the frontend super-admin layout — no auth check here.
 // @Tags admin
 // @Produce json
+// @Param window_days query int false "Bound the audit-log aggregate to the last N days (omit for all-time)"
 // @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /admin/usage [get]
 func (h *UsageHandler) GetUsage(c *gin.Context) {
-	rows, err := h.service.GetTenantUsage(c.Request.Context())
+	// Optional ?window_days=N bounds the aggregate to recent activity; absent
+	// keeps the historical all-time behavior.
+	var since *time.Time
+	if windowStr := c.Query("window_days"); windowStr != "" {
+		days, err := strconv.Atoi(windowStr)
+		if err != nil || days <= 0 {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "window_days must be a positive integer"})
+			return
+		}
+		t := time.Now().UTC().AddDate(0, 0, -days)
+		since = &t
+	}
+
+	rows, err := h.service.GetTenantUsage(c.Request.Context(), since)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to load tenant usage report")
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to load tenant usage report"})

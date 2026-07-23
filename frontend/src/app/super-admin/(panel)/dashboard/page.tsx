@@ -7,7 +7,7 @@ import {
   BarChart, Bar,
   PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer,
 } from 'recharts';
 import {
   Building2,
@@ -32,7 +32,7 @@ import {
   Settings,
   RefreshCw,
 } from 'lucide-react';
-import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenantStore } from '@/stores/tenants';
 
@@ -45,13 +45,6 @@ const tierPrices: Record<string, number> = {
   starter: 2999,
   professional: 9999,
   enterprise: 29999,
-};
-
-const tierColor: Record<string, string> = {
-  free: 'bg-gray-100 text-gray-800',
-  starter: 'bg-blue-100 text-blue-800',
-  professional: 'bg-indigo-100 text-indigo-800',
-  enterprise: 'bg-purple-100 text-purple-800',
 };
 
 const PIE_COLORS = ['#d1d5db', '#60a5fa', '#6366f1', '#a78bfa'];

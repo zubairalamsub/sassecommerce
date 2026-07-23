@@ -10,7 +10,7 @@ import {
   Mail,
   Phone,
 } from 'lucide-react';
-import { cn, formatCurrency, formatDate, statusColor } from '@/lib/utils';
+import { cn, formatDate, statusColor } from '@/lib/utils';
 import { userApi, type User } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 

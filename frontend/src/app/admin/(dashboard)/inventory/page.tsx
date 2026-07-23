@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import {
   inventoryApi, productApi,
   type InventoryItem, type Warehouse as WarehouseType,
-  type CreateWarehouseRequest, type CreateInventoryItemRequest,
 } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth';
 

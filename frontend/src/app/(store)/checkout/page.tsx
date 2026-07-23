@@ -127,13 +127,13 @@ export default function CheckoutPage() {
       });
     }
     if (name === 'city') {
-      fetchShippingRates(value, formData.postalCode);
+      fetchShippingRates(value);
     } else if (name === 'postalCode' && formData.city) {
-      fetchShippingRates(formData.city, value);
+      fetchShippingRates(formData.city);
     }
   }
 
-  function fetchShippingRates(city: string, _postalCode: string) {
+  function fetchShippingRates(city: string) {
     if (!city) return;
     setSelectedCarrier(null);
     const isDhaka = DHAKA_ZONE.includes(city);

@@ -10,7 +10,6 @@ import { TwoFactorPrompt } from '@/components/auth/two-factor-prompt';
 export default function PlatformLoginPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const setAuth = useAuthStore((s) => s.setAuth);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);

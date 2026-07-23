@@ -43,7 +43,7 @@ const emptyForm: StaffForm = {
 };
 
 export default function UsersPage() {
-  const { tenantId, token, user: currentUser } = useAuthStore();
+  const { tenantId, token } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<RoleFilter>('all');
@@ -92,7 +92,7 @@ export default function UsersPage() {
       );
 
       // Response: { success, data: { id, ... }, message }
-      const newUser = (res as any)?.data ?? res;
+      const newUser = (res as { data?: User })?.data ?? res;
       const userId = newUser?.id;
 
       // 2. Promote to the selected staff role
@@ -103,8 +103,8 @@ export default function UsersPage() {
       setShowModal(false);
       setForm(emptyForm);
       loadUsers();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to create staff member');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create staff member');
     } finally {
       setSaving(false);
     }

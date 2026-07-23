@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { reviewApi, type ReviewResponse, type ReviewSummary } from '@/lib/api';
+import { reviewApi, type ReviewResponse } from '@/lib/api';
 
 export interface Review {
   id: string;

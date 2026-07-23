@@ -162,7 +162,7 @@ export default function BillingPage() {
     // Fetch real staff count — response has pagination.total_items
     if (token) {
       userApi.list(tenantId, token, 1, 1).then((res) => {
-        const raw = res as any;
+        const raw = res as { pagination?: { total_items?: number } };
         const count = res.total ?? raw.pagination?.total_items ?? 0;
         setUsage((prev) => ({ ...prev, staff: count }));
       }).catch(() => {});

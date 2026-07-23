@@ -29,7 +29,7 @@ export default function ProductPreview({
   const [activeImg, setActiveImg] = useState(0);
   const [openFaqs, setOpenFaqs] = useState<Set<string>>(new Set());
   const toggleFaq = (id: string) =>
-    setOpenFaqs((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setOpenFaqs((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const priceN = Number(price) || 0;
   const compareN = Number(compareAtPrice) || 0;

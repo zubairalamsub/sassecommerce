@@ -65,6 +65,7 @@ func createCartWithItems() *models.Cart {
 // === AddItem Tests ===
 
 func TestAddItem_Success_NewItem(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -93,6 +94,7 @@ func TestAddItem_Success_NewItem(t *testing.T) {
 }
 
 func TestAddItem_Success_ExistingProduct(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -120,6 +122,7 @@ func TestAddItem_Success_ExistingProduct(t *testing.T) {
 }
 
 func TestAddItem_GetCartFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -142,6 +145,7 @@ func TestAddItem_GetCartFailure(t *testing.T) {
 }
 
 func TestAddItem_SaveCartFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -167,6 +171,7 @@ func TestAddItem_SaveCartFailure(t *testing.T) {
 // === GetCart Tests ===
 
 func TestGetCart_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -179,11 +184,12 @@ func TestGetCart_Success(t *testing.T) {
 	assert.Equal(t, "tenant-1", result.TenantID)
 	assert.Equal(t, "user-1", result.UserID)
 	assert.Equal(t, 2, len(result.Items))
-	assert.Equal(t, 3, result.TotalItems)                       // 2 + 1
+	assert.Equal(t, 3, result.TotalItems)               // 2 + 1
 	assert.InDelta(t, 109.97, result.TotalAmount, 0.01) // 29.99*2 + 49.99
 }
 
 func TestGetCart_Empty(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -198,6 +204,7 @@ func TestGetCart_Empty(t *testing.T) {
 }
 
 func TestGetCart_Failure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -212,6 +219,7 @@ func TestGetCart_Failure(t *testing.T) {
 // === UpdateItem Tests ===
 
 func TestUpdateItem_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -228,6 +236,7 @@ func TestUpdateItem_Success(t *testing.T) {
 }
 
 func TestUpdateItem_NotFound(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -244,6 +253,7 @@ func TestUpdateItem_NotFound(t *testing.T) {
 }
 
 func TestUpdateItem_GetCartFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -258,6 +268,7 @@ func TestUpdateItem_GetCartFailure(t *testing.T) {
 }
 
 func TestUpdateItem_SaveFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -276,6 +287,7 @@ func TestUpdateItem_SaveFailure(t *testing.T) {
 // === RemoveItem Tests ===
 
 func TestRemoveItem_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -292,6 +304,7 @@ func TestRemoveItem_Success(t *testing.T) {
 }
 
 func TestRemoveItem_NotFound(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -306,6 +319,7 @@ func TestRemoveItem_NotFound(t *testing.T) {
 }
 
 func TestRemoveItem_GetCartFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -320,6 +334,7 @@ func TestRemoveItem_GetCartFailure(t *testing.T) {
 // === ClearCart Tests ===
 
 func TestClearCart_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -331,6 +346,7 @@ func TestClearCart_Success(t *testing.T) {
 }
 
 func TestClearCart_Failure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -344,6 +360,7 @@ func TestClearCart_Failure(t *testing.T) {
 // === UpdateProductPrice Tests ===
 
 func TestUpdateProductPrice_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -358,6 +375,7 @@ func TestUpdateProductPrice_Success(t *testing.T) {
 }
 
 func TestUpdateProductPrice_NoCarts(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -371,6 +389,7 @@ func TestUpdateProductPrice_NoCarts(t *testing.T) {
 }
 
 func TestUpdateProductPrice_GetCartsFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -384,6 +403,7 @@ func TestUpdateProductPrice_GetCartsFailure(t *testing.T) {
 // === RemoveProduct Tests ===
 
 func TestRemoveProduct_Success(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -398,6 +418,7 @@ func TestRemoveProduct_Success(t *testing.T) {
 }
 
 func TestRemoveProduct_NoCarts(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -412,6 +433,7 @@ func TestRemoveProduct_NoCarts(t *testing.T) {
 }
 
 func TestRemoveProduct_GetCartsFailure(t *testing.T) {
+	t.Parallel()
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
@@ -425,18 +447,21 @@ func TestRemoveProduct_GetCartsFailure(t *testing.T) {
 // === parseCartKey Tests ===
 
 func TestParseCartKey_Valid(t *testing.T) {
+	t.Parallel()
 	tenantID, userID := parseCartKey("cart:tenant-1:user-1")
 	assert.Equal(t, "tenant-1", tenantID)
 	assert.Equal(t, "user-1", userID)
 }
 
 func TestParseCartKey_Invalid(t *testing.T) {
+	t.Parallel()
 	tenantID, userID := parseCartKey("bad")
 	assert.Equal(t, "", tenantID)
 	assert.Equal(t, "", userID)
 }
 
 func TestParseCartKey_TooShort(t *testing.T) {
+	t.Parallel()
 	tenantID, userID := parseCartKey("abc")
 	assert.Equal(t, "", tenantID)
 	assert.Equal(t, "", userID)
@@ -445,6 +470,7 @@ func TestParseCartKey_TooShort(t *testing.T) {
 // === toCartResponse Tests ===
 
 func TestToCartResponse(t *testing.T) {
+	t.Parallel()
 	cart := createCartWithItems()
 	resp := toCartResponse(cart)
 
@@ -460,6 +486,7 @@ func TestToCartResponse(t *testing.T) {
 }
 
 func TestToCartResponse_EmptyCart(t *testing.T) {
+	t.Parallel()
 	cart := createEmptyCart()
 	resp := toCartResponse(cart)
 

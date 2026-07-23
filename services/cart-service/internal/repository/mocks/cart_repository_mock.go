@@ -34,6 +34,19 @@ func (m *MockCartRepository) GetCartsByProduct(ctx context.Context, productID st
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *MockCartRepository) GetCartsByKeys(ctx context.Context, keys []string) ([]*models.Cart, error) {
+	args := m.Called(ctx, keys)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Cart), args.Error(1)
+}
+
+func (m *MockCartRepository) SaveCarts(ctx context.Context, carts []*models.Cart) error {
+	args := m.Called(ctx, carts)
+	return args.Error(0)
+}
+
 func (m *MockCartRepository) AddProductCartMapping(ctx context.Context, productID, cartKey string) error {
 	args := m.Called(ctx, productID, cartKey)
 	return args.Error(0)

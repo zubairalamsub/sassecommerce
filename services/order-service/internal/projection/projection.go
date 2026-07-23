@@ -328,18 +328,28 @@ func (p *OrderProjection) GetOrderItems(orderID string) ([]*queries.OrderItemRea
 // The tenant filter is mandatory: it comes from the verified JWT so a caller
 // cannot read another tenant's orders by guessing customer IDs.
 func (p *OrderProjection) GetOrdersByCustomer(tenantID, customerID string, limit, offset int) ([]*queries.OrderSummary, error) {
+	// Paginate first, then aggregate items only for the page via a single
+	// LATERAL join (SUM+COUNT in one index scan on order_item_read_model),
+	// instead of two correlated subqueries per row.
 	rows, err := p.db.Query(`
-		SELECT o.id, o.customer_id, o.status,
-			CASE WHEN o.total_amount = 0
-				THEN COALESCE((SELECT SUM(total_price) FROM order_item_read_model WHERE order_id = o.id), 0)
-				ELSE o.total_amount
-			END as total_amount,
-			o.currency, o.created_at, o.updated_at,
-			COALESCE((SELECT COUNT(*) FROM order_item_read_model WHERE order_id = o.id), 0) as item_count
-		FROM order_read_model o
-		WHERE o.tenant_id = $1 AND o.customer_id = $2
-		ORDER BY o.created_at DESC
-		LIMIT $3 OFFSET $4
+		WITH page AS (
+			SELECT o.id, o.customer_id, o.status, o.total_amount, o.currency,
+				o.created_at, o.updated_at
+			FROM order_read_model o
+			WHERE o.tenant_id = $1 AND o.customer_id = $2
+			ORDER BY o.created_at DESC
+			LIMIT $3 OFFSET $4
+		)
+		SELECT p.id, p.customer_id, p.status,
+			CASE WHEN p.total_amount = 0 THEN COALESCE(i.sum_total, 0) ELSE p.total_amount END AS total_amount,
+			p.currency, p.created_at, p.updated_at,
+			COALESCE(i.item_count, 0) AS item_count
+		FROM page p
+		LEFT JOIN LATERAL (
+			SELECT SUM(total_price) AS sum_total, COUNT(*) AS item_count
+			FROM order_item_read_model WHERE order_id = p.id
+		) i ON true
+		ORDER BY p.created_at DESC
 	`, tenantID, customerID, limit, offset)
 	if err != nil {
 		return nil, err
@@ -352,17 +362,24 @@ func (p *OrderProjection) GetOrdersByCustomer(tenantID, customerID string, limit
 // GetOrdersByTenant retrieves orders for a tenant
 func (p *OrderProjection) GetOrdersByTenant(tenantID string, limit, offset int) ([]*queries.OrderSummary, error) {
 	rows, err := p.db.Query(`
-		SELECT o.id, o.customer_id, o.status,
-			CASE WHEN o.total_amount = 0
-				THEN COALESCE((SELECT SUM(total_price) FROM order_item_read_model WHERE order_id = o.id), 0)
-				ELSE o.total_amount
-			END as total_amount,
-			o.currency, o.created_at, o.updated_at,
-			COALESCE((SELECT COUNT(*) FROM order_item_read_model WHERE order_id = o.id), 0) as item_count
-		FROM order_read_model o
-		WHERE o.tenant_id = $1
-		ORDER BY o.created_at DESC
-		LIMIT $2 OFFSET $3
+		WITH page AS (
+			SELECT o.id, o.customer_id, o.status, o.total_amount, o.currency,
+				o.created_at, o.updated_at
+			FROM order_read_model o
+			WHERE o.tenant_id = $1
+			ORDER BY o.created_at DESC
+			LIMIT $2 OFFSET $3
+		)
+		SELECT p.id, p.customer_id, p.status,
+			CASE WHEN p.total_amount = 0 THEN COALESCE(i.sum_total, 0) ELSE p.total_amount END AS total_amount,
+			p.currency, p.created_at, p.updated_at,
+			COALESCE(i.item_count, 0) AS item_count
+		FROM page p
+		LEFT JOIN LATERAL (
+			SELECT SUM(total_price) AS sum_total, COUNT(*) AS item_count
+			FROM order_item_read_model WHERE order_id = p.id
+		) i ON true
+		ORDER BY p.created_at DESC
 	`, tenantID, limit, offset)
 	if err != nil {
 		return nil, err

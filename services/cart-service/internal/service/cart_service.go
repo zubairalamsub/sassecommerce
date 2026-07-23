@@ -187,18 +187,15 @@ func (s *cartService) UpdateProductPrice(ctx context.Context, productID string, 
 		return err
 	}
 
-	for _, key := range cartKeys {
-		tenantID, userID := parseCartKey(key)
-		if tenantID == "" || userID == "" {
-			continue
-		}
+	// Batch-fetch all affected carts in one MGET instead of one GET per cart.
+	carts, err := s.repo.GetCartsByKeys(ctx, cartKeys)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to batch-get carts for price update")
+		return err
+	}
 
-		cart, err := s.repo.GetCart(ctx, tenantID, userID)
-		if err != nil {
-			s.logger.WithError(err).WithField("cart_key", key).Error("Failed to get cart for price update")
-			continue
-		}
-
+	toSave := make([]*models.Cart, 0, len(carts))
+	for _, cart := range carts {
 		updated := false
 		for i, item := range cart.Items {
 			if item.ProductID == productID {
@@ -206,12 +203,14 @@ func (s *cartService) UpdateProductPrice(ctx context.Context, productID string, 
 				updated = true
 			}
 		}
-
 		if updated {
-			if err := s.repo.SaveCart(ctx, cart); err != nil {
-				s.logger.WithError(err).WithField("cart_key", key).Error("Failed to save cart after price update")
-			}
+			toSave = append(toSave, cart)
 		}
+	}
+
+	// Persist all changed carts in a single pipeline.
+	if err := s.repo.SaveCarts(ctx, toSave); err != nil {
+		s.logger.WithError(err).Error("Failed to batch-save carts after price update")
 	}
 
 	return nil
@@ -224,30 +223,31 @@ func (s *cartService) RemoveProduct(ctx context.Context, productID string) error
 		return err
 	}
 
-	for _, key := range cartKeys {
-		tenantID, userID := parseCartKey(key)
-		if tenantID == "" || userID == "" {
-			continue
-		}
+	carts, err := s.repo.GetCartsByKeys(ctx, cartKeys)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to batch-get carts for product removal")
+		return err
+	}
 
-		cart, err := s.repo.GetCart(ctx, tenantID, userID)
-		if err != nil {
-			s.logger.WithError(err).WithField("cart_key", key).Error("Failed to get cart for product removal")
-			continue
-		}
-
-		newItems := make([]models.CartItem, 0)
+	toSave := make([]*models.Cart, 0, len(carts))
+	for _, cart := range carts {
+		newItems := make([]models.CartItem, 0, len(cart.Items))
+		removed := false
 		for _, item := range cart.Items {
 			if item.ProductID != productID {
 				newItems = append(newItems, item)
+			} else {
+				removed = true
 			}
 		}
-
-		cart.Items = newItems
-
-		if err := s.repo.SaveCart(ctx, cart); err != nil {
-			s.logger.WithError(err).WithField("cart_key", key).Error("Failed to save cart after product removal")
+		if removed {
+			cart.Items = newItems
+			toSave = append(toSave, cart)
 		}
+	}
+
+	if err := s.repo.SaveCarts(ctx, toSave); err != nil {
+		s.logger.WithError(err).Error("Failed to batch-save carts after product removal")
 	}
 
 	// Clean up the product-cart mapping set

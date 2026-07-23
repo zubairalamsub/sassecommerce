@@ -348,13 +348,13 @@ func TestUpdateProductPrice_Success(t *testing.T) {
 	ctx := context.Background()
 
 	mockRepo.On("GetCartsByProduct", ctx, "product-1").Return([]string{"cart:tenant-1:user-1"}, nil)
-	mockRepo.On("GetCart", ctx, "tenant-1", "user-1").Return(createCartWithItems(), nil)
-	mockRepo.On("SaveCart", ctx, mock.AnythingOfType("*models.Cart")).Return(nil)
+	mockRepo.On("GetCartsByKeys", ctx, mock.Anything).Return([]*models.Cart{createCartWithItems()}, nil)
+	mockRepo.On("SaveCarts", ctx, mock.Anything).Return(nil)
 
 	err := svc.UpdateProductPrice(ctx, "product-1", 19.99)
 
 	assert.NoError(t, err)
-	mockRepo.AssertCalled(t, "SaveCart", ctx, mock.AnythingOfType("*models.Cart"))
+	mockRepo.AssertCalled(t, "SaveCarts", ctx, mock.Anything)
 }
 
 func TestUpdateProductPrice_NoCarts(t *testing.T) {
@@ -362,6 +362,8 @@ func TestUpdateProductPrice_NoCarts(t *testing.T) {
 	ctx := context.Background()
 
 	mockRepo.On("GetCartsByProduct", ctx, "product-1").Return([]string{}, nil)
+	mockRepo.On("GetCartsByKeys", ctx, mock.Anything).Return([]*models.Cart{}, nil)
+	mockRepo.On("SaveCarts", ctx, mock.Anything).Return(nil)
 
 	err := svc.UpdateProductPrice(ctx, "product-1", 19.99)
 
@@ -386,8 +388,8 @@ func TestRemoveProduct_Success(t *testing.T) {
 	ctx := context.Background()
 
 	mockRepo.On("GetCartsByProduct", ctx, "product-1").Return([]string{"cart:tenant-1:user-1"}, nil)
-	mockRepo.On("GetCart", ctx, "tenant-1", "user-1").Return(createCartWithItems(), nil)
-	mockRepo.On("SaveCart", ctx, mock.AnythingOfType("*models.Cart")).Return(nil)
+	mockRepo.On("GetCartsByKeys", ctx, mock.Anything).Return([]*models.Cart{createCartWithItems()}, nil)
+	mockRepo.On("SaveCarts", ctx, mock.Anything).Return(nil)
 	mockRepo.On("RemoveProductCartMapping", ctx, "product-1", "").Return(nil)
 
 	err := svc.RemoveProduct(ctx, "product-1")
@@ -400,6 +402,8 @@ func TestRemoveProduct_NoCarts(t *testing.T) {
 	ctx := context.Background()
 
 	mockRepo.On("GetCartsByProduct", ctx, "product-1").Return([]string{}, nil)
+	mockRepo.On("GetCartsByKeys", ctx, mock.Anything).Return([]*models.Cart{}, nil)
+	mockRepo.On("SaveCarts", ctx, mock.Anything).Return(nil)
 	mockRepo.On("RemoveProductCartMapping", ctx, "product-1", "").Return(nil)
 
 	err := svc.RemoveProduct(ctx, "product-1")

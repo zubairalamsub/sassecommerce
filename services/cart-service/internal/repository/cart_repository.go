@@ -21,6 +21,8 @@ type CartRepository interface {
 	SaveCart(ctx context.Context, cart *models.Cart) error
 	DeleteCart(ctx context.Context, tenantID, userID string) error
 	GetCartsByProduct(ctx context.Context, productID string) ([]string, error)
+	GetCartsByKeys(ctx context.Context, keys []string) ([]*models.Cart, error)
+	SaveCarts(ctx context.Context, carts []*models.Cart) error
 	AddProductCartMapping(ctx context.Context, productID, cartKey string) error
 	RemoveProductCartMapping(ctx context.Context, productID, cartKey string) error
 }
@@ -97,6 +99,52 @@ func (r *redisCartRepository) DeleteCart(ctx context.Context, tenantID, userID s
 		return fmt.Errorf("failed to delete cart: %w", err)
 	}
 
+	return nil
+}
+
+// GetCartsByKeys fetches multiple carts in a single MGET round-trip. Missing or
+// unparseable entries are skipped.
+func (r *redisCartRepository) GetCartsByKeys(ctx context.Context, keys []string) ([]*models.Cart, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to mget carts: %w", err)
+	}
+	carts := make([]*models.Cart, 0, len(vals))
+	for _, v := range vals {
+		s, ok := v.(string)
+		if !ok || s == "" {
+			continue
+		}
+		var cart models.Cart
+		if err := json.Unmarshal([]byte(s), &cart); err != nil {
+			continue
+		}
+		carts = append(carts, &cart)
+	}
+	return carts, nil
+}
+
+// SaveCarts writes multiple carts in a single pipeline round-trip.
+func (r *redisCartRepository) SaveCarts(ctx context.Context, carts []*models.Cart) error {
+	if len(carts) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	pipe := r.client.Pipeline()
+	for _, cart := range carts {
+		cart.UpdatedAt = now
+		data, err := json.Marshal(cart)
+		if err != nil {
+			return fmt.Errorf("failed to marshal cart: %w", err)
+		}
+		pipe.Set(ctx, cartKey(cart.TenantID, cart.UserID), data, cartTTL)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("failed to save carts: %w", err)
+	}
 	return nil
 }
 

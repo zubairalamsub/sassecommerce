@@ -149,7 +149,7 @@ func TestHandler_AddItem_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.CartResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 1, len(result.Items))
 }
 
@@ -205,7 +205,7 @@ func TestHandler_GetCart_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.CartResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "tenant-1", result.TenantID)
 	assert.Equal(t, 2, result.TotalItems)
 }

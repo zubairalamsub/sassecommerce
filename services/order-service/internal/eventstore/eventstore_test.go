@@ -3,6 +3,7 @@ package eventstore
 import (
 	"database/sql"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -133,13 +134,14 @@ func TestPostgresEventStore_OptimisticConcurrency(t *testing.T) {
 		ProductID: "product-123",
 	}
 
-	// This should fail because expected version is -1 but current is 0
+	// This should fail: the store's current version is MAX(version) = 1 after
+	// saving event1, so an expected version of -1 (empty aggregate) conflicts.
 	err = store.Save(aggregateID, []events.Event{event2}, -1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "concurrency conflict")
 
-	// This should succeed with correct expected version
-	err = store.Save(aggregateID, []events.Event{event2}, 0)
+	// This should succeed with the correct expected version (current = 1).
+	err = store.Save(aggregateID, []events.Event{event2}, 1)
 	assert.NoError(t, err)
 }
 
@@ -154,20 +156,23 @@ func TestPostgresEventStore_GetEventsByType(t *testing.T) {
 	store, err := NewPostgresEventStore(db)
 	require.NoError(t, err)
 
-	// Save multiple events of different types
+	// Save multiple events of different types.
+	// NOTE: use strconv.Itoa, NOT string(rune(i)) — string(rune(0)) is the
+	// NUL byte, which Postgres rejects ("invalid byte sequence for encoding
+	// UTF8: 0x00").
 	for i := 0; i < 5; i++ {
-		aggregateID := "order-" + string(rune(i))
+		aggregateID := "order-" + strconv.Itoa(i)
 
 		event := events.OrderCreated{
 			BaseEvent: events.BaseEvent{
-				ID:          "event-" + string(rune(i)),
+				ID:          "event-" + strconv.Itoa(i),
 				AggregateID: aggregateID,
 				EventType:   events.OrderCreatedEvent,
 				Timestamp:   time.Now(),
 				Version:     1,
 			},
 			TenantID:   "tenant-123",
-			CustomerID: "customer-" + string(rune(i)),
+			CustomerID: "customer-" + strconv.Itoa(i),
 			Currency:   "BDT",
 		}
 
@@ -197,15 +202,15 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 
 	err = db.Ping()
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Skipf("Skipping integration test: database not available: %v", err)
 	}
 
 	// Cleanup function
 	cleanup := func() {
 		// Clean up test data
-		db.Exec("DROP TABLE IF EXISTS events")
-		db.Close()
+		_, _ = db.Exec("DROP TABLE IF EXISTS events")
+		_ = db.Close()
 	}
 
 	return db, cleanup

@@ -34,7 +34,7 @@ func (suite *UserRepositoryTestSuite) SetupTest() {
 
 func (suite *UserRepositoryTestSuite) TearDownTest() {
 	sqlDB, _ := suite.db.DB()
-	sqlDB.Close()
+	_ = sqlDB.Close()
 }
 
 func (suite *UserRepositoryTestSuite) TestCreate() {

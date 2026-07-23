@@ -92,7 +92,7 @@ func (p *SendGridEmailProvider) Send(notification *models.Notification) (*Provid
 			Error:        fmt.Sprintf("SendGrid API request failed: %v", err),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	messageID := resp.Header.Get("X-Message-Id")
 	if messageID == "" {

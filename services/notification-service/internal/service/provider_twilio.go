@@ -87,7 +87,7 @@ func (p *TwilioSMSProvider) Send(notification *models.Notification) (*ProviderRe
 			Error:        fmt.Sprintf("Twilio API request failed: %v", err),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -96,7 +96,7 @@ func (p *TwilioSMSProvider) Send(notification *models.Notification) (*ProviderRe
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
 	}
-	json.Unmarshal(respBody, &twilioResp)
+	_ = json.Unmarshal(respBody, &twilioResp)
 
 	messageID := twilioResp.SID
 	if messageID == "" {

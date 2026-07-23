@@ -316,7 +316,7 @@ func TestHandler_GetProductReviews_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result ListReviewsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Len(t, result.Data, 1)
 }
 
@@ -579,7 +579,7 @@ func TestHandler_GetProductSummary_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.ReviewSummaryResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 4.5, result.AverageRating)
 	assert.Equal(t, 10, result.TotalReviews)
 }

@@ -242,7 +242,7 @@ func TestHandler_GetActivePromotions_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result []models.PromotionResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Len(t, result, 1)
 }
 

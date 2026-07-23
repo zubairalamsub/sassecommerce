@@ -266,7 +266,7 @@ func (step *ReserveInventoryStep) callInventoryService(path string, request map[
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("inventory service returned status %d", resp.StatusCode)
@@ -385,7 +385,7 @@ func (step *ProcessPaymentStep) callPaymentService(path string, request map[stri
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("payment service returned status %d", resp.StatusCode)

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	sharedstorage "github.com/ecommerce/shared/go/pkg/storage"
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository/mocks"
-	sharedstorage "github.com/ecommerce/shared/go/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -20,16 +20,16 @@ import (
 // Reused across avatar/branding/review tests via copy — kept local to each
 // service so tests stay independent.
 type fakeStorage struct {
-	puts, gets []string
-	deletes    []string
-	exists     map[string]bool
+	puts    []string
+	deletes []string
+	exists  map[string]bool
 }
 
 func newFakeStorage() *fakeStorage {
 	return &fakeStorage{exists: map[string]bool{}}
 }
 
-func (f *fakeStorage) Bucket() string                                                   { return "test" }
+func (f *fakeStorage) Bucket() string                                                    { return "test" }
 func (f *fakeStorage) Put(ctx context.Context, t, k string, b io.Reader, c string) error { return nil }
 func (f *fakeStorage) Get(ctx context.Context, t, k string) (io.ReadCloser, error) {
 	return nil, errors.New("nope")

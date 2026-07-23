@@ -129,7 +129,9 @@ func (s *configService) SetConfig(ctx context.Context, req *models.SetConfigRequ
 		Environment: entry.Environment,
 		TenantID:    entry.TenantID,
 	}
-	s.repo.RecordAudit(ctx, audit)
+	if err := s.repo.RecordAudit(ctx, audit); err != nil {
+		s.logger.WithError(err).Warn("Failed to record config audit")
+	}
 
 	return toConfigResponse(entry), nil
 }
@@ -163,7 +165,9 @@ func (s *configService) DeleteConfig(ctx context.Context, id, tenantID string) e
 		Environment: entry.Environment,
 		TenantID:    entry.TenantID,
 	}
-	s.repo.RecordAudit(ctx, audit)
+	if err := s.repo.RecordAudit(ctx, audit); err != nil {
+		s.logger.WithError(err).Warn("Failed to record config audit")
+	}
 
 	return nil
 }
@@ -303,19 +307,7 @@ func toConfigResponses(entries []models.ConfigEntry) []models.ConfigEntryRespons
 func toAuditResponses(logs []models.ConfigAuditLog) []models.ConfigAuditResponse {
 	responses := make([]models.ConfigAuditResponse, len(logs))
 	for i, l := range logs {
-		responses[i] = models.ConfigAuditResponse{
-			ID:          l.ID,
-			ConfigID:    l.ConfigID,
-			Namespace:   l.Namespace,
-			Key:         l.Key,
-			OldValue:    l.OldValue,
-			NewValue:    l.NewValue,
-			Action:      l.Action,
-			ChangedBy:   l.ChangedBy,
-			Environment: l.Environment,
-			TenantID:    l.TenantID,
-			CreatedAt:   l.CreatedAt,
-		}
+		responses[i] = models.ConfigAuditResponse(l)
 	}
 	return responses
 }

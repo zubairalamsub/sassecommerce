@@ -91,7 +91,7 @@ func (r *notificationRepository) GetByUserID(ctx context.Context, tenantID, user
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var notifications []models.Notification
 	if err := cursor.All(ctx, &notifications); err != nil {
@@ -175,7 +175,7 @@ func (r *notificationRepository) ListTemplates(ctx context.Context, tenantID str
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var templates []models.NotificationTemplate
 	if err := cursor.All(ctx, &templates); err != nil {

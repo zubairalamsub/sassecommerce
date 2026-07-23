@@ -112,7 +112,7 @@ func TestHandler_GetUserRecommendations_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.RecommendationResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "user-1", result.UserID)
 	assert.Len(t, result.Recommendations, 1)
 }
@@ -184,7 +184,7 @@ func TestHandler_GetProductRecommendations_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.RecommendationResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "p-1", result.ProductID)
 }
 

@@ -61,7 +61,7 @@ func main() {
 		BatchTimeout: 10 * time.Millisecond,
 		RequiredAcks: kafka.RequireOne,
 	}
-	defer kafkaWriter.Close()
+	defer func() { _ = kafkaWriter.Close() }()
 
 	// Initialize repository
 	promotionRepo := repository.NewPromotionRepository(db)

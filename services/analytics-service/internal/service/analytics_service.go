@@ -168,7 +168,9 @@ func (s *analyticsService) generateReport(ctx context.Context, report *models.Cu
 		report.CompletedAt = &now
 	}
 
-	s.repo.UpdateReport(ctx, report)
+	if err := s.repo.UpdateReport(ctx, report); err != nil {
+		s.logger.WithError(err).Error("Failed to update report")
+	}
 }
 
 func (s *analyticsService) GetReport(ctx context.Context, id, tenantID string) (*models.CustomReportResponse, error) {
@@ -225,7 +227,9 @@ func (s *analyticsService) RecordSale(ctx context.Context, tenantID, orderID, us
 
 	// Also record as customer purchase event
 	eventType := "purchase"
-	s.RecordCustomerActivity(ctx, tenantID, userID, eventType, orderID, amount)
+	if err := s.RecordCustomerActivity(ctx, tenantID, userID, eventType, orderID, amount); err != nil {
+		s.logger.WithError(err).Error("Failed to record customer activity")
+	}
 
 	return nil
 }

@@ -118,7 +118,7 @@ func (r *categoryRepository) List(ctx context.Context, tenantID string, offset, 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var categories []models.Category
 	if err := cursor.All(ctx, &categories); err != nil {
@@ -157,7 +157,7 @@ func (r *categoryRepository) ListByParent(ctx context.Context, tenantID string, 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var categories []models.Category
 	if err := cursor.All(ctx, &categories); err != nil {

@@ -206,7 +206,7 @@ func (r *productRepository) List(ctx context.Context, tenantID string, offset, l
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var products []models.Product
 	if err := cursor.All(ctx, &products); err != nil {
@@ -240,7 +240,7 @@ func (r *productRepository) ListByCategory(ctx context.Context, tenantID, catego
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var products []models.Product
 	if err := cursor.All(ctx, &products); err != nil {
@@ -281,7 +281,7 @@ func (r *productRepository) Search(ctx context.Context, tenantID, query string, 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var products []models.Product
 	if err := cursor.All(ctx, &products); err != nil {

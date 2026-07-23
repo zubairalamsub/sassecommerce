@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
+	"github.com/ecommerce/shared/go/pkg/metrics"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/vendor-service/internal/api"
 	"github.com/ecommerce/vendor-service/internal/config"
 	"github.com/ecommerce/vendor-service/internal/messaging"
@@ -16,9 +19,6 @@ import (
 	"github.com/ecommerce/vendor-service/internal/repository"
 	"github.com/ecommerce/vendor-service/internal/service"
 	"github.com/ecommerce/vendor-service/pkg/logger"
-	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
-	"github.com/ecommerce/shared/go/pkg/metrics"
-	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/segmentio/kafka-go"
@@ -58,7 +58,7 @@ func main() {
 		BatchTimeout: 10 * time.Millisecond,
 		RequiredAcks: kafka.RequireOne,
 	}
-	defer kafkaWriter.Close()
+	defer func() { _ = kafkaWriter.Close() }()
 
 	// Initialize repository
 	vendorRepo := repository.NewVendorRepository(db)

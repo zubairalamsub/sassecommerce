@@ -131,7 +131,7 @@ func (r *analyticsRepository) GetCustomerInsights(ctx context.Context, tenantID 
 	}
 
 	var avgOrderValue float64
-	r.db.WithContext(ctx).Model(&models.CustomerEvent{}).
+	_ = r.db.WithContext(ctx).Model(&models.CustomerEvent{}).
 		Where("tenant_id = ? AND event_type IN ('purchase', 'first_purchase') AND created_at BETWEEN ? AND ?", tenantID, from, to).
 		Select("COALESCE(AVG(amount), 0)").
 		Row().Scan(&avgOrderValue)

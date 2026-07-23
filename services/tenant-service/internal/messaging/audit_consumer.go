@@ -71,41 +71,6 @@ func eventTypeToAction(eventType string) models.AuditAction {
 	}
 }
 
-// securityEventActions maps known security-relevant event types to their
-// canonical audit action label. When an event matches, the consumer uses
-// this label instead of the generic CREATE/UPDATE/DELETE classification so
-// the audit log (and the security-events filter in the admin UI) can pick
-// these out with a clean prefix-based filter.
-//
-// Labels follow a "<resource>.<area>.<verb>" convention so the admin UI
-// can filter by prefix (e.g. "user.login.*" → all login activity).
-var securityEventActions = map[string]string{
-	// user-service auth events
-	"LoginSucceeded":             "user.login.succeeded",
-	"LoginFailed":                "user.login.failed",
-	"PasswordChanged":            "user.password.changed",
-	"PasswordReset":              "user.password.reset",
-	"PasswordResetRequested":     "user.password.reset_requested",
-	"EmailVerificationRequested": "user.email.verification_requested",
-	"EmailVerified":              "user.email.verified",
-	"TwoFactorEnabled":           "user.2fa.enabled",
-	"TwoFactorDisabled":          "user.2fa.disabled",
-	"UserRoleChanged":            "user.role.changed",
-	"UserSuspended":              "user.suspended.changed",
-	"UserReactivated":            "user.reactivated.changed",
-	"UserStatusChanged":          "user.status.changed",
-	"SessionRevoked":             "user.session.revoked",
-	"AllSessionsRevoked":         "user.session.revoked_all",
-	// tenant-service events
-	"TenantSuspended":     "tenant.suspended.changed",
-	"TenantReactivated":   "tenant.reactivated.changed",
-	"TenantConfigChanged": "tenant.config.changed",
-	// product-service events
-	"ProductPriceChanged": "product.price.changed",
-	// order-service events
-	"OrderRefunded": "payment.refund.created",
-}
-
 // AuditEventConsumer listens to Kafka topics from all services and creates
 // centralised audit log entries in the tenant service database.
 type AuditEventConsumer struct {

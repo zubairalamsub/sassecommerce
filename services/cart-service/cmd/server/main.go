@@ -67,7 +67,7 @@ func main() {
 			}
 		},
 	}
-	defer kafkaWriter.Close()
+	defer func() { _ = kafkaWriter.Close() }()
 
 	// Initialize repository
 	cartRepo := repository.NewCartRepository(redisClient)

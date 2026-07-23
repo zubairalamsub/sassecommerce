@@ -10,9 +10,14 @@ on:
         required: true
         type: string
       go-version:
+        # Optional override. When empty (default), the exact toolchain is read
+        # from the service's go.mod via go-version-file. Installing the exact
+        # module toolchain matters: if setup-go installs an older Go and the
+        # module forces a newer one, `go test -cover` breaks with
+        # `go: no such tool "covdata"` across the toolchain switch.
         required: false
         type: string
-        default: '1.25'
+        default: ''
       needs-postgres:
         required: false
         type: boolean
@@ -92,6 +97,7 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.service-path }}/go.mod
           cache-dependency-path: ${{ inputs.service-path }}/go.sum
 
       - name: Download dependencies
@@ -149,14 +155,19 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.service-path }}/go.mod
           cache-dependency-path: ${{ inputs.service-path }}/go.sum
 
+      # golangci-lint v2 pinned: the v6 action installs golangci-lint v1.64.x
+      # (built with go1.24), which refuses modules targeting go 1.25.0
+      # ("Go language version used to build golangci-lint is lower than the
+      # targeted Go version"). v2.5.0 is built with go1.25.
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
+
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@8564da7cb3c6866ed1da648ca8f00a258ef0c802 # v6.5.2
-        with:
-          version: latest
-          working-directory: ${{ inputs.service-path }}
-          args: --timeout=5m
+        working-directory: ${{ inputs.service-path }}
+        run: golangci-lint run --timeout=5m
 
   docker:
     name: Docker Build

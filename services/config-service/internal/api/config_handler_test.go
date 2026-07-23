@@ -117,7 +117,7 @@ func TestHandler_GetConfig_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.ConfigEntryResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "20", result.Value)
 }
 
@@ -241,7 +241,7 @@ func TestHandler_ListByNamespace_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, float64(1), result["count"])
 }
 
@@ -284,7 +284,7 @@ func TestHandler_SearchConfigs_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, float64(1), result["total"])
 }
 
@@ -349,7 +349,7 @@ func TestHandler_ExportNamespace_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "business.shipping", result["namespace"])
 	assert.Equal(t, float64(2), result["count"])
 }

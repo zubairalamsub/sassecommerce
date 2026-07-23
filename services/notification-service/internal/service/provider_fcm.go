@@ -92,7 +92,7 @@ func (p *FCMPushProvider) Send(notification *models.Notification) (*ProviderResu
 			Error:        fmt.Sprintf("FCM API request failed: %v", err),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -105,7 +105,7 @@ func (p *FCMPushProvider) Send(notification *models.Notification) (*ProviderResu
 			Error     string `json:"error"`
 		} `json:"results"`
 	}
-	json.Unmarshal(respBody, &fcmResp)
+	_ = json.Unmarshal(respBody, &fcmResp)
 
 	messageID := generateMessageID("fcm")
 	if len(fcmResp.Results) > 0 && fcmResp.Results[0].MessageID != "" {

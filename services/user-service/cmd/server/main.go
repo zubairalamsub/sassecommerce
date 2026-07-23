@@ -11,15 +11,15 @@ import (
 
 	"strings"
 
+	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
+	"github.com/ecommerce/shared/go/pkg/metrics"
+	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/ecommerce/user-service/internal/api"
 	"github.com/ecommerce/user-service/internal/messaging"
 	"github.com/ecommerce/user-service/internal/middleware"
 	"github.com/ecommerce/user-service/internal/models"
 	"github.com/ecommerce/user-service/internal/repository"
 	"github.com/ecommerce/user-service/internal/service"
-	sharedconfig "github.com/ecommerce/shared/go/pkg/config"
-	"github.com/ecommerce/shared/go/pkg/metrics"
-	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -50,7 +50,7 @@ func main() {
 	// Initialize Kafka producer
 	kafkaBrokers := strings.Split(getEnv("KAFKA_BROKERS", "kafka:9092"), ",")
 	kafkaProducer := messaging.NewProducer(kafkaBrokers, log)
-	defer kafkaProducer.Close()
+	defer func() { _ = kafkaProducer.Close() }()
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
@@ -368,25 +368,4 @@ func setupRouter(
 	}
 
 	return router
-}
-
-// requestLoggerMiddleware logs HTTP requests
-func requestLoggerMiddleware(logger *logrus.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
-
-		c.Next()
-
-		duration := time.Since(start)
-		status := c.Writer.Status()
-
-		logger.WithFields(logrus.Fields{
-			"method":   c.Request.Method,
-			"path":     path,
-			"status":   status,
-			"duration": duration.Milliseconds(),
-			"ip":       c.ClientIP(),
-		}).Info("HTTP request")
-	}
 }

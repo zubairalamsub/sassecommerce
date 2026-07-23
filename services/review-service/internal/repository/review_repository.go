@@ -85,7 +85,7 @@ func (r *reviewRepository) GetByProductID(ctx context.Context, tenantID, product
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var reviews []models.Review
 	if err := cursor.All(ctx, &reviews); err != nil {
@@ -117,7 +117,7 @@ func (r *reviewRepository) GetByUserID(ctx context.Context, tenantID, userID str
 	if err != nil {
 		return nil, 0, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var reviews []models.Review
 	if err := cursor.All(ctx, &reviews); err != nil {
@@ -179,7 +179,7 @@ func (r *reviewRepository) GetProductSummary(ctx context.Context, tenantID, prod
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var results []struct {
 		ProductID     string  `bson:"_id"`

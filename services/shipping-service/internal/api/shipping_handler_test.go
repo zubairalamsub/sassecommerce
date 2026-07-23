@@ -220,7 +220,7 @@ func TestHandler_GetShipment_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.ShipmentResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, "shipment-1", result.ID)
 }
 
@@ -322,7 +322,7 @@ func TestHandler_ListShipments_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result ListShipmentsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Len(t, result.Data, 1)
 	assert.Equal(t, int64(1), result.Pagination.Total)
 }
@@ -366,7 +366,7 @@ func TestHandler_ListShipments_Pagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result ListShipmentsResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, 2, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.PageSize)
 	assert.Equal(t, int64(15), result.Pagination.Total)
@@ -441,7 +441,7 @@ func TestHandler_CancelShipment_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.ShipmentResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Equal(t, models.StatusCancelled, result.Status)
 }
 
@@ -488,7 +488,7 @@ func TestHandler_CalculateRates_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var result models.RateCalculationResponse
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 	assert.Len(t, result.Rates, 2)
 }
 

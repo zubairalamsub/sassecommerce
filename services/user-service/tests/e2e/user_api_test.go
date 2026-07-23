@@ -103,7 +103,7 @@ func (suite *E2ETestSuite) SetupSuite() {
 
 func (suite *E2ETestSuite) TearDownSuite() {
 	sqlDB, _ := suite.db.DB()
-	sqlDB.Close()
+	_ = sqlDB.Close()
 }
 
 func (suite *E2ETestSuite) TestRegister_Success() {
@@ -126,7 +126,7 @@ func (suite *E2ETestSuite) TestRegister_Success() {
 	assert.Equal(suite.T(), http.StatusCreated, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.True(suite.T(), response["success"].(bool))
 	assert.NotNil(suite.T(), response["data"])
 }
@@ -162,7 +162,7 @@ func (suite *E2ETestSuite) TestRegister_DuplicateEmail() {
 	assert.Equal(suite.T(), http.StatusConflict, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.False(suite.T(), response["success"].(bool))
 }
 
@@ -202,7 +202,7 @@ func (suite *E2ETestSuite) TestLogin_Success() {
 	assert.Equal(suite.T(), http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.True(suite.T(), response["success"].(bool))
 
 	data := response["data"].(map[string]interface{})
@@ -243,7 +243,7 @@ func (suite *E2ETestSuite) TestGetProfile_Success() {
 	assert.Equal(suite.T(), http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.True(suite.T(), response["success"].(bool))
 }
 
@@ -299,7 +299,7 @@ func (suite *E2ETestSuite) TestListUsers_Success() {
 	assert.Equal(suite.T(), http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.True(suite.T(), response["success"].(bool))
 	assert.NotNil(suite.T(), response["data"])
 	assert.NotNil(suite.T(), response["pagination"])
@@ -337,7 +337,7 @@ func (suite *E2ETestSuite) registerAndLogin(tenantID, email, username, password 
 	suite.router.ServeHTTP(w, req)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	data := response["data"].(map[string]interface{})
 	return data["token"].(string)
 }

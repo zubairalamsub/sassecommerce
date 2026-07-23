@@ -91,7 +91,9 @@ func (r *redisCartRepository) DeleteCart(ctx context.Context, tenantID, userID s
 	cart, err := r.GetCart(ctx, tenantID, userID)
 	if err == nil && len(cart.Items) > 0 {
 		for _, item := range cart.Items {
-			r.RemoveProductCartMapping(ctx, item.ProductID, key)
+			// Best-effort cleanup; the mapping entry is only an index and the
+			// cart deletion below must proceed regardless.
+			_ = r.RemoveProductCartMapping(ctx, item.ProductID, key)
 		}
 	}
 

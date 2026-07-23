@@ -24,6 +24,7 @@ import (
 	"github.com/ecommerce/shared/go/pkg/metrics"
 	sharedmiddleware "github.com/ecommerce/shared/go/pkg/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -50,8 +51,31 @@ func main() {
 	kafkaProducer := kafka.NewProducer(cfg.Kafka.Brokers, log)
 	defer kafkaProducer.Close()
 
+	// Optional Redis cache for tenant lookups (id/slug/domain). If Redis is
+	// unreachable the service runs without caching (repo gets a nil client).
+	var redisClient *redis.Client
+	if cfg.Redis.Host != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.Redis.Host + ":" + cfg.Redis.Port,
+			Password: cfg.Redis.Password,
+		})
+		pingCtx, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := redisClient.Ping(pingCtx).Err(); err != nil {
+			log.WithError(err).Warn("Redis unavailable; continuing without tenant cache")
+			redisClient = nil
+		} else {
+			log.Info("Tenant cache enabled (Redis)")
+		}
+		cancelPing()
+		defer func() {
+			if redisClient != nil {
+				_ = redisClient.Close()
+			}
+		}()
+	}
+
 	// Initialize repositories
-	tenantRepo := repository.NewTenantRepository(db)
+	tenantRepo := repository.NewTenantRepository(db, redisClient)
 	auditRepo := repository.NewAuditRepository(db)
 	usageRepo := repository.NewUsageRepository(db)
 

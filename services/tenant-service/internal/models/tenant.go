@@ -32,16 +32,16 @@ const (
 
 // Tenant represents a multi-tenant business entity
 type Tenant struct {
-	ID          string       `gorm:"primaryKey" json:"id"`
-	Name        string       `gorm:"not null" json:"name"`
-	Slug        string       `gorm:"uniqueIndex;not null" json:"slug"`
-	Domain      string       `gorm:"index" json:"domain,omitempty"`
-	Email       string       `gorm:"not null" json:"email"`
-	Status      TenantStatus `gorm:"not null;default:pending" json:"status"`
-	Tier        TenantTier   `gorm:"not null;default:free" json:"tier"`
+	ID     string       `gorm:"primaryKey" json:"id"`
+	Name   string       `gorm:"not null" json:"name"`
+	Slug   string       `gorm:"uniqueIndex;not null" json:"slug"`
+	Domain string       `gorm:"index" json:"domain,omitempty"`
+	Email  string       `gorm:"not null" json:"email"`
+	Status TenantStatus `gorm:"not null;default:pending" json:"status"`
+	Tier   TenantTier   `gorm:"not null;default:free" json:"tier"`
 
 	// Configuration
-	Config      TenantConfig `gorm:"type:text" json:"config"`
+	Config TenantConfig `gorm:"type:text" json:"config"`
 
 	// Limits based on tier
 	MaxUsers    int `gorm:"default:10" json:"max_users"`
@@ -73,37 +73,37 @@ type TenantConfig struct {
 
 // BrandingConfig holds branding settings
 type BrandingConfig struct {
-	LogoURL       string            `json:"logo_url"`
-	FaviconURL    string            `json:"favicon_url"`
-	PrimaryColor  string            `json:"primary_color"`
-	SecondaryColor string           `json:"secondary_color"`
-	CustomCSS     string            `json:"custom_css"`
-	CustomFonts   map[string]string `json:"custom_fonts"`
+	LogoURL        string            `json:"logo_url"`
+	FaviconURL     string            `json:"favicon_url"`
+	PrimaryColor   string            `json:"primary_color"`
+	SecondaryColor string            `json:"secondary_color"`
+	CustomCSS      string            `json:"custom_css"`
+	CustomFonts    map[string]string `json:"custom_fonts"`
 }
 
 // GeneralConfig holds general settings
 type GeneralConfig struct {
-	Timezone        string `json:"timezone"`
-	Currency        string `json:"currency"`
-	Language        string `json:"language"`
-	DateFormat      string `json:"date_format"`
-	TimeFormat      string `json:"time_format"`
-	ContactEmail    string `json:"contact_email"`
-	ContactPhone    string `json:"contact_phone"`
-	SupportURL      string `json:"support_url"`
+	Timezone     string `json:"timezone"`
+	Currency     string `json:"currency"`
+	Language     string `json:"language"`
+	DateFormat   string `json:"date_format"`
+	TimeFormat   string `json:"time_format"`
+	ContactEmail string `json:"contact_email"`
+	ContactPhone string `json:"contact_phone"`
+	SupportURL   string `json:"support_url"`
 }
 
 // FeatureConfig holds feature flags
 type FeatureConfig struct {
-	MultiCurrency      bool `json:"multi_currency"`
-	Wishlist           bool `json:"wishlist"`
-	ProductReviews     bool `json:"product_reviews"`
-	GuestCheckout      bool `json:"guest_checkout"`
-	SocialLogin        bool `json:"social_login"`
-	AIRecommendations  bool `json:"ai_recommendations"`
-	LoyaltyProgram     bool `json:"loyalty_program"`
-	Subscriptions      bool `json:"subscriptions"`
-	GiftCards          bool `json:"gift_cards"`
+	MultiCurrency     bool `json:"multi_currency"`
+	Wishlist          bool `json:"wishlist"`
+	ProductReviews    bool `json:"product_reviews"`
+	GuestCheckout     bool `json:"guest_checkout"`
+	SocialLogin       bool `json:"social_login"`
+	AIRecommendations bool `json:"ai_recommendations"`
+	LoyaltyProgram    bool `json:"loyalty_program"`
+	Subscriptions     bool `json:"subscriptions"`
+	GiftCards         bool `json:"gift_cards"`
 }
 
 // CreateTenantRequest represents the request to create a new tenant
@@ -123,16 +123,16 @@ type UpdateTenantRequest struct {
 
 // TenantResponse represents the tenant response
 type TenantResponse struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	Slug      string        `json:"slug"`
-	Domain    string        `json:"domain,omitempty"`
-	Email     string        `json:"email"`
-	Status    TenantStatus  `json:"status"`
-	Tier      TenantTier    `json:"tier"`
-	Config    TenantConfig  `json:"config"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Slug      string       `json:"slug"`
+	Domain    string       `json:"domain,omitempty"`
+	Email     string       `json:"email"`
+	Status    TenantStatus `json:"status"`
+	Tier      TenantTier   `json:"tier"`
+	Config    TenantConfig `json:"config"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }
 
 // TableName specifies the table name for GORM

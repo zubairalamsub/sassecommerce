@@ -6,31 +6,31 @@ import (
 
 // AuditLog represents an audit trail entry
 type AuditLog struct {
-	ID        string    `gorm:"primaryKey" json:"id"`
-	TenantID  string    `gorm:"index" json:"tenant_id,omitempty"`
-	UserID    string    `gorm:"index" json:"user_id,omitempty"`
-	Action    string    `gorm:"not null;index" json:"action"`
-	Resource  string    `gorm:"not null;index" json:"resource"`
-	ResourceID string   `gorm:"index" json:"resource_id,omitempty"`
-	Method    string    `json:"method"`
-	Path      string    `json:"path"`
-	IPAddress string    `json:"ip_address"`
-	UserAgent string    `json:"user_agent"`
+	ID         string `gorm:"primaryKey" json:"id"`
+	TenantID   string `gorm:"index" json:"tenant_id,omitempty"`
+	UserID     string `gorm:"index" json:"user_id,omitempty"`
+	Action     string `gorm:"not null;index" json:"action"`
+	Resource   string `gorm:"not null;index" json:"resource"`
+	ResourceID string `gorm:"index" json:"resource_id,omitempty"`
+	Method     string `json:"method"`
+	Path       string `json:"path"`
+	IPAddress  string `json:"ip_address"`
+	UserAgent  string `json:"user_agent"`
 
 	// Request/Response details
-	RequestBody  string    `gorm:"type:text" json:"request_body,omitempty"`
-	ResponseCode int       `json:"response_code"`
+	RequestBody  string `gorm:"type:text" json:"request_body,omitempty"`
+	ResponseCode int    `json:"response_code"`
 
 	// Old and new values for updates
-	OldValue     string    `gorm:"type:text" json:"old_value,omitempty"`
-	NewValue     string    `gorm:"type:text" json:"new_value,omitempty"`
+	OldValue string `gorm:"type:text" json:"old_value,omitempty"`
+	NewValue string `gorm:"type:text" json:"new_value,omitempty"`
 
 	// Metadata
-	Metadata     string    `gorm:"type:text" json:"metadata,omitempty"`
-	ErrorMessage string    `gorm:"type:text" json:"error_message,omitempty"`
-	Duration     int64     `json:"duration_ms"` // Request duration in milliseconds
+	Metadata     string `gorm:"type:text" json:"metadata,omitempty"`
+	ErrorMessage string `gorm:"type:text" json:"error_message,omitempty"`
+	Duration     int64  `json:"duration_ms"` // Request duration in milliseconds
 
-	CreatedAt    time.Time `gorm:"index" json:"created_at"`
+	CreatedAt time.Time `gorm:"index" json:"created_at"`
 }
 
 // TableName specifies the table name for GORM

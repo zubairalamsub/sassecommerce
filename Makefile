@@ -15,6 +15,7 @@ help:
 	@echo ""
 	@echo "Services:"
 	@echo "  make up               - Start app services + core infra (no monitoring stack)"
+	@echo "  make up-core          - Start core infra + only named services (SERVICES=\"...\")"
 	@echo "  make up-monitoring    - Start everything incl. Prometheus/Grafana/exporters"
 	@echo "  make down             - Stop all services"
 	@echo "  make build            - Build all services"
@@ -64,6 +65,14 @@ infra-logs:
 # so a normal dev bring-up skips Prometheus/Grafana/Loki/exporters).
 up:
 	docker-compose up -d
+
+# Minimal dev loop: core infra plus only the services you name. Compose pulls
+# in each named service's depends_on automatically. Examples:
+#   make up-core                                     # infra only
+#   make up-core SERVICES="tenant-service frontend"  # infra + what you need
+CORE_INFRA = postgres mongodb redis zookeeper kafka
+up-core:
+	docker-compose up -d $(CORE_INFRA) $(SERVICES)
 
 # Full stack including the monitoring + exporter profile.
 up-monitoring:

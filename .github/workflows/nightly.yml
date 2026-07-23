@@ -1,0 +1,46 @@
+name: Nightly (race detector + integration)
+
+# PR runs skip the race detector for fast feedback (see go-service.yml).
+# This nightly lane restores that coverage: every Go service is tested with
+# -race, and the datastore-backed integration suites are included.
+on:
+  schedule:
+    # 02:00 UTC daily (08:00 Asia/Dhaka)
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  race:
+    name: ${{ matrix.service }}
+    uses: ./.github/workflows/go-service.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: analytics-service,      postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: cart-service,           postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: config-service,         postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: notification-service,   postgres: false, mongodb: false, redis: false, tags: '' }
+          # order-service eventstore tests run against real Postgres.
+          - { service: order-service,          postgres: true,  mongodb: false, redis: false, tags: '' }
+          # product-service repository suites run against real MongoDB.
+          - { service: product-service,        postgres: false, mongodb: true,  redis: false, tags: 'integration' }
+          - { service: promotion-service,      postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: recommendation-service, postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: review-service,         postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: search-service,         postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: shipping-service,       postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: tenant-service,         postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: user-service,           postgres: false, mongodb: false, redis: false, tags: '' }
+          - { service: vendor-service,         postgres: false, mongodb: false, redis: false, tags: '' }
+    with:
+      service-name: ${{ matrix.service }}
+      service-path: services/${{ matrix.service }}
+      needs-postgres: ${{ matrix.postgres }}
+      needs-mongodb: ${{ matrix.mongodb }}
+      needs-redis: ${{ matrix.redis }}
+      race: true
+      test-tags: ${{ matrix.tags }}

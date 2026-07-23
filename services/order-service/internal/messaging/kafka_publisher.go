@@ -41,6 +41,19 @@ func NewKafkaEventPublisher(brokers []string, topic string, logger *zap.Logger) 
 		RequiredAcks: kafka.RequireOne,
 		MaxAttempts:  3,
 		Logger:       kafka.LoggerFunc(func(msg string, args ...interface{}) {}), // Suppress kafka logs
+		// Async so the command/Save path doesn't block on the broker RTT. Events
+		// are the source of truth in Postgres and the projection is updated
+		// synchronously, so a publish failure is tolerated — log it via Completion.
+		// Keying by aggregate ID still preserves per-aggregate ordering.
+		Async: true,
+		Completion: func(messages []kafka.Message, err error) {
+			if err != nil {
+				logger.Error("Async Kafka publish failed",
+					zap.Int("message_count", len(messages)),
+					zap.Error(err),
+				)
+			}
+		},
 	}
 
 	return &KafkaEventPublisher{

@@ -60,6 +60,10 @@ func (suite *ProductRepositoryTestSuite) TearDownSuite() {
 func (suite *ProductRepositoryTestSuite) SetupTest() {
 	// Clear collection before each test
 	_ = suite.db.Collection("products").Drop(suite.ctx)
+	// Dropping the collection drops its indexes too; recreate them exactly as
+	// production startup does. Search() uses $text, which ERRORS (rather than
+	// returning empty) without the text index.
+	suite.Require().NoError(suite.repository.EnsureIndexes(suite.ctx))
 }
 
 func TestProductRepositoryTestSuite(t *testing.T) {

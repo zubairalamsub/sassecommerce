@@ -46,7 +46,7 @@ func (suite *ProductRepositoryTestSuite) SetupSuite() {
 
 	suite.client = client
 	suite.db = client.Database("product_test_db")
-	suite.repository = NewProductRepository(suite.db)
+	suite.repository = NewProductRepository(suite.db, nil)
 }
 
 func (suite *ProductRepositoryTestSuite) TearDownSuite() {

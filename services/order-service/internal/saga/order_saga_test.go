@@ -119,6 +119,11 @@ type fakeServices struct {
 	invCreateStatus int
 	invCreateBody   string
 	invCancelStatus int
+	// invCreateFailAfter, when >= 0, makes reservation creation start failing
+	// once this many have already succeeded (0 = fail immediately).
+	invCreateFailAfter int
+	// invCancelFailFor makes the cancel of this one reservation id fail.
+	invCancelFailFor string
 
 	payCreateStatus int
 	payCreateBody   string
@@ -133,20 +138,35 @@ type fakeServices struct {
 func newFakeServices(t *testing.T) *fakeServices {
 	t.Helper()
 	f := &fakeServices{
-		invCreateStatus: http.StatusCreated,
-		invCancelStatus: http.StatusOK,
-		payCreateStatus: http.StatusCreated,
-		payCreateBody:   `{"id":"pay-1","status":"succeeded"}`,
-		payRefundStatus: http.StatusOK,
+		invCreateStatus:    http.StatusCreated,
+		invCancelStatus:    http.StatusOK,
+		invCreateFailAfter: -1,
+		payCreateStatus:    http.StatusCreated,
+		payCreateBody:      `{"id":"pay-1","status":"succeeded"}`,
+		payRefundStatus:    http.StatusOK,
 	}
 
 	f.inventory = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/cancel") {
 			f.record(r, "inventory", "cancel")
+			if f.invCancelFailFor != "" && strings.Contains(r.URL.Path, "/"+f.invCancelFailFor+"/") {
+				f.reply(w, http.StatusInternalServerError, `{"error":"cannot cancel"}`)
+				return
+			}
 			f.reply(w, f.invCancelStatus, `{"status":"cancelled"}`)
 			return
 		}
 		f.record(r, "inventory", "create")
+
+		f.mu.Lock()
+		succeeded := f.reservationSeq
+		failAfter := f.invCreateFailAfter
+		f.mu.Unlock()
+		if failAfter >= 0 && succeeded >= failAfter {
+			f.reply(w, http.StatusConflict, `{"error":"insufficient stock"}`)
+			return
+		}
+
 		body := f.invCreateBody
 		if body == "" {
 			f.mu.Lock()
@@ -449,17 +469,41 @@ func TestOrderSaga_PaymentFailureIsSkipped(t *testing.T) {
 	assert.Empty(t, loadOrder(t, f.store).PaymentID, "no payment recorded when the payment call failed")
 }
 
-// A 2xx payment response without an id is treated as a step failure — and since
-// payment is optional, the saga continues.
-func TestOrderSaga_PaymentResponseWithoutIDIsSkipped(t *testing.T) {
-	f := newSagaFixture(t, defaultItems()...)
-	f.services.payCreateBody = `{"status":"succeeded"}`
+// A 2xx payment response with no usable id leaves the payment outcome UNKNOWN —
+// the charge may have gone through with nothing to refund against. That must
+// fail the order rather than be skipped as an optional-step failure, because
+// confirming an order on an unknown payment outcome is the worse error.
+func TestOrderSaga_PaymentResponseWithoutIDFailsTheSaga(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"id missing", `{"status":"succeeded"}`},
+		{"id empty", `{"id":"","status":"succeeded"}`},
+		{"id wrong type", `{"id":12345,"status":"succeeded"}`},
+	}
 
-	err := f.newSaga("test-token").Execute()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSagaFixture(t, defaultItems()...)
+			f.services.payCreateBody = tc.body
 
-	require.NoError(t, err)
-	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
-	assert.Empty(t, loadOrder(t, f.store).PaymentID)
+			err := f.newSaga("test-token").Execute()
+
+			require.Error(t, err, "an unknown payment outcome must not be skipped")
+			assert.Contains(t, err.Error(), "saga step ProcessPayment failed")
+
+			assert.NotEqual(t, aggregates.StatusConfirmed, f.statusInStore(t),
+				"the order must not be confirmed on an unknown payment outcome")
+			assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+
+			// No refund is possible without an id, but the stock hold is released.
+			assert.Empty(t, f.services.callsOfKind("refund"),
+				"there is no payment id to refund against")
+			require.Len(t, f.services.callsOfKind("cancel"), 1,
+				"the inventory hold is still released")
+		})
+	}
 }
 
 func TestOrderSaga_BothOptionalStepsFailStillConfirms(t *testing.T) {
@@ -641,6 +685,106 @@ func TestOrderSaga_ExternalFailureStillSkipsWithoutCompensating(t *testing.T) {
 	assert.Equal(t, []string{"inventory:create", "payment:create"}, f.services.sequence(),
 		"no compensation, because nothing was captured")
 	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
+}
+
+// ----------------------------------- multi-item reservation leaks (regression)
+
+func threeItems() []commands.AddOrderItemCommand {
+	return []commands.AddOrderItemCommand{
+		{ProductID: "product-1", SKU: "SKU-1", Name: "Shirt", Quantity: 1, UnitPrice: 100},
+		{ProductID: "product-2", SKU: "SKU-2", Name: "Hat", Quantity: 1, UnitPrice: 100},
+		{ProductID: "product-3", SKU: "SKU-3", Name: "Socks", Quantity: 1, UnitPrice: 100},
+	}
+}
+
+// Regression: the step used to keep only the LAST reservation id, so rolling
+// back a multi-item order cancelled one reservation and leaked the rest.
+func TestOrderSaga_CompensationReleasesEveryReservation(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.store.failSaveOn = failOnConfirm
+
+	require.Error(t, f.newSaga("test-token").Execute())
+
+	cancels := f.services.callsOfKind("cancel")
+	require.Len(t, cancels, 3, "every reservation must be released, not just the last")
+
+	paths := make([]string, 0, len(cancels))
+	for _, c := range cancels {
+		paths = append(paths, c.Path)
+	}
+	assert.ElementsMatch(t, []string{
+		"/api/v1/inventory/reservations/res-1/cancel",
+		"/api/v1/inventory/reservations/res-2/cancel",
+		"/api/v1/inventory/reservations/res-3/cancel",
+	}, paths)
+
+	// Newest-first, mirroring the reverse-order unwind.
+	assert.Equal(t, "/api/v1/inventory/reservations/res-3/cancel", paths[0])
+
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// Regression: a failure partway through reserving must release what was already
+// held. It used to be swallowed as an optional-step skip, leaking those holds
+// while the order went on to be confirmed.
+func TestOrderSaga_PartialReservationFailureReleasesEarlierHolds(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	// Let the first two reservations succeed, then start failing.
+	f.services.invCreateFailAfter = 2
+
+	err := f.newSaga("test-token").Execute()
+
+	require.Error(t, err, "a partial reservation must not be skipped")
+	assert.Contains(t, err.Error(), "saga step ReserveInventory failed")
+	assert.Contains(t, err.Error(), "reservation(s) succeeded")
+
+	cancels := f.services.callsOfKind("cancel")
+	require.Len(t, cancels, 2, "both successful holds must be released")
+	assert.ElementsMatch(t, []string{
+		"/api/v1/inventory/reservations/res-1/cancel",
+		"/api/v1/inventory/reservations/res-2/cancel",
+	}, []string{cancels[0].Path, cancels[1].Path})
+
+	assert.Empty(t, f.services.callsOfKind("refund"), "payment was never attempted")
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// The very first reservation failing means nothing is held, so the original
+// optional-skip behaviour still applies.
+func TestOrderSaga_FirstReservationFailureIsStillSkipped(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.services.invCreateFailAfter = 0 // fail immediately
+
+	err := f.newSaga("test-token").Execute()
+
+	require.NoError(t, err, "nothing was held, so the optional step is skipped")
+	assert.Empty(t, f.services.callsOfKind("cancel"), "nothing to release")
+	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
+}
+
+// A release that fails for one reservation must not prevent the others from
+// being released.
+func TestOrderSaga_OneFailedReleaseDoesNotStrandTheOthers(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.store.failSaveOn = failOnConfirm
+	f.services.invCancelFailFor = "res-2"
+
+	require.Error(t, f.newSaga("test-token").Execute())
+
+	require.Len(t, f.services.callsOfKind("cancel"), 3,
+		"all three releases are attempted even though one fails")
+
+	// res-2's release failed, so the compensation chain reports an error and the
+	// order is left uncancelled — but res-1 and res-3 were still released.
+	assert.Equal(t, aggregates.StatusPending, f.statusInStore(t))
+
+	releases := 0
+	for _, e := range f.store.eventTypes(testOrderID) {
+		if e == "InventoryReleased" {
+			releases++
+		}
+	}
+	assert.Equal(t, 2, releases, "only the successful releases are recorded")
 }
 
 // ------------------------------------------------------------ step primitives

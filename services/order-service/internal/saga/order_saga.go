@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/yourusername/ecommerce/order-service/internal/domain/aggregates"
@@ -21,21 +22,26 @@ type SagaStep interface {
 	GetName() string
 }
 
-// recordError marks a step failure that happened AFTER the step's external side
-// effect already succeeded — the payment was captured, or the stock is held —
-// but recording it on the order failed.
+// sideEffectError marks a step failure where an external side effect may
+// already exist — the payment was captured, or stock is held — even though the
+// step did not complete. It covers three cases:
+//
+//   - recording the side effect on the order failed after the call succeeded
+//   - a later item failed after earlier items were already reserved
+//   - the dependency returned success but an unusable response, leaving the
+//     outcome genuinely unknown
 //
 // Such a failure is never optional. "Optional" exists for a dependency that is
 // unavailable or not applicable (no stock records yet, no payment needed for
-// COD), where nothing was acquired and skipping is harmless. Once money has
-// moved, skipping would strand it, so a recordError always fails the saga and
-// triggers compensation.
-type recordError struct {
+// COD), where nothing was acquired and skipping is harmless. Once a side effect
+// may exist, skipping would strand it, so a sideEffectError always fails the
+// saga and triggers compensation.
+type sideEffectError struct {
 	err error
 }
 
-func (e *recordError) Error() string { return e.err.Error() }
-func (e *recordError) Unwrap() error { return e.err }
+func (e *sideEffectError) Error() string { return e.err.Error() }
+func (e *sideEffectError) Unwrap() error { return e.err }
 
 // OrderSaga orchestrates a distributed transaction for order processing
 type OrderSaga struct {
@@ -110,10 +116,10 @@ func (s *OrderSaga) Execute() error {
 
 		if err := step.Execute(); err != nil {
 			// An optional step may be skipped only when nothing was acquired.
-			// A recordError means the side effect already happened, so it must
-			// be compensated rather than skipped.
-			var recErr *recordError
-			if s.optionalSteps[step.GetName()] && !errors.As(err, &recErr) {
+			// A sideEffectError means an external side effect may already exist,
+			// so it must be compensated rather than skipped.
+			var sideErr *sideEffectError
+			if s.optionalSteps[step.GetName()] && !errors.As(err, &sideErr) {
 				s.logger.Warn("Optional saga step failed, skipping",
 					zap.String("order_id", s.orderID),
 					zap.String("step", step.GetName()),
@@ -184,8 +190,11 @@ func (s *OrderSaga) compensate() error {
 
 // Reserve Inventory Step
 type ReserveInventoryStep struct {
-	saga          *OrderSaga
-	reservationID string
+	saga *OrderSaga
+	// reservationIDs holds every reservation created by this step, in creation
+	// order — the inventory service issues one per order item. Compensation must
+	// release all of them; tracking only the last one leaked the rest.
+	reservationIDs []string
 }
 
 func (s *OrderSaga) NewReserveInventoryStep() *ReserveInventoryStep {
@@ -197,8 +206,6 @@ func (step *ReserveInventoryStep) GetName() string {
 }
 
 func (step *ReserveInventoryStep) Execute() error {
-	var lastReservationID string
-
 	// Reserve each item individually (inventory service expects single-item requests)
 	for _, item := range step.saga.order.Items {
 		request := map[string]interface{}{
@@ -214,15 +221,27 @@ func (step *ReserveInventoryStep) Execute() error {
 
 		response, err := step.callInventoryService("/api/v1/inventory/reservations", request)
 		if err != nil {
+			// If earlier items are already reserved, stock is held and must be
+			// released — this is no longer a skippable optional failure.
+			if len(step.reservationIDs) > 0 {
+				return &sideEffectError{fmt.Errorf(
+					"failed to reserve inventory for product %s after %d reservation(s) succeeded: %w",
+					item.ProductID, len(step.reservationIDs), err)}
+			}
 			return fmt.Errorf("failed to reserve inventory: %w", err)
 		}
 
-		if id, ok := response["id"].(string); ok {
-			lastReservationID = id
+		// Record the id immediately, so a failure on a later item can still
+		// release everything reserved so far.
+		if id, ok := response["id"].(string); ok && id != "" {
+			step.reservationIDs = append(step.reservationIDs, id)
 		}
 	}
 
-	step.reservationID = lastReservationID
+	lastReservationID := ""
+	if n := len(step.reservationIDs); n > 0 {
+		lastReservationID = step.reservationIDs[n-1]
+	}
 
 	// Record reservation in order
 	reservedItems := make([]events.ReservedItem, 0, len(step.saga.order.Items))
@@ -245,42 +264,63 @@ func (step *ReserveInventoryStep) Execute() error {
 	if err := step.saga.commandHandler.Handle(cmd); err != nil {
 		// The stock is already held at this point, so this must not be skipped
 		// as an optional-step failure — it has to be compensated.
-		return &recordError{fmt.Errorf("failed to record inventory reservation: %w", err)}
+		return &sideEffectError{fmt.Errorf("failed to record inventory reservation: %w", err)}
 	}
 
 	return nil
 }
 
 func (step *ReserveInventoryStep) Compensate() error {
-	if step.reservationID == "" {
+	if len(step.reservationIDs) == 0 {
 		return nil
 	}
 
-	// Cancel reservation
 	request := map[string]interface{}{
 		"cancelled_by": "system",
 		"reason":       "Order saga compensation",
 	}
 
-	_, err := step.callInventoryService(
-		fmt.Sprintf("/api/v1/inventory/reservations/%s/cancel", step.reservationID),
-		request,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to cancel inventory reservation: %w", err)
+	// Release every reservation, newest first. Keep going after a failure so one
+	// unreachable reservation cannot strand the others, then report the first
+	// error once the rest have been attempted.
+	var firstErr error
+	released := make([]string, 0, len(step.reservationIDs))
+	for i := len(step.reservationIDs) - 1; i >= 0; i-- {
+		id := step.reservationIDs[i]
+
+		if _, err := step.callInventoryService(
+			fmt.Sprintf("/api/v1/inventory/reservations/%s/cancel", id),
+			request,
+		); err != nil {
+			step.saga.logger.Error("Failed to cancel inventory reservation",
+				zap.String("order_id", step.saga.orderID),
+				zap.String("reservation_id", id),
+				zap.Error(err),
+			)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to cancel inventory reservation %s: %w", id, err)
+			}
+			continue
+		}
+		released = append(released, id)
 	}
 
-	// Record release in order
-	cmd := commands.RecordInventoryReleaseCommand{
-		OrderID:       step.saga.orderID,
-		ReservationID: step.reservationID,
-		Reason:        "Saga compensation",
-	}
-	if err := step.saga.commandHandler.Handle(cmd); err != nil {
-		return fmt.Errorf("failed to record inventory release: %w", err)
+	// Record what was actually released, so the event history matches reality
+	// even on a partial release.
+	for _, id := range released {
+		cmd := commands.RecordInventoryReleaseCommand{
+			OrderID:       step.saga.orderID,
+			ReservationID: id,
+			Reason:        "Saga compensation",
+		}
+		if err := step.saga.commandHandler.Handle(cmd); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to record inventory release %s: %w", id, err)
+			}
+		}
 	}
 
-	return nil
+	return firstErr
 }
 
 func (step *ReserveInventoryStep) callInventoryService(path string, request map[string]interface{}) (map[string]interface{}, error) {
@@ -355,8 +395,27 @@ func (step *ProcessPaymentStep) Execute() error {
 	}
 
 	paymentID, ok := response["id"].(string)
-	if !ok {
-		return fmt.Errorf("invalid payment response")
+	if !ok || paymentID == "" {
+		// A 2xx with no usable id means the charge may have gone through while
+		// leaving us nothing to refund against. Never skip this: confirming the
+		// order on an unknown payment outcome is worse than failing it. Log the
+		// response field names (not values — they may carry PII) so the payment
+		// can be reconciled by hand.
+		fields := make([]string, 0, len(response))
+		for k := range response {
+			fields = append(fields, k)
+		}
+		sort.Strings(fields)
+
+		step.saga.logger.Error("Payment service reported success without a payment id; the charge may have been captured and needs manual reconciliation",
+			zap.String("order_id", step.saga.orderID),
+			zap.String("tenant_id", step.saga.order.TenantID),
+			zap.Float64("amount", step.saga.order.TotalAmount),
+			zap.String("currency", step.saga.order.Currency),
+			zap.Strings("response_fields", fields),
+		)
+
+		return &sideEffectError{errors.New("payment service returned no payment id")}
 	}
 
 	step.paymentID = paymentID
@@ -372,7 +431,7 @@ func (step *ProcessPaymentStep) Execute() error {
 	if err := step.saga.commandHandler.Handle(cmd); err != nil {
 		// The payment is already captured at this point, so this must not be
 		// skipped as an optional-step failure — it has to be refunded.
-		return &recordError{fmt.Errorf("failed to record payment: %w", err)}
+		return &sideEffectError{fmt.Errorf("failed to record payment: %w", err)}
 	}
 
 	return nil

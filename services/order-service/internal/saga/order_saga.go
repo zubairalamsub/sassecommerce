@@ -3,6 +3,7 @@ package saga
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,6 +21,22 @@ type SagaStep interface {
 	GetName() string
 }
 
+// recordError marks a step failure that happened AFTER the step's external side
+// effect already succeeded — the payment was captured, or the stock is held —
+// but recording it on the order failed.
+//
+// Such a failure is never optional. "Optional" exists for a dependency that is
+// unavailable or not applicable (no stock records yet, no payment needed for
+// COD), where nothing was acquired and skipping is harmless. Once money has
+// moved, skipping would strand it, so a recordError always fails the saga and
+// triggers compensation.
+type recordError struct {
+	err error
+}
+
+func (e *recordError) Error() string { return e.err.Error() }
+func (e *recordError) Unwrap() error { return e.err }
+
 // OrderSaga orchestrates a distributed transaction for order processing
 type OrderSaga struct {
 	orderID        string
@@ -30,7 +47,12 @@ type OrderSaga struct {
 	paymentURL     string
 	authToken      string
 	steps          []SagaStep
-	completedSteps []SagaStep
+	// attemptedSteps holds every step whose Execute was entered, in order. A
+	// step can acquire an external side effect and then fail, so compensation
+	// must consider attempted steps rather than only successful ones.
+	// Compensate() is a no-op for a step that acquired nothing, which is what
+	// makes tracking attempts safe.
+	attemptedSteps []SagaStep
 	optionalSteps  map[string]bool
 }
 
@@ -53,7 +75,7 @@ func NewOrderSaga(
 		paymentURL:     paymentURL,
 		authToken:      authToken,
 		steps:          make([]SagaStep, 0),
-		completedSteps: make([]SagaStep, 0),
+		attemptedSteps: make([]SagaStep, 0),
 	}
 }
 
@@ -81,8 +103,17 @@ func (s *OrderSaga) Execute() error {
 			zap.String("step", step.GetName()),
 		)
 
+		// Register the step for compensation before running it: it may capture a
+		// payment or hold stock and then fail, and that side effect still has to
+		// be unwound.
+		s.attemptedSteps = append(s.attemptedSteps, step)
+
 		if err := step.Execute(); err != nil {
-			if s.optionalSteps[step.GetName()] {
+			// An optional step may be skipped only when nothing was acquired.
+			// A recordError means the side effect already happened, so it must
+			// be compensated rather than skipped.
+			var recErr *recordError
+			if s.optionalSteps[step.GetName()] && !errors.As(err, &recErr) {
 				s.logger.Warn("Optional saga step failed, skipping",
 					zap.String("order_id", s.orderID),
 					zap.String("step", step.GetName()),
@@ -97,7 +128,7 @@ func (s *OrderSaga) Execute() error {
 				zap.Error(err),
 			)
 
-			// Compensate completed steps
+			// Compensate attempted steps
 			if compErr := s.compensate(); compErr != nil {
 				s.logger.Error("Compensation failed",
 					zap.String("order_id", s.orderID),
@@ -107,21 +138,19 @@ func (s *OrderSaga) Execute() error {
 
 			return fmt.Errorf("saga step %s failed: %w", step.GetName(), err)
 		}
-
-		s.completedSteps = append(s.completedSteps, step)
 	}
 
 	s.logger.Info("Order saga completed successfully", zap.String("order_id", s.orderID))
 	return nil
 }
 
-// compensate runs compensation for completed steps in reverse order
+// compensate runs compensation for attempted steps in reverse order
 func (s *OrderSaga) compensate() error {
 	s.logger.Warn("Starting saga compensation", zap.String("order_id", s.orderID))
 
 	// Compensate in reverse order
-	for i := len(s.completedSteps) - 1; i >= 0; i-- {
-		step := s.completedSteps[i]
+	for i := len(s.attemptedSteps) - 1; i >= 0; i-- {
+		step := s.attemptedSteps[i]
 
 		s.logger.Info("Compensating saga step",
 			zap.String("order_id", s.orderID),
@@ -205,11 +234,20 @@ func (step *ReserveInventoryStep) Execute() error {
 		})
 	}
 
-	if err := step.saga.order.RecordInventoryReservation(lastReservationID, reservedItems); err != nil {
-		return err
+	// Route through the command handler so the event is persisted to the event
+	// store, projected to the read model and published — recording it on the
+	// local aggregate alone would drop it.
+	cmd := commands.RecordInventoryReservationCommand{
+		OrderID:       step.saga.orderID,
+		ReservationID: lastReservationID,
+		Items:         reservedItems,
+	}
+	if err := step.saga.commandHandler.Handle(cmd); err != nil {
+		// The stock is already held at this point, so this must not be skipped
+		// as an optional-step failure — it has to be compensated.
+		return &recordError{fmt.Errorf("failed to record inventory reservation: %w", err)}
 	}
 
-	step.saga.order.MarkEventsAsCommitted()
 	return nil
 }
 
@@ -233,11 +271,15 @@ func (step *ReserveInventoryStep) Compensate() error {
 	}
 
 	// Record release in order
-	if err := step.saga.order.RecordInventoryRelease(step.reservationID, "Saga compensation"); err != nil {
-		return err
+	cmd := commands.RecordInventoryReleaseCommand{
+		OrderID:       step.saga.orderID,
+		ReservationID: step.reservationID,
+		Reason:        "Saga compensation",
+	}
+	if err := step.saga.commandHandler.Handle(cmd); err != nil {
+		return fmt.Errorf("failed to record inventory release: %w", err)
 	}
 
-	step.saga.order.MarkEventsAsCommitted()
 	return nil
 }
 
@@ -320,16 +362,19 @@ func (step *ProcessPaymentStep) Execute() error {
 	step.paymentID = paymentID
 
 	// Record payment in order
-	if err := step.saga.order.RecordPayment(
-		paymentID,
-		"credit_card",
-		fmt.Sprintf("txn_%s", paymentID),
-		step.saga.order.TotalAmount,
-	); err != nil {
-		return err
+	cmd := commands.RecordPaymentCommand{
+		OrderID:       step.saga.orderID,
+		PaymentID:     paymentID,
+		PaymentMethod: "credit_card",
+		TransactionID: fmt.Sprintf("txn_%s", paymentID),
+		Amount:        step.saga.order.TotalAmount,
+	}
+	if err := step.saga.commandHandler.Handle(cmd); err != nil {
+		// The payment is already captured at this point, so this must not be
+		// skipped as an optional-step failure — it has to be refunded.
+		return &recordError{fmt.Errorf("failed to record payment: %w", err)}
 	}
 
-	step.saga.order.MarkEventsAsCommitted()
 	return nil
 }
 
@@ -352,11 +397,15 @@ func (step *ProcessPaymentStep) Compensate() error {
 	}
 
 	// Record payment failure in order
-	if err := step.saga.order.RecordPaymentFailure(step.paymentID, "Refunded due to saga compensation"); err != nil {
-		return err
+	cmd := commands.RecordPaymentFailureCommand{
+		OrderID:   step.saga.orderID,
+		PaymentID: step.paymentID,
+		Reason:    "Refunded due to saga compensation",
+	}
+	if err := step.saga.commandHandler.Handle(cmd); err != nil {
+		return fmt.Errorf("failed to record payment failure: %w", err)
 	}
 
-	step.saga.order.MarkEventsAsCommitted()
 	return nil
 }
 

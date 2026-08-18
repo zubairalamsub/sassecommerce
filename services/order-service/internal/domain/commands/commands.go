@@ -76,3 +76,44 @@ type DeliverOrderCommand struct {
 }
 
 func (c DeliverOrderCommand) GetAggregateID() string { return c.OrderID }
+
+// RecordInventoryReservationCommand records a successful inventory reservation.
+// The order saga issues this after the inventory service accepts the reservation
+// so the event is persisted, projected and published like any other state change.
+type RecordInventoryReservationCommand struct {
+	OrderID       string
+	ReservationID string
+	Items         []events.ReservedItem
+}
+
+func (c RecordInventoryReservationCommand) GetAggregateID() string { return c.OrderID }
+
+// RecordInventoryReleaseCommand records the release of a previously held
+// inventory reservation (saga compensation).
+type RecordInventoryReleaseCommand struct {
+	OrderID       string
+	ReservationID string
+	Reason        string
+}
+
+func (c RecordInventoryReleaseCommand) GetAggregateID() string { return c.OrderID }
+
+// RecordPaymentCommand records a successful payment against the order.
+type RecordPaymentCommand struct {
+	OrderID       string
+	PaymentID     string
+	PaymentMethod string
+	TransactionID string
+	Amount        float64
+}
+
+func (c RecordPaymentCommand) GetAggregateID() string { return c.OrderID }
+
+// RecordPaymentFailureCommand records a failed or reversed payment.
+type RecordPaymentFailureCommand struct {
+	OrderID   string
+	PaymentID string
+	Reason    string
+}
+
+func (c RecordPaymentFailureCommand) GetAggregateID() string { return c.OrderID }

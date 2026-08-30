@@ -3,6 +3,7 @@ module github.com/yourusername/ecommerce/order-service
 go 1.24
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/ecommerce/shared/go v0.1.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0

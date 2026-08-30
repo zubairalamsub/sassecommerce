@@ -226,6 +226,7 @@ func (h *CommandHandler) handleShipOrder(cmd ShipOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }

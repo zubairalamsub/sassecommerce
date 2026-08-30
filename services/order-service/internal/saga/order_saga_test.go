@@ -3,6 +3,7 @@ package saga
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,6 +41,20 @@ func (s *memEventStore) Save(aggregateID string, evs []events.Event, expectedVer
 	if s.failSaveOn != nil && s.failSaveOn(evs) {
 		return errors.New("event store rejected save")
 	}
+
+	// Mirror PostgresEventStore's optimistic concurrency check:
+	// COALESCE(MAX(version), -1) must equal expectedVersion.
+	currentVersion := -1
+	for _, e := range s.streams[aggregateID] {
+		if v := e.GetVersion(); v > currentVersion {
+			currentVersion = v
+		}
+	}
+	if currentVersion != expectedVersion {
+		return fmt.Errorf("concurrency conflict: aggregate version mismatch (current %d, expected %d)",
+			currentVersion, expectedVersion)
+	}
+
 	s.streams[aggregateID] = append(s.streams[aggregateID], evs...)
 	return nil
 }
@@ -104,6 +119,11 @@ type fakeServices struct {
 	invCreateStatus int
 	invCreateBody   string
 	invCancelStatus int
+	// invCreateFailAfter, when >= 0, makes reservation creation start failing
+	// once this many have already succeeded (0 = fail immediately).
+	invCreateFailAfter int
+	// invCancelFailFor makes the cancel of this one reservation id fail.
+	invCancelFailFor string
 
 	payCreateStatus int
 	payCreateBody   string
@@ -118,20 +138,35 @@ type fakeServices struct {
 func newFakeServices(t *testing.T) *fakeServices {
 	t.Helper()
 	f := &fakeServices{
-		invCreateStatus: http.StatusCreated,
-		invCancelStatus: http.StatusOK,
-		payCreateStatus: http.StatusCreated,
-		payCreateBody:   `{"id":"pay-1","status":"succeeded"}`,
-		payRefundStatus: http.StatusOK,
+		invCreateStatus:    http.StatusCreated,
+		invCancelStatus:    http.StatusOK,
+		invCreateFailAfter: -1,
+		payCreateStatus:    http.StatusCreated,
+		payCreateBody:      `{"id":"pay-1","status":"succeeded"}`,
+		payRefundStatus:    http.StatusOK,
 	}
 
 	f.inventory = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/cancel") {
 			f.record(r, "inventory", "cancel")
+			if f.invCancelFailFor != "" && strings.Contains(r.URL.Path, "/"+f.invCancelFailFor+"/") {
+				f.reply(w, http.StatusInternalServerError, `{"error":"cannot cancel"}`)
+				return
+			}
 			f.reply(w, f.invCancelStatus, `{"status":"cancelled"}`)
 			return
 		}
 		f.record(r, "inventory", "create")
+
+		f.mu.Lock()
+		succeeded := f.reservationSeq
+		failAfter := f.invCreateFailAfter
+		f.mu.Unlock()
+		if failAfter >= 0 && succeeded >= failAfter {
+			f.reply(w, http.StatusConflict, `{"error":"insufficient stock"}`)
+			return
+		}
+
 		body := f.invCreateBody
 		if body == "" {
 			f.mu.Lock()
@@ -338,7 +373,8 @@ func TestOrderSaga_ReservesEachItemSeparately(t *testing.T) {
 		inventoryCreates[1].Body["productId"].(string),
 	}
 	assert.ElementsMatch(t, []string{"product-1", "product-2"}, productIDs)
-	assert.Equal(t, "res-2", f.order.ReservationID, "the last reservation id is retained")
+	assert.Equal(t, "res-2", loadOrder(t, f.store).ReservationID,
+		"the last reservation id is the one recorded on the order")
 }
 
 // The reservation payload carries the tenant, order and expiry the inventory
@@ -418,7 +454,7 @@ func TestOrderSaga_InventoryFailureIsSkipped(t *testing.T) {
 	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
 	assert.Equal(t, []string{"inventory:create", "payment:create"}, f.services.sequence(),
 		"payment still runs after inventory is skipped")
-	assert.Empty(t, f.order.ReservationID, "no reservation recorded when inventory failed")
+	assert.Empty(t, loadOrder(t, f.store).ReservationID, "no reservation recorded when inventory failed")
 }
 
 // Payment is also optional (e.g. cash-on-delivery), so a failure is skipped.
@@ -430,20 +466,44 @@ func TestOrderSaga_PaymentFailureIsSkipped(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
-	assert.Empty(t, f.order.PaymentID, "no payment recorded when the payment call failed")
+	assert.Empty(t, loadOrder(t, f.store).PaymentID, "no payment recorded when the payment call failed")
 }
 
-// A 2xx payment response without an id is treated as a step failure — and since
-// payment is optional, the saga continues.
-func TestOrderSaga_PaymentResponseWithoutIDIsSkipped(t *testing.T) {
-	f := newSagaFixture(t, defaultItems()...)
-	f.services.payCreateBody = `{"status":"succeeded"}`
+// A 2xx payment response with no usable id leaves the payment outcome UNKNOWN —
+// the charge may have gone through with nothing to refund against. That must
+// fail the order rather than be skipped as an optional-step failure, because
+// confirming an order on an unknown payment outcome is the worse error.
+func TestOrderSaga_PaymentResponseWithoutIDFailsTheSaga(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"id missing", `{"status":"succeeded"}`},
+		{"id empty", `{"id":"","status":"succeeded"}`},
+		{"id wrong type", `{"id":12345,"status":"succeeded"}`},
+	}
 
-	err := f.newSaga("test-token").Execute()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSagaFixture(t, defaultItems()...)
+			f.services.payCreateBody = tc.body
 
-	require.NoError(t, err)
-	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
-	assert.Empty(t, f.order.PaymentID)
+			err := f.newSaga("test-token").Execute()
+
+			require.Error(t, err, "an unknown payment outcome must not be skipped")
+			assert.Contains(t, err.Error(), "saga step ProcessPayment failed")
+
+			assert.NotEqual(t, aggregates.StatusConfirmed, f.statusInStore(t),
+				"the order must not be confirmed on an unknown payment outcome")
+			assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+
+			// No refund is possible without an id, but the stock hold is released.
+			assert.Empty(t, f.services.callsOfKind("refund"),
+				"there is no payment id to refund against")
+			require.Len(t, f.services.callsOfKind("cancel"), 1,
+				"the inventory hold is still released")
+		})
+	}
 }
 
 func TestOrderSaga_BothOptionalStepsFailStillConfirms(t *testing.T) {
@@ -556,6 +616,177 @@ func TestOrderSaga_CompensationFailureAbortsUnwind(t *testing.T) {
 		"the order is left pending when compensation could not complete")
 }
 
+// ------------------------------------- record-failure must not skip (regression)
+
+func failOnEventType(t events.EventType) func([]events.Event) bool {
+	return func(evs []events.Event) bool {
+		for _, e := range evs {
+			if e.GetEventType() == t {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Regression: ProcessPayment is an optional step, but once the payment has been
+// CAPTURED a failure to record it must not be skipped as "optional" — the money
+// would be stranded. It has to fail the saga and refund.
+//
+// Before this was fixed, the saga logged "Optional saga step failed, skipping",
+// returned nil, and never issued the refund.
+func TestOrderSaga_PaymentRecordFailureIsRefundedNotSkipped(t *testing.T) {
+	f := newSagaFixture(t, defaultItems()...)
+	f.store.failSaveOn = failOnEventType(events.PaymentProcessedEvent)
+
+	err := f.newSaga("test-token").Execute()
+
+	require.Error(t, err, "a captured payment that cannot be recorded must fail the saga")
+	assert.Contains(t, err.Error(), "saga step ProcessPayment failed")
+
+	assert.Equal(t, []string{
+		"inventory:create",
+		"payment:create",
+		"payment:refund",   // the captured payment is returned
+		"inventory:cancel", // and the stock hold released
+	}, f.services.sequence(), "the captured payment must be refunded, not stranded")
+
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// Same rule for inventory: once stock is held, a failure to record the
+// reservation must release it rather than silently continue.
+func TestOrderSaga_InventoryRecordFailureIsReleasedNotSkipped(t *testing.T) {
+	f := newSagaFixture(t, defaultItems()...)
+	f.store.failSaveOn = failOnEventType(events.InventoryReservedEvent)
+
+	err := f.newSaga("test-token").Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "saga step ReserveInventory failed")
+
+	assert.Equal(t, []string{
+		"inventory:create",
+		"inventory:cancel", // the hold is released
+	}, f.services.sequence(), "payment is never attempted once the reservation failed to record")
+
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// The optional-skip path must still work when the external dependency itself
+// fails, because nothing was acquired and there is nothing to unwind.
+func TestOrderSaga_ExternalFailureStillSkipsWithoutCompensating(t *testing.T) {
+	f := newSagaFixture(t, defaultItems()...)
+	f.services.payCreateStatus = http.StatusServiceUnavailable
+
+	err := f.newSaga("test-token").Execute()
+
+	require.NoError(t, err, "an unavailable optional dependency is still skipped")
+	assert.Equal(t, []string{"inventory:create", "payment:create"}, f.services.sequence(),
+		"no compensation, because nothing was captured")
+	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
+}
+
+// ----------------------------------- multi-item reservation leaks (regression)
+
+func threeItems() []commands.AddOrderItemCommand {
+	return []commands.AddOrderItemCommand{
+		{ProductID: "product-1", SKU: "SKU-1", Name: "Shirt", Quantity: 1, UnitPrice: 100},
+		{ProductID: "product-2", SKU: "SKU-2", Name: "Hat", Quantity: 1, UnitPrice: 100},
+		{ProductID: "product-3", SKU: "SKU-3", Name: "Socks", Quantity: 1, UnitPrice: 100},
+	}
+}
+
+// Regression: the step used to keep only the LAST reservation id, so rolling
+// back a multi-item order cancelled one reservation and leaked the rest.
+func TestOrderSaga_CompensationReleasesEveryReservation(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.store.failSaveOn = failOnConfirm
+
+	require.Error(t, f.newSaga("test-token").Execute())
+
+	cancels := f.services.callsOfKind("cancel")
+	require.Len(t, cancels, 3, "every reservation must be released, not just the last")
+
+	paths := make([]string, 0, len(cancels))
+	for _, c := range cancels {
+		paths = append(paths, c.Path)
+	}
+	assert.ElementsMatch(t, []string{
+		"/api/v1/inventory/reservations/res-1/cancel",
+		"/api/v1/inventory/reservations/res-2/cancel",
+		"/api/v1/inventory/reservations/res-3/cancel",
+	}, paths)
+
+	// Newest-first, mirroring the reverse-order unwind.
+	assert.Equal(t, "/api/v1/inventory/reservations/res-3/cancel", paths[0])
+
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// Regression: a failure partway through reserving must release what was already
+// held. It used to be swallowed as an optional-step skip, leaking those holds
+// while the order went on to be confirmed.
+func TestOrderSaga_PartialReservationFailureReleasesEarlierHolds(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	// Let the first two reservations succeed, then start failing.
+	f.services.invCreateFailAfter = 2
+
+	err := f.newSaga("test-token").Execute()
+
+	require.Error(t, err, "a partial reservation must not be skipped")
+	assert.Contains(t, err.Error(), "saga step ReserveInventory failed")
+	assert.Contains(t, err.Error(), "reservation(s) succeeded")
+
+	cancels := f.services.callsOfKind("cancel")
+	require.Len(t, cancels, 2, "both successful holds must be released")
+	assert.ElementsMatch(t, []string{
+		"/api/v1/inventory/reservations/res-1/cancel",
+		"/api/v1/inventory/reservations/res-2/cancel",
+	}, []string{cancels[0].Path, cancels[1].Path})
+
+	assert.Empty(t, f.services.callsOfKind("refund"), "payment was never attempted")
+	assert.Equal(t, aggregates.StatusCancelled, f.statusInStore(t))
+}
+
+// The very first reservation failing means nothing is held, so the original
+// optional-skip behaviour still applies.
+func TestOrderSaga_FirstReservationFailureIsStillSkipped(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.services.invCreateFailAfter = 0 // fail immediately
+
+	err := f.newSaga("test-token").Execute()
+
+	require.NoError(t, err, "nothing was held, so the optional step is skipped")
+	assert.Empty(t, f.services.callsOfKind("cancel"), "nothing to release")
+	assert.Equal(t, aggregates.StatusConfirmed, f.statusInStore(t))
+}
+
+// A release that fails for one reservation must not prevent the others from
+// being released.
+func TestOrderSaga_OneFailedReleaseDoesNotStrandTheOthers(t *testing.T) {
+	f := newSagaFixture(t, threeItems()...)
+	f.store.failSaveOn = failOnConfirm
+	f.services.invCancelFailFor = "res-2"
+
+	require.Error(t, f.newSaga("test-token").Execute())
+
+	require.Len(t, f.services.callsOfKind("cancel"), 3,
+		"all three releases are attempted even though one fails")
+
+	// res-2's release failed, so the compensation chain reports an error and the
+	// order is left uncancelled — but res-1 and res-3 were still released.
+	assert.Equal(t, aggregates.StatusPending, f.statusInStore(t))
+
+	releases := 0
+	for _, e := range f.store.eventTypes(testOrderID) {
+		if e == "InventoryReleased" {
+			releases++
+		}
+	}
+	assert.Equal(t, 2, releases, "only the successful releases are recorded")
+}
+
 // ------------------------------------------------------------ step primitives
 
 func TestSagaSteps_GetName(t *testing.T) {
@@ -628,27 +859,51 @@ func TestConfirmOrderStep_FailsForOrderWithoutItems(t *testing.T) {
 
 // ------------------------------------------------------ event-sourcing surface
 
-// Documents current behaviour: the saga mutates the in-memory aggregate for
-// inventory and payment and then calls MarkEventsAsCommitted WITHOUT persisting
-// through the event store, so InventoryReserved / PaymentProcessed never reach
-// the stream. Only the command-handler steps (create/add-item/confirm) persist.
-//
-// Consequence: replaying the order loses reservation and payment state.
-func TestOrderSaga_InventoryAndPaymentEventsAreNotPersisted(t *testing.T) {
+// Regression test: the saga's inventory and payment recordings must go through
+// the command handler so they are persisted to the event store (and from there
+// projected to the read model and published). They were previously recorded on
+// the local aggregate and then dropped by MarkEventsAsCommitted, which lost
+// reservation and payment state on replay.
+func TestOrderSaga_InventoryAndPaymentEventsArePersisted(t *testing.T) {
 	f := newSagaFixture(t, defaultItems()...)
 
 	require.NoError(t, f.newSaga("test-token").Execute())
 
-	// In-memory aggregate did record them.
-	assert.Equal(t, "res-1", f.order.ReservationID)
-	assert.Equal(t, "pay-1", f.order.PaymentID)
+	assert.Equal(t, []string{
+		"OrderCreated",
+		"OrderItemAdded",
+		"InventoryReserved",
+		"PaymentProcessed",
+		"OrderConfirmed",
+	}, f.store.eventTypes(testOrderID))
+
+	// A replayed aggregate carries the reservation and payment.
+	replayed := loadOrder(t, f.store)
+	assert.Equal(t, "res-1", replayed.ReservationID)
+	assert.Equal(t, "pay-1", replayed.PaymentID)
+}
+
+// Compensation must also persist its events, and because the payment is now on
+// the replayed aggregate, cancelling emits the OrderRefunded audit event that
+// Order.Cancel documents.
+func TestOrderSaga_CompensationEventsArePersisted(t *testing.T) {
+	f := newSagaFixture(t, defaultItems()...)
+	f.store.failSaveOn = failOnConfirm
+
+	require.Error(t, f.newSaga("test-token").Execute())
 
 	persisted := f.store.eventTypes(testOrderID)
-	assert.Equal(t, []string{"OrderCreated", "OrderItemAdded", "OrderConfirmed"}, persisted)
-	assert.NotContains(t, persisted, "InventoryReserved")
-	assert.NotContains(t, persisted, "PaymentProcessed")
+	assert.Equal(t, []string{
+		"OrderCreated",
+		"OrderItemAdded",
+		"InventoryReserved",
+		"PaymentProcessed",
+		"PaymentFailed",     // payment compensated first
+		"InventoryReleased", // then inventory
+		"OrderCancelled",
+		"OrderRefunded", // emitted because the replayed order has a PaymentID
+	}, persisted)
 
-	// Because PaymentProcessed was never persisted, a reloaded aggregate has no
-	// PaymentID — so a later cancel cannot emit the OrderRefunded audit event.
-	assert.Empty(t, loadOrder(t, f.store).PaymentID)
+	assert.Empty(t, loadOrder(t, f.store).ReservationID,
+		"releasing the reservation clears it on the aggregate")
 }

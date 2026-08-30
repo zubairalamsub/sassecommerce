@@ -52,6 +52,14 @@ func (h *CommandHandler) Handle(cmd Command) error {
 		return h.handleShipOrder(c)
 	case DeliverOrderCommand:
 		return h.handleDeliverOrder(c)
+	case RecordInventoryReservationCommand:
+		return h.handleRecordInventoryReservation(c)
+	case RecordInventoryReleaseCommand:
+		return h.handleRecordInventoryRelease(c)
+	case RecordPaymentCommand:
+		return h.handleRecordPayment(c)
+	case RecordPaymentFailureCommand:
+		return h.handleRecordPaymentFailure(c)
 	default:
 		return errors.New("unknown command type")
 	}
@@ -218,6 +226,7 @@ func (h *CommandHandler) handleShipOrder(cmd ShipOrderCommand) error {
 		return fmt.Errorf("failed to save events: %w", err)
 	}
 
+	h.projectEvents(events)
 	order.MarkEventsAsCommitted()
 	return nil
 }
@@ -234,6 +243,110 @@ func (h *CommandHandler) handleDeliverOrder(cmd DeliverOrderCommand) error {
 	}
 
 	if err := order.Deliver(cmd.ReceivedBy); err != nil {
+		return err
+	}
+
+	events := order.GetUncommittedEvents()
+	if err := h.eventStore.Save(cmd.OrderID, events, order.Version-len(events)); err != nil {
+		return fmt.Errorf("failed to save events: %w", err)
+	}
+
+	h.projectEvents(events)
+	order.MarkEventsAsCommitted()
+	return nil
+}
+
+// handleRecordInventoryReservation records an inventory reservation on the order
+func (h *CommandHandler) handleRecordInventoryReservation(cmd RecordInventoryReservationCommand) error {
+	h.logger.Info("Handling RecordInventoryReservationCommand",
+		zap.String("order_id", cmd.OrderID),
+		zap.String("reservation_id", cmd.ReservationID),
+	)
+
+	order, err := h.loadOrder(cmd.OrderID)
+	if err != nil {
+		return err
+	}
+
+	if err := order.RecordInventoryReservation(cmd.ReservationID, cmd.Items); err != nil {
+		return err
+	}
+
+	events := order.GetUncommittedEvents()
+	if err := h.eventStore.Save(cmd.OrderID, events, order.Version-len(events)); err != nil {
+		return fmt.Errorf("failed to save events: %w", err)
+	}
+
+	h.projectEvents(events)
+	order.MarkEventsAsCommitted()
+	return nil
+}
+
+// handleRecordInventoryRelease records the release of an inventory reservation
+func (h *CommandHandler) handleRecordInventoryRelease(cmd RecordInventoryReleaseCommand) error {
+	h.logger.Info("Handling RecordInventoryReleaseCommand",
+		zap.String("order_id", cmd.OrderID),
+		zap.String("reservation_id", cmd.ReservationID),
+	)
+
+	order, err := h.loadOrder(cmd.OrderID)
+	if err != nil {
+		return err
+	}
+
+	if err := order.RecordInventoryRelease(cmd.ReservationID, cmd.Reason); err != nil {
+		return err
+	}
+
+	events := order.GetUncommittedEvents()
+	if err := h.eventStore.Save(cmd.OrderID, events, order.Version-len(events)); err != nil {
+		return fmt.Errorf("failed to save events: %w", err)
+	}
+
+	h.projectEvents(events)
+	order.MarkEventsAsCommitted()
+	return nil
+}
+
+// handleRecordPayment records a successful payment against the order
+func (h *CommandHandler) handleRecordPayment(cmd RecordPaymentCommand) error {
+	h.logger.Info("Handling RecordPaymentCommand",
+		zap.String("order_id", cmd.OrderID),
+		zap.String("payment_id", cmd.PaymentID),
+	)
+
+	order, err := h.loadOrder(cmd.OrderID)
+	if err != nil {
+		return err
+	}
+
+	if err := order.RecordPayment(cmd.PaymentID, cmd.PaymentMethod, cmd.TransactionID, cmd.Amount); err != nil {
+		return err
+	}
+
+	events := order.GetUncommittedEvents()
+	if err := h.eventStore.Save(cmd.OrderID, events, order.Version-len(events)); err != nil {
+		return fmt.Errorf("failed to save events: %w", err)
+	}
+
+	h.projectEvents(events)
+	order.MarkEventsAsCommitted()
+	return nil
+}
+
+// handleRecordPaymentFailure records a failed or reversed payment
+func (h *CommandHandler) handleRecordPaymentFailure(cmd RecordPaymentFailureCommand) error {
+	h.logger.Info("Handling RecordPaymentFailureCommand",
+		zap.String("order_id", cmd.OrderID),
+		zap.String("payment_id", cmd.PaymentID),
+	)
+
+	order, err := h.loadOrder(cmd.OrderID)
+	if err != nil {
+		return err
+	}
+
+	if err := order.RecordPaymentFailure(cmd.PaymentID, cmd.Reason); err != nil {
 		return err
 	}
 

@@ -113,7 +113,14 @@
       "PowerShell($env:TENANT_NAME = \"Demo Store Live\"; $env:TENANT_EMAIL = \"owner+live@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 100)",
       "PowerShell($env:TENANT_NAME = \"Demo Store Live\"; $env:TENANT_EMAIL = \"owner+live@demostore.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 50)",
       "PowerShell($env:TENANT_ID = \"tenant_saajan\"; $env:TENANT_NAME = \"Saajan Demo Store\"; $env:TENANT_EMAIL = \"owner@saajan.test\"; node scripts/seed.mjs 2>&1 | Select-Object -Last 60)",
-      "Bash(DOCKER_BUILDKIT=1 docker compose build tenant-service)"
+      "Bash(DOCKER_BUILDKIT=1 docker compose build tenant-service)",
+      "PowerShell(& docker system prune -a -f 2>&1)",
+      "PowerShell(& docker system df 2>&1)",
+      "PowerShell(\"=== docker system prune -a -f \\(removes images not used by a container; keeps ALL volumes\\) ===\")",
+      "PowerShell(\"\")",
+      "PowerShell(\"=== docker df after image prune ===\")",
+      "Bash(echo \"=== src mtime ===\" && stat -c '%y %n' src src/Backend src/Frontend 2>/dev/null && echo \"=== newest source files in src \\(excl node_modules/bin/obj\\) ===\" && find src -type f \\\\\\( -name '*.cs' -o -name '*.ts' -o -name '*.html' -o -name '*.json' -o -name '*.sln' \\\\\\) -not -path '*/node_modules/*' -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/.angular/*' -printf '%T@ %p\\\\n' | sort -rn | head -15 && echo \"=== counts ===\" && find src -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' | wc -l && find src -name '*.ts' -not -path '*/node_modules/*' -not -path '*/.angular/*' | wc -l)",
+      "Bash(grep -n '^#\\\\{1,3\\\\} ' DEVELOPMENT_CHECKLIST.md)"
     ]
   },
   "model": "opus",

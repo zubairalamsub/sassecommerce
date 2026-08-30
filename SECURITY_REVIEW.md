@@ -56,8 +56,10 @@ Third remediation pass on the same branch (one commit per finding):
 
 | A08-2 no container image signing (MEDIUM) | **FIXED** | deploy.yml cosign-signs every pushed image by digest (keyless/OIDC, Rekor-logged); cluster-side verifyImages policy still recommended |
 
-Still open: A08-3 (broader CI integrity review — e.g. pinning actions by
-SHA). B03 (JWT in localStorage) is now **FIXED**: the token moved to an
+A08-3 (broader CI integrity review) is now **FIXED**: all 12 external actions
+referenced across the 16 workflows are pinned by 40-character commit SHA with
+a `# vX.Y.Z` comment, and every workflow declares a least-privilege
+`permissions:` block. B03 (JWT in localStorage) is now **FIXED**: the token moved to an
 HttpOnly, SameSite=Lax cookie and the transparent `/proxy` rewrite became a
 BFF Route Handler that injects the credential server-side (no JWT reachable
 from JS). B01/B02 (`/api/upload` auth + folder allowlist; `/api/media` SVG
@@ -430,8 +432,12 @@ See **Dependency Vulnerability Tables** below.
   ImagePolicyWebhook or Kyverno/OPA policy to require signature.
 
 #### A08-3 (LOW): No CI/CD integrity controls reviewed
-- **Status:** UNKNOWN — no `.github/workflows` or `.gitlab-ci.yml` reviewed
-  in this audit. Recommend separate review.
+- **Status:** FIXED — the 16 `.github/workflows/*.yml` were reviewed after the
+  original audit. All 12 external action references are pinned to a
+  40-character commit SHA (with a `# vX.Y.Z` comment for readability), so a
+  moved tag cannot swap the code that runs, and every workflow declares an
+  explicit least-privilege `permissions:` block rather than inheriting the
+  repository default. No `.gitlab-ci.yml` exists.
 
 ---
 

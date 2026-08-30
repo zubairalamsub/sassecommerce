@@ -107,3 +107,6 @@ temp/
 # Local-built CLI binaries from the storage cmd helpers
 /shared/go/storagecheck
 /shared/go/storageupload
+
+# Claude Code preview launcher: machine-specific ports and a dev JWT_SECRET
+/.claude/launch.json

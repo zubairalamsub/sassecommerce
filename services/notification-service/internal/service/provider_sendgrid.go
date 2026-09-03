@@ -135,3 +135,6 @@ func (p *SendGridEmailProvider) Send(notification *models.Notification) (*Provid
 		Error:        errMsg,
 	}, nil
 }
+
+// Name reports this provider's label for failover logging and results.
+func (p *SendGridEmailProvider) Name() string { return "sendgrid" }

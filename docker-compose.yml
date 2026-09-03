@@ -308,6 +308,29 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: notification-service
+      # Ordered email provider chain: the first entry carries traffic, the rest
+      # are fallbacks tried in order when a send fails. Any SMTP vendor works
+      # (brevo, mailjet, resend, smtp2go, elasticemail, zeptomail, mailgun,
+      # postmark, ses) plus sendgrid and simulated. Each needs credentials —
+      # e.g. BREVO_SMTP_USER / BREVO_SMTP_PASSWORD — and a provider whose
+      # credentials are missing is skipped with a warning at startup.
+      # Keeping "simulated" last means a total outage logs instead of erroring,
+      # which is right for development and wrong for production.
+      EMAIL_PROVIDERS: ${EMAIL_PROVIDERS:-simulated}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@saajan.test}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Saajan Store}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      BREVO_SMTP_USER: ${BREVO_SMTP_USER:-}
+      BREVO_SMTP_PASSWORD: ${BREVO_SMTP_PASSWORD:-}
+      MAILJET_SMTP_USER: ${MAILJET_SMTP_USER:-}
+      MAILJET_SMTP_PASSWORD: ${MAILJET_SMTP_PASSWORD:-}
+      RESEND_SMTP_USER: ${RESEND_SMTP_USER:-}
+      RESEND_SMTP_PASSWORD: ${RESEND_SMTP_PASSWORD:-}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3002}
     depends_on:
       mongodb:
         condition: service_healthy

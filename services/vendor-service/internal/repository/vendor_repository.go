@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ecommerce/vendor-service/internal/models"
@@ -36,7 +37,7 @@ func (r *gormVendorRepository) Create(ctx context.Context, vendor *models.Vendor
 func (r *gormVendorRepository) GetByID(ctx context.Context, id string, tenantID string) (*models.Vendor, error) {
 	var vendor models.Vendor
 	if err := r.db.WithContext(ctx).First(&vendor, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("vendor not found")
 		}
 		return nil, err
@@ -47,7 +48,7 @@ func (r *gormVendorRepository) GetByID(ctx context.Context, id string, tenantID 
 func (r *gormVendorRepository) GetByEmail(ctx context.Context, email string, tenantID string) (*models.Vendor, error) {
 	var vendor models.Vendor
 	if err := r.db.WithContext(ctx).First(&vendor, "email = ? AND tenant_id = ?", email, tenantID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("vendor not found")
 		}
 		return nil, err
@@ -97,7 +98,7 @@ func (r *gormVendorRepository) GetOrdersByVendor(ctx context.Context, vendorID s
 func (r *gormVendorRepository) GetVendorAnalytics(ctx context.Context, vendorID string) (*models.VendorAnalyticsResponse, error) {
 	var vendor models.Vendor
 	if err := r.db.WithContext(ctx).First(&vendor, "id = ?", vendorID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("vendor not found")
 		}
 		return nil, err

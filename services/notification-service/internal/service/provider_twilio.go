@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/ecommerce/notification-service/internal/models"
 	"github.com/sirupsen/logrus"
@@ -34,7 +35,9 @@ func NewTwilioSMSProvider(config TwilioConfig, logger *logrus.Logger) Notificati
 		authToken:  config.AuthToken,
 		fromNumber: config.FromNumber,
 		logger:     logger,
-		client:     &http.Client{},
+		// Third-party APIs get an explicit deadline: without one a hung
+		// gateway would block this provider's caller indefinitely.
+		client: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 

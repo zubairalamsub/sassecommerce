@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,7 +48,7 @@ func productCartSetKey(productID string) string {
 func (r *redisCartRepository) GetCart(ctx context.Context, tenantID, userID string) (*models.Cart, error) {
 	key := cartKey(tenantID, userID)
 	data, err := r.client.Get(ctx, key).Bytes()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		// Return empty cart
 		return &models.Cart{
 			TenantID:  tenantID,

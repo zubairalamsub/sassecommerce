@@ -66,7 +66,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Ca
 
 	err = r.collection.FindOne(ctx, filter).Decode(&category)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("category not found")
 		}
 		return nil, err
@@ -86,7 +86,7 @@ func (r *categoryRepository) GetBySlug(ctx context.Context, tenantID, slug strin
 
 	err := r.collection.FindOne(ctx, filter).Decode(&category)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("category not found")
 		}
 		return nil, err

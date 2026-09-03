@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -163,13 +165,24 @@ func main() {
 	router := api.NewRouter(apiCommandHandler, queryHandler, logger)
 	engine := router.Setup()
 
-	// Start HTTP server
+	// Start HTTP server. We build the http.Server explicitly rather than using
+	// engine.Run: Run wraps http.ListenAndServe, which has no timeouts (an
+	// idle connection can hold a goroutine indefinitely) and no way to drain
+	// in-flight requests on shutdown. Timeouts match the other services.
 	serverAddr := cfg.GetServerAddress()
+	srv := &http.Server{
+		Addr:              serverAddr,
+		Handler:           engine,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
 	logger.Info("Starting HTTP server", zap.String("address", serverAddr))
 
-	// Graceful shutdown
 	go func() {
-		if err := engine.Run(serverAddr); err != nil {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
@@ -180,6 +193,14 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+
+	// Stop accepting new requests and let in-flight orders finish before the
+	// event store and Kafka consumers go away underneath them.
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("Server forced to shutdown", zap.Error(err))
+	}
 
 	// Cleanup
 	if consumer != nil {

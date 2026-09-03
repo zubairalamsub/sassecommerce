@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/ecommerce/notification-service/internal/models"
 	"github.com/sirupsen/logrus"
@@ -33,7 +34,9 @@ func NewSendGridEmailProvider(config SendGridConfig, logger *logrus.Logger) Noti
 		fromEmail: config.FromEmail,
 		fromName:  config.FromName,
 		logger:    logger,
-		client:    &http.Client{},
+		// Third-party APIs get an explicit deadline: without one a hung
+		// gateway would block this provider's caller indefinitely.
+		client: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 

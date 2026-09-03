@@ -58,6 +58,9 @@ jobs:
       id-token: write
 
     strategy:
+      # One service failing to build must not cancel the other services'
+      # images — they are deployed independently.
+      fail-fast: false
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
 
@@ -88,7 +91,17 @@ jobs:
         id: build
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
-          context: services/${{ matrix.service }}
+          # The build context differs by stack, so it cannot be one value:
+          #   * Go Dockerfiles COPY shared/go and services/<svc>/ from the
+          #     repo root, so they need the root as context (this is what
+          #     go-service.yml does).
+          #   * The two .NET Dockerfiles COPY src/... relative to their own
+          #     service directory (this is what dotnet-service.yml does).
+          # Using services/<svc> for a Go service fails with
+          # "/shared/go: not found"; using . for a .NET service fails with
+          # "src/Ecommerce.<X>Service/...: not found".
+          context: ${{ contains(fromJson('["payment-service","inventory-service"]'), matrix.service) && format('services/{0}', matrix.service) || '.' }}
+          file: services/${{ matrix.service }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

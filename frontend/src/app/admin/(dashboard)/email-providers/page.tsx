@@ -228,7 +228,14 @@ export default function EmailProvidersPage() {
     setTesting(provider);
     try {
       const res = await emailProviderApi.test(provider, testTo.trim(), tenantId, token, apiScope);
-      toast.success(`Test sent via ${res.provider} to ${res.sent_to}`);
+      // "Accepted", not "sent": all we know is that the relay completed the
+      // SMTP transaction. Vendors apply sender validation and policy
+      // asynchronously, so an accepted message can still be dropped after the
+      // fact — most often because the From address is not a validated sender.
+      // Claiming delivery here sends operators hunting for a bug in us.
+      toast.success(
+        `${res.provider} accepted the message for ${res.sent_to}. Check the provider's own delivery log to confirm it arrived.`,
+      );
     } catch (err) {
       // The backend tests one provider deliberately, so this is the real
       // vendor response rather than a fallback masking the failure.

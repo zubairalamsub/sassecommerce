@@ -100,7 +100,9 @@ export default function EmailProvidersPage() {
   const confirm = useConfirm();
 
   const isSuperAdmin = user?.role === 'super_admin';
-  const [scope, setScope] = useState<'tenant' | 'platform'>('tenant');
+  // A super_admin has no tenant of its own, so tenant scope would just return
+  // "tenant_required". Land it on the platform default instead.
+  const [scope, setScope] = useState<'tenant' | 'platform'>(isSuperAdmin ? 'platform' : 'tenant');
   const apiScope = scope === 'platform' ? ('platform' as const) : undefined;
 
   const [configs, setConfigs] = useState<EmailProviderConfig[]>([]);

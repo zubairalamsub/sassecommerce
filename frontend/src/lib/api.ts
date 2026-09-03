@@ -633,6 +633,79 @@ export const recommendationApi = {
 // Notification Templates (admin-managed bodies that override the hardcoded
 // renderer in the notification-service consumer). All endpoints require the
 // X-Tenant-Id header and an admin JWT.
+// Email provider configuration (notification-service).
+//
+// Secrets are write-only by design: the backend never returns a stored
+// credential, only `secret_set` plus a hint derived from the ciphertext. So the
+// UI can show that a key exists and let you replace it, but never read it back.
+export interface EmailProviderConfig {
+  id: string;
+  tenant_id: string;
+  provider: string;
+  enabled: boolean;
+  priority: number;
+  host?: string;
+  port?: number;
+  username?: string;
+  from_email?: string;
+  from_name?: string;
+  secret_set: boolean;
+  secret_hint?: string;
+  /** True when this row comes from the platform default rather than this
+   *  tenant's own configuration — render it read-only. */
+  inherited: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailProviderListResponse {
+  data: EmailProviderConfig[];
+  scope: string;
+  inherited: boolean;
+  available: string[];
+  encrypted_at_rest: boolean;
+}
+
+export interface UpsertEmailProviderRequest {
+  provider: string;
+  enabled?: boolean;
+  priority?: number;
+  host?: string;
+  port?: number;
+  username?: string;
+  /** Omit to keep the stored credential; send a value to replace it. */
+  secret?: string;
+  from_email?: string;
+  from_name?: string;
+}
+
+export const emailProviderApi = {
+  list: (tenantId: string, token: string, scope?: 'platform') =>
+    request<EmailProviderListResponse>(
+      'notification',
+      `/api/v1/email-providers${scope ? `?scope=${scope}` : ''}`,
+      { tenantId, token },
+    ),
+  upsert: (data: UpsertEmailProviderRequest, tenantId: string, token: string, scope?: 'platform') =>
+    request<EmailProviderConfig>(
+      'notification',
+      `/api/v1/email-providers${scope ? `?scope=${scope}` : ''}`,
+      { method: 'PUT', body: data, tenantId, token },
+    ),
+  remove: (provider: string, tenantId: string, token: string, scope?: 'platform') =>
+    request<{ message: string }>(
+      'notification',
+      `/api/v1/email-providers/${encodeURIComponent(provider)}${scope ? `?scope=${scope}` : ''}`,
+      { method: 'DELETE', tenantId, token },
+    ),
+  test: (provider: string, to: string, tenantId: string, token: string, scope?: 'platform') =>
+    request<{ success: boolean; provider: string; message_id: string; sent_to: string }>(
+      'notification',
+      `/api/v1/email-providers/test${scope ? `?scope=${scope}` : ''}`,
+      { method: 'POST', body: { provider, to }, tenantId, token },
+    ),
+};
+
 export const notificationTemplateApi = {
   list: (tenantId: string, token: string, channel?: string, type?: string) => {
     // Filtering is done client-side; the backend returns every template for

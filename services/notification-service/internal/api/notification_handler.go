@@ -173,6 +173,9 @@ func RegisterRoutes(router *gin.Engine, handler *NotificationHandler) {
 // Response types
 type ErrorResponse struct {
 	Error string `json:"error"`
+	// Message carries an operator-facing explanation. omitempty keeps the
+	// existing single-field responses byte-identical.
+	Message string `json:"message,omitempty"`
 }
 
 type SuccessResponse struct {

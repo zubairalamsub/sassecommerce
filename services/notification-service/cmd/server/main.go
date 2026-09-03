@@ -116,8 +116,31 @@ func main() {
 		log.Info("Push provider: Simulated (set FCM_SERVER_KEY to enable FCM)")
 	}
 
+	// Per-tenant / platform provider configuration, stored encrypted in Mongo
+	// and editable through the admin UI. Credentials are sealed with
+	// EMAIL_ENCRYPTION_KEY (16, 24 or 32 bytes); without it they are only
+	// base64-encoded, which is fine locally and not fine in production.
+	providerRepo, err := repository.NewEmailProviderRepository(db, []byte(os.Getenv("EMAIL_ENCRYPTION_KEY")))
+	if err != nil {
+		log.Fatalf("Failed to initialise email provider repository: %v", err)
+	}
+	if !providerRepo.UsingEncryption() {
+		log.Warn("EMAIL_ENCRYPTION_KEY is not set — provider credentials are base64-encoded, NOT encrypted. Set it before production.")
+	}
+
+	// The resolver decides which chain a tenant's mail takes: the tenant's own
+	// providers, else the platform default, else the EMAIL_PROVIDERS chain
+	// built above. That last fallback means a database problem degrades
+	// delivery rather than stopping it.
+	emailResolver := service.NewEmailProviderResolver(providerRepo, providers[models.ChannelEmail], log)
+
 	// Initialize service
 	notifService := service.NewNotificationService(notifRepo, providers, log)
+	if configurable, ok := notifService.(interface {
+		SetEmailResolver(service.EmailChainResolver)
+	}); ok {
+		configurable.SetEmailResolver(emailResolver)
+	}
 	tmplService := service.NewTemplateService(notifRepo, providers, log)
 
 	// Initialize Kafka consumer — templates are looked up via the repository
@@ -131,6 +154,7 @@ func main() {
 	// Initialize handler
 	handler := api.NewNotificationHandler(notifService, log)
 	tmplHandler := api.NewTemplateHandler(tmplService, log)
+	providerHandler := api.NewEmailProviderHandler(providerRepo, emailResolver, log)
 
 	// Setup Gin router
 	if cfg.Server.Env == "production" {
@@ -176,6 +200,7 @@ func main() {
 	// Register API routes
 	api.RegisterRoutes(router, handler)
 	api.RegisterTemplateRoutes(router, tmplHandler)
+	api.RegisterEmailProviderRoutes(router, providerHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

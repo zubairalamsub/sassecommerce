@@ -316,6 +316,11 @@ services:
       # credentials are missing is skipped with a warning at startup.
       # Keeping "simulated" last means a total outage logs instead of erroring,
       # which is right for development and wrong for production.
+      # Seals provider credentials stored via the admin UI (AES-GCM). Must be
+      # 16, 24 or 32 bytes. Unset means secrets are only base64-encoded, which
+      # the service warns about loudly at startup. Rotating this key makes
+      # existing stored secrets undecryptable — they must be re-entered.
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:-}
       EMAIL_PROVIDERS: ${EMAIL_PROVIDERS:-simulated}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@saajan.test}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Saajan Store}

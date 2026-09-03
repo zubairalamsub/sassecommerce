@@ -175,3 +175,57 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+// BuildProviderFromConfig turns a stored EmailProviderConfig plus its
+// decrypted secret into a live provider. It shares the preset table with the
+// environment path, so a vendor configured through the UI and the same vendor
+// configured through EMAIL_PROVIDERS resolve to identical relay coordinates.
+func BuildProviderFromConfig(cfg *models.EmailProviderConfig, secret string, logger *logrus.Logger) (NotificationProvider, error) {
+	name := strings.ToLower(strings.TrimSpace(cfg.Provider))
+
+	switch name {
+	case "simulated":
+		return NewSimulatedEmailProvider(logger), nil
+
+	case "sendgrid":
+		if secret == "" {
+			return nil, fmt.Errorf("sendgrid requires an API key")
+		}
+		return NewSendGridEmailProvider(SendGridConfig{
+			APIKey:    secret,
+			FromEmail: firstNonEmpty(cfg.FromEmail, "noreply@saajan.com"),
+			FromName:  firstNonEmpty(cfg.FromName, "Saajan Store"),
+		}, logger), nil
+	}
+
+	preset, isPreset := smtpPresets[name]
+	if !isPreset && name != "smtp" {
+		return nil, fmt.Errorf("unknown email provider %q (known: %s)", name, strings.Join(EmailProviderNames(), ", "))
+	}
+
+	host := firstNonEmpty(cfg.Host, preset.host)
+	if host == "" {
+		return nil, fmt.Errorf("provider %q needs an explicit host", name)
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = preset.port
+	}
+	if port == 0 {
+		port = 587
+	}
+	if cfg.Username == "" || secret == "" {
+		return nil, fmt.Errorf("provider %q needs a username and secret", name)
+	}
+
+	return NewSMTPEmailProvider(SMTPConfig{
+		Name:        name,
+		Host:        host,
+		Port:        port,
+		Username:    cfg.Username,
+		Password:    secret,
+		ImplicitTLS: port == 465,
+		FromEmail:   firstNonEmpty(cfg.FromEmail, "noreply@saajan.com"),
+		FromName:    firstNonEmpty(cfg.FromName, "Saajan Store"),
+	}, logger), nil
+}

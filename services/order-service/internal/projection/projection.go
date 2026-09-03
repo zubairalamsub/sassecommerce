@@ -2,6 +2,7 @@ package projection
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/yourusername/ecommerce/order-service/internal/domain/events"
@@ -285,7 +286,7 @@ func (p *OrderProjection) GetOrder(orderID string) (*queries.OrderReadModel, err
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("order not found")
 		}
 		return nil, err

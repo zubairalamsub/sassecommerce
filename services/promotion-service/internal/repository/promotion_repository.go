@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -53,7 +54,7 @@ func (r *gormPromotionRepository) CreatePromotion(ctx context.Context, promotion
 func (r *gormPromotionRepository) GetPromotionByID(ctx context.Context, tenantID, id string) (*models.Promotion, error) {
 	var promotion models.Promotion
 	if err := r.db.WithContext(ctx).First(&promotion, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("promotion not found")
 		}
 		return nil, err
@@ -85,7 +86,7 @@ func (r *gormPromotionRepository) CreateCoupon(ctx context.Context, coupon *mode
 func (r *gormPromotionRepository) GetCouponByCode(ctx context.Context, tenantID, code string) (*models.Coupon, error) {
 	var coupon models.Coupon
 	if err := r.db.WithContext(ctx).First(&coupon, "code = ? AND tenant_id = ?", code, tenantID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("coupon not found")
 		}
 		return nil, err
@@ -122,7 +123,7 @@ func (r *gormPromotionRepository) GetUserCouponUsageCount(ctx context.Context, c
 func (r *gormPromotionRepository) GetLoyaltyAccount(ctx context.Context, tenantID, userID string) (*models.LoyaltyAccount, error) {
 	var account models.LoyaltyAccount
 	if err := r.db.WithContext(ctx).First(&account, "tenant_id = ? AND user_id = ?", tenantID, userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("loyalty account not found")
 		}
 		return nil, err

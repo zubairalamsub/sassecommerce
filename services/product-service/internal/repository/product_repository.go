@@ -153,7 +153,7 @@ func (r *productRepository) GetByID(ctx context.Context, id string) (*models.Pro
 
 	err = r.collection.FindOne(ctx, filter).Decode(&product)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("product not found")
 		}
 		return nil, err
@@ -174,7 +174,7 @@ func (r *productRepository) GetBySKU(ctx context.Context, tenantID, sku string) 
 
 	err := r.collection.FindOne(ctx, filter).Decode(&product)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, errors.New("product not found")
 		}
 		return nil, err

@@ -42,22 +42,39 @@ func NewEmailProviderHandler(
 // verified JWT — never from a query or path parameter, so a tenant admin
 // cannot reach another tenant's credentials or the platform's by asking.
 func (h *EmailProviderHandler) scopeFor(c *gin.Context) (string, bool) {
+	role, _ := c.Get("role")
+	isSuperAdmin := role == "super_admin"
+
+	// The platform branch is checked before any tenant requirement, because a
+	// super_admin legitimately has no tenant: its JWT carries an empty
+	// tenant_id. Requiring a tenant first would 401 the only role allowed to
+	// configure the platform default, making that scope unreachable.
+	if c.Query("scope") == "platform" {
+		if !isSuperAdmin {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Error: "forbidden", Message: "only a super_admin may configure the platform default",
+			})
+			return "", false
+		}
+		return models.PlatformScope, true
+	}
+
 	tenantID := sharedmiddleware.GetTenantID(c)
 	if tenantID == "" {
+		// A tenant-less super_admin asking for tenant scope is a usable
+		// request aimed at the wrong place, so say so rather than returning a
+		// bare 401 that looks like an auth failure.
+		if isSuperAdmin {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "tenant_required",
+				Message: "a super_admin has no tenant of its own; use ?scope=platform to configure the platform default",
+			})
+			return "", false
+		}
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
 		return "", false
 	}
-
-	if c.Query("scope") != "platform" {
-		return tenantID, true
-	}
-	if role, _ := c.Get("role"); role != "super_admin" {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Error: "forbidden", Message: "only a super_admin may configure the platform default",
-		})
-		return "", false
-	}
-	return models.PlatformScope, true
+	return tenantID, true
 }
 
 // ListProviders returns the effective chain for the caller's scope, plus the
@@ -162,8 +179,10 @@ func (h *EmailProviderHandler) UpsertProvider(c *gin.Context) {
 		cfg.FromName = req.FromName
 	}
 
-	// An omitted secret keeps the stored one; Upsert leaves the field alone
-	// when it is empty.
+	// An omitted secret keeps the stored one. cfg.Secret is left exactly as
+	// loaded rather than blanked, so this does not depend on the repository
+	// treating an empty value as "skip this field" — the existing ciphertext
+	// is simply written back unchanged.
 	if req.Secret != "" {
 		sealed, err := h.repo.EncryptSecret(req.Secret)
 		if err != nil {
@@ -172,8 +191,6 @@ func (h *EmailProviderHandler) UpsertProvider(c *gin.Context) {
 			return
 		}
 		cfg.Secret = sealed
-	} else {
-		cfg.Secret = ""
 	}
 
 	if err := h.repo.Upsert(c.Request.Context(), cfg); err != nil {

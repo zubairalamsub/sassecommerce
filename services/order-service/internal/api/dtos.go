@@ -10,6 +10,13 @@ type CreateOrderRequest struct {
 	GuestPhone      string  `json:"guest_phone"`
 	ShippingAddress Address `json:"shipping_address" binding:"required"`
 	BillingAddress  Address `json:"billing_address" binding:"required"`
+	// Items lets a caller submit the whole order in one request. This is the
+	// only way a guest can attach items: POST /orders/:id/items requires auth
+	// deliberately, because an unauthenticated route keyed only by order id
+	// would let anyone holding an id mutate someone else's pending order.
+	// Optional — staff/POS flows still create an empty order and add items
+	// through the authenticated route.
+	Items []AddOrderItemRequest `json:"items"`
 }
 
 // AddOrderItemRequest represents a request to add an item to an order

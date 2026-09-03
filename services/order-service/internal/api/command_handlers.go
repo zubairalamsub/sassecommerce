@@ -115,7 +115,49 @@ func (h *CommandHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Order created successfully", zap.String("order_id", orderID))
+	// Attach any items submitted with the order. Sequentially, because the
+	// aggregate uses optimistic concurrency and parallel adds conflict on
+	// version. A failure here would otherwise strand an empty order, so the
+	// order is cancelled to keep the stream consistent and the caller is told
+	// the whole request failed.
+	for i, item := range req.Items {
+		addCmd := commands.AddOrderItemCommand{
+			OrderID:   orderID,
+			ProductID: item.ProductID,
+			VariantID: item.VariantID,
+			SKU:       item.SKU,
+			Name:      item.Name,
+			Quantity:  item.Quantity,
+			UnitPrice: item.UnitPrice,
+		}
+		if err := h.commandHandler.Handle(addCmd); err != nil {
+			h.logger.Error("Failed to add item to new order",
+				zap.String("order_id", orderID),
+				zap.Int("item_index", i),
+				zap.Error(err),
+			)
+			if cancelErr := h.commandHandler.Handle(commands.CancelOrderCommand{
+				OrderID:     orderID,
+				Reason:      "order creation failed while adding items",
+				CancelledBy: "system",
+			}); cancelErr != nil {
+				h.logger.Error("Failed to cancel partially created order",
+					zap.String("order_id", orderID),
+					zap.Error(cancelErr),
+				)
+			}
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error:   "order_creation_failed",
+				Message: err.Error(),
+			})
+			return
+		}
+	}
+
+	h.logger.Info("Order created successfully",
+		zap.String("order_id", orderID),
+		zap.Int("item_count", len(req.Items)),
+	)
 
 	c.JSON(http.StatusCreated, CreateOrderResponse{
 		OrderID: orderID,

@@ -972,6 +972,11 @@ export interface CreateOrderRequest {
   guest_phone?: string;
   shipping_address: Address;
   billing_address: Address;
+  /** Submit the whole order in one call. Required for guest checkout:
+   *  POST /orders/:id/items is auth-gated on purpose, so a guest cannot add
+   *  items to an already-created order. Omit for staff/POS flows that create
+   *  an empty order and add items through the authenticated route. */
+  items?: AddOrderItemRequest[];
 }
 
 export interface CreateOrderResponse {

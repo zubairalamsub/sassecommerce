@@ -49,7 +49,12 @@ const PRESET_HINTS: Record<string, { label: string; userLabel: string; secretLab
   smtp2go: { label: 'SMTP2GO', userLabel: 'SMTP username', secretLabel: 'SMTP password' },
   elasticemail: { label: 'Elastic Email', userLabel: 'Username', secretLabel: 'API key' },
   zeptomail: { label: 'ZeptoMail', userLabel: 'SMTP username', secretLabel: 'SMTP password' },
-  mailgun: { label: 'Mailgun', userLabel: 'SMTP login', secretLabel: 'SMTP password' },
+  mailgun: {
+    label: 'Mailgun',
+    userLabel: 'SMTP login (postmaster@mg.yourdomain.com)',
+    secretLabel: 'SMTP password',
+    note: 'Mailgun\'s SMTP credentials are NOT your API key — find them under Sending → Domains → your domain → SMTP credentials. If your account is in the EU region, override the Host with smtp.eu.mailgun.org. A sandbox domain only delivers to recipients you have added as Authorized Recipients.',
+  },
   postmark: { label: 'Postmark', userLabel: 'Server token', secretLabel: 'Server token' },
   ses: { label: 'Amazon SES', userLabel: 'SMTP username', secretLabel: 'SMTP password', note: 'SES is region-scoped — set the Host to your region\'s endpoint, e.g. email-smtp.ap-southeast-1.amazonaws.com' },
   sendgrid: { label: 'SendGrid', userLabel: 'unused', secretLabel: 'API key', note: 'SendGrid uses its REST API, so no username or host is needed.' },

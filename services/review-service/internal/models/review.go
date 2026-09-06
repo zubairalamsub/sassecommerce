@@ -1,6 +1,7 @@
 package models
 
 import (
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"time"
 )
 
@@ -127,14 +128,17 @@ type ReviewSummaryResponse struct {
 
 // EventEnvelope is the Kafka event wire format
 type EventEnvelope struct {
-	EventID       string                 `json:"event_id"`
-	EventType     string                 `json:"event_type"`
-	AggregateID   string                 `json:"aggregate_id,omitempty"`
-	AggregateType string                 `json:"aggregate_type,omitempty"`
-	Timestamp     time.Time              `json:"timestamp"`
-	Version       string                 `json:"version,omitempty"`
-	Payload       map[string]interface{} `json:"payload,omitempty"`
-	Data          map[string]interface{} `json:"data,omitempty"`
+	EventID       string    `json:"event_id"`
+	EventType     string    `json:"event_type"`
+	AggregateID   string    `json:"aggregate_id,omitempty"`
+	AggregateType string    `json:"aggregate_type,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+	// Version decodes from either a JSON number or a quoted one. order-service
+	// emits a number; this envelope was written expecting a string, which
+	// silently dropped every order event on the order-events topic.
+	Version sharedkafka.EventVersion `json:"version,omitempty"`
+	Payload map[string]interface{}   `json:"payload,omitempty"`
+	Data    map[string]interface{}   `json:"data,omitempty"`
 }
 
 func (e *EventEnvelope) GetPayload() map[string]interface{} {

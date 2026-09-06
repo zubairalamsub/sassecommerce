@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestValidatePasswordPolicy(t *testing.T) {
 	cases := []struct {
@@ -18,7 +21,7 @@ func TestValidatePasswordPolicy(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validatePasswordPolicy(tc.password); err != tc.wantErr {
+			if err := validatePasswordPolicy(tc.password); !errors.Is(err, tc.wantErr) {
 				t.Errorf("validatePasswordPolicy(%q) = %v, want %v", tc.password, err, tc.wantErr)
 			}
 		})

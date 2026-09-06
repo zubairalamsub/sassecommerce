@@ -93,7 +93,7 @@ func (p *SSLWirelessSMSProvider) Send(notification *models.Notification) (*Provi
 		return nil, fmt.Errorf("failed to marshal SSL Wireless request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", p.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, p.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SSL Wireless request: %w", err)
 	}

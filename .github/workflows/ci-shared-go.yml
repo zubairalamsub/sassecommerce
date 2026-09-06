@@ -1,0 +1,94 @@
+# CI for shared/go.
+#
+# This module had no workflow of its own, despite all 14 Go services pulling it
+# in through a `replace` directive — so a change to the shared HTTP error
+# mapper, the tenant middleware or the Kafka envelope reached master with
+# nothing having compiled it.
+#
+# It does not reuse go-service.yml because that workflow ends in a Docker build
+# and shared/go has no Dockerfile: it is a library, not a service.
+name: CI - Shared Go
+
+on:
+  push:
+    branches: [master, develop]
+    paths:
+      - 'shared/go/**'
+      - '.github/workflows/ci-shared-go.yml'
+      - '.golangci.yml'
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'shared/go/**'
+      - '.github/workflows/ci-shared-go.yml'
+      - '.golangci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: shared/go/go.mod
+          cache-dependency-path: shared/go/go.sum
+
+      - name: Download dependencies
+        working-directory: shared/go
+        run: go mod download
+
+      # vet rather than build: vet compiles the test files too, and a missing
+      # import in a _test.go is invisible to `go build ./...`.
+      - name: Vet
+        working-directory: shared/go
+        run: go vet ./...
+
+      - name: Run tests
+        working-directory: shared/go
+        run: go test -v -coverprofile=coverage.out -covermode=atomic -timeout 120s ./...
+
+      - name: Coverage summary
+        if: always()
+        working-directory: shared/go
+        run: |
+          if [ -f coverage.out ]; then
+            go tool cover -func=coverage.out | tail -1
+          fi
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-shared-go
+          path: shared/go/coverage.out
+          retention-days: 14
+          if-no-files-found: ignore
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: shared/go/go.mod
+          cache-dependency-path: shared/go/go.sum
+
+      # Same pin as go-service.yml: the v6 action installs golangci-lint
+      # v1.64.x, which refuses modules targeting go 1.25.0.
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
+
+      - name: Run golangci-lint
+        working-directory: shared/go
+        run: golangci-lint run --timeout=5m

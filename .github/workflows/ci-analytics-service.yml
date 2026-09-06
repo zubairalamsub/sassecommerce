@@ -5,12 +5,14 @@ on:
     branches: [master, develop]
     paths:
       - 'services/analytics-service/**'
+      - '.golangci.yml'
       - '.github/workflows/ci-analytics-service.yml'
       - '.github/workflows/go-service.yml'
   pull_request:
     branches: [master, develop]
     paths:
       - 'services/analytics-service/**'
+      - '.golangci.yml'
 
 permissions:
   contents: read

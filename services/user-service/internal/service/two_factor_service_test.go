@@ -184,7 +184,7 @@ func TestChallengeToken_RejectsExpired(t *testing.T) {
 
 // assertErr is a tiny helper — we want to control the error message so the
 // IsEnabled "not configured" branch is exercised.
-type assertableErr struct{ msg string }
+type assertableError struct{ msg string }
 
-func (e assertableErr) Error() string { return e.msg }
-func assertErr(msg string) error      { return assertableErr{msg} }
+func (e assertableError) Error() string { return e.msg }
+func assertErr(msg string) error        { return assertableError{msg} }

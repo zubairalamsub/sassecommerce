@@ -118,7 +118,7 @@ func TestHandler_GetSalesReport_Success(t *testing.T) {
 	mockService.On("GetSalesReport", mock.Anything, mock.AnythingOfType("*models.SalesReportRequest")).Return(report, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/sales?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/sales?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -134,7 +134,7 @@ func TestHandler_GetSalesReport_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/sales", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/sales", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -147,7 +147,7 @@ func TestHandler_GetSalesReport_ServiceFailure(t *testing.T) {
 	mockService.On("GetSalesReport", mock.Anything, mock.AnythingOfType("*models.SalesReportRequest")).Return(nil, errors.New("db error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/sales?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/sales?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -163,7 +163,7 @@ func TestHandler_GetCustomerInsights_Success(t *testing.T) {
 	mockService.On("GetCustomerInsights", mock.Anything, mock.AnythingOfType("*models.CustomerInsightsRequest")).Return(insights, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/customers?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/customers?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -174,7 +174,7 @@ func TestHandler_GetCustomerInsights_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/customers", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/customers", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -190,7 +190,7 @@ func TestHandler_GetProductPerformance_Success(t *testing.T) {
 	mockService.On("GetProductPerformance", mock.Anything, mock.AnythingOfType("*models.ProductPerformanceRequest")).Return(perf, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/products?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/products?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -201,7 +201,7 @@ func TestHandler_GetProductPerformance_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/products", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/products", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -219,7 +219,7 @@ func TestHandler_CreateReport_Success(t *testing.T) {
 	body := `{"tenant_id":"tenant-1","name":"Monthly Sales","report_type":"sales","date_from":"2026-03-01","date_to":"2026-03-31"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/analytics/reports", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/analytics/reports", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -233,7 +233,7 @@ func TestHandler_CreateReport_BadRequest(t *testing.T) {
 	body := `{"name":"Test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/analytics/reports", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/analytics/reports", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -250,7 +250,7 @@ func TestHandler_CreateReport_InvalidType(t *testing.T) {
 	body := `{"tenant_id":"tenant-1","name":"Test","report_type":"bad","date_from":"2026-03-01","date_to":"2026-03-31"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/analytics/reports", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/analytics/reports", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -267,7 +267,7 @@ func TestHandler_CreateReport_DateValidation(t *testing.T) {
 	body := `{"tenant_id":"tenant-1","name":"Test","report_type":"sales","date_from":"2026-04-01","date_to":"2026-03-01"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/analytics/reports", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/analytics/reports", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -284,7 +284,7 @@ func TestHandler_GetReport_Success(t *testing.T) {
 	mockService.On("GetReport", mock.Anything, "r-1", testTenantID).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/r-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/reports/r-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -297,7 +297,7 @@ func TestHandler_GetReport_NotFound(t *testing.T) {
 	mockService.On("GetReport", mock.Anything, "bad", testTenantID).Return(nil, errors.New("report not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/bad", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/reports/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -312,7 +312,7 @@ func TestHandler_GetReport_CrossTenantDenied(t *testing.T) {
 	mockService.On("GetReport", mock.Anything, "r-1", "tenant-2").Return(nil, errors.New("report not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports/r-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/reports/r-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -329,7 +329,7 @@ func TestHandler_ListReports_Success(t *testing.T) {
 	mockService.On("ListReports", mock.Anything, "tenant-1", 1, 20).Return(reports, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/reports?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -345,7 +345,7 @@ func TestHandler_ListReports_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/analytics/reports", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/analytics/reports", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)

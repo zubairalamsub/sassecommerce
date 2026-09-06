@@ -103,7 +103,7 @@ func (suite *E2ETestSuite) TestCreateTenant_Success() {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", "/api/v1/tenants", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/tenants", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -131,7 +131,7 @@ func (suite *E2ETestSuite) TestCreateTenant_InvalidRequest() {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", "/api/v1/tenants", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/tenants", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func (suite *E2ETestSuite) TestGetTenant_Success() {
 	err := suite.db.Create(tenant).Error
 	assert.NoError(suite.T(), err)
 
-	req, _ := http.NewRequest("GET", fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), nil)
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -167,7 +167,7 @@ func (suite *E2ETestSuite) TestGetTenant_Success() {
 }
 
 func (suite *E2ETestSuite) TestGetTenant_NotFound() {
-	req, _ := http.NewRequest("GET", "/api/v1/tenants/nonexistent-id", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/tenants/nonexistent-id", nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -187,7 +187,7 @@ func (suite *E2ETestSuite) TestGetTenantBySlug_Success() {
 	err := suite.db.Create(tenant).Error
 	assert.NoError(suite.T(), err)
 
-	req, _ := http.NewRequest("GET", "/api/v1/tenants/slug/test-slug-unique-123", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/tenants/slug/test-slug-unique-123", nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -213,7 +213,7 @@ func (suite *E2ETestSuite) TestGetTenantByDomain_Success() {
 	err := suite.db.Create(tenant).Error
 	assert.NoError(suite.T(), err)
 
-	req, _ := http.NewRequest("GET", "/api/v1/tenants/domain?domain=testdomain.mystore.com", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/tenants/domain?domain=testdomain.mystore.com", nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -240,7 +240,7 @@ func (suite *E2ETestSuite) TestListTenants_Success() {
 		assert.NoError(suite.T(), err)
 	}
 
-	req, _ := http.NewRequest("GET", "/api/v1/tenants?page=1&page_size=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/tenants?page=1&page_size=10", nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -280,7 +280,7 @@ func (suite *E2ETestSuite) TestUpdateTenant_Success() {
 	}
 
 	body, _ := json.Marshal(updateReq)
-	req, _ := http.NewRequest("PUT", fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -323,7 +323,7 @@ func (suite *E2ETestSuite) TestUpdateTenantConfig_Success() {
 	}
 
 	body, _ := json.Marshal(configReq)
-	req, _ := http.NewRequest("PATCH", fmt.Sprintf("/api/v1/tenants/%s/config", tenant.ID), bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/tenants/%s/config", tenant.ID), bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -344,7 +344,7 @@ func (suite *E2ETestSuite) TestDeleteTenant_Success() {
 	err := suite.db.Create(tenant).Error
 	assert.NoError(suite.T(), err)
 
-	req, _ := http.NewRequest("DELETE", fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), nil)
+	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/tenants/%s", tenant.ID), nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -372,7 +372,7 @@ func (suite *E2ETestSuite) TestListTenantsWithPagination() {
 	}
 
 	// Test first page
-	req, _ := http.NewRequest("GET", "/api/v1/tenants?page=1&page_size=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/tenants?page=1&page_size=10", nil)
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 
@@ -392,7 +392,7 @@ func (suite *E2ETestSuite) TestListTenantsWithPagination() {
 	assert.LessOrEqual(suite.T(), len(response1.Data), 10)
 
 	// Test second page
-	req, _ = http.NewRequest("GET", "/api/v1/tenants?page=2&page_size=10", nil)
+	req, _ = http.NewRequest(http.MethodGet, "/api/v1/tenants?page=2&page_size=10", nil)
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
 

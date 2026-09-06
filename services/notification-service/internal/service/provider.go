@@ -143,12 +143,6 @@ func generateMessageID(prefix string) string {
 	return fmt.Sprintf("%s_%09d", prefix, n.Int64())
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // Name reports this provider's label for failover logging and results.
 func (p *SimulatedEmailProvider) Name() string { return "simulated" }

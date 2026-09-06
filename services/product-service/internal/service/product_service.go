@@ -394,8 +394,12 @@ func parseStatus(s string) models.ProductStatus {
 
 // publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
 func (s *productService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	// Held in a variable rather than read back out of the map: the Kafka key
+	// needs it as a string, and reading it back out was an unchecked
+	// assertion standing in for a value we had in hand two lines earlier.
+	eventID := uuid.New().String()
 	event := map[string]interface{}{
-		"event_id":   uuid.New().String(),
+		"event_id":   eventID,
 		"event_type": eventType,
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		"version":    "1.0.0",
@@ -408,7 +412,7 @@ func (s *productService) publishEvent(ctx context.Context, eventType string, pay
 		return
 	}
 
-	if err := s.kafkaProducer.Publish(ctx, "product-events", event["event_id"].(string), data); err != nil {
+	if err := s.kafkaProducer.Publish(ctx, "product-events", eventID, data); err != nil {
 		s.logger.WithError(err).Warn("Failed to publish product event")
 	}
 }

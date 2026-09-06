@@ -1,6 +1,7 @@
 package errors
 
 import (
+	stderrors "errors"
 	"fmt"
 	"net/http"
 )
@@ -96,15 +97,23 @@ func TooManyRequests(message string) *AppError {
 	return NewAppError(ErrCodeTooManyRequests, message, http.StatusTooManyRequests)
 }
 
-// IsAppError checks if an error is an AppError
+// IsAppError reports whether err is, or wraps, an *AppError.
 func IsAppError(err error) bool {
-	_, ok := err.(*AppError)
-	return ok
+	var appErr *AppError
+	return stderrors.As(err, &appErr)
 }
 
-// GetAppError extracts AppError from error
+// GetAppError returns the *AppError in err's chain, or nil when there is none.
+//
+// It unwraps deliberately. response.Error is the single place every handler
+// turns an error into a status code, and it reaches for this function first.
+// A bare type assertion stopped matching as soon as any caller wrapped with
+// %w, so a wrapped NotFound or TooManyRequests fell through to the 500 branch
+// -- which also echoes err.Error() into the response body, exposing the whole
+// wrapped chain to the client.
 func GetAppError(err error) *AppError {
-	if appErr, ok := err.(*AppError); ok {
+	var appErr *AppError
+	if stderrors.As(err, &appErr) {
 		return appErr
 	}
 	return nil

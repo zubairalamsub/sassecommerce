@@ -79,7 +79,7 @@ func (p *SendGridEmailProvider) Send(notification *models.Notification) (*Provid
 		return nil, fmt.Errorf("failed to marshal SendGrid request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.sendgrid.com/v3/mail/send", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, "https://api.sendgrid.com/v3/mail/send", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SendGrid request: %w", err)
 	}

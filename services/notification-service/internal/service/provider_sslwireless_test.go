@@ -39,7 +39,7 @@ func TestNormalizeBDMSISDN(t *testing.T) {
 func TestSSLWireless_Send_Success(t *testing.T) {
 	var capturedBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
+		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {

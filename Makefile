@@ -1,4 +1,4 @@
-.PHONY: help up up-monitoring down build logs clean test
+.PHONY: help up up-monitoring down build logs clean test lint lint-fix lint-install vet
 
 # Enable BuildKit + parallel image builds for every docker/compose invocation.
 export DOCKER_BUILDKIT := 1
@@ -46,6 +46,12 @@ help:
 	@echo "  make test-tenant-badges    - Generate test coverage badges"
 	@echo "  make view-tenant-report    - View HTML test report in browser"
 	@echo "  make view-tenant-coverage  - View coverage report in browser"
+	@echo ""
+	@echo "Code quality (all 15 Go modules):"
+	@echo "  make lint             - Run golangci-lint across every Go module"
+	@echo "  make lint-fix         - Same, applying auto-fixes (then ALWAYS run make vet)"
+	@echo "  make vet              - go vet every module (compiles tests, unlike go build)"
+	@echo "  make lint-install     - Install the golangci-lint version CI pins"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            - Remove containers and volumes"
@@ -220,3 +226,59 @@ test-api:
 		-d '{"name": "Test Store", "email": "test@example.com", "tier": "free"}' | jq '.'
 	@echo "\n3. List Tenants:"
 	curl -s http://localhost:8081/api/v1/tenants | jq '.'
+
+# ---------------------------------------------------------------------------
+# Code quality
+#
+# One .golangci.yml at the repo root governs all 15 modules -- golangci-lint
+# walks up from each module directory to find it, so these targets just visit
+# each module in turn.
+# ---------------------------------------------------------------------------
+
+GOLANGCI_VERSION := v2.5.0
+GO_MODULES := shared/go $(wildcard services/*-service)
+
+lint-install:
+	@echo "Installing golangci-lint $(GOLANGCI_VERSION) (the version CI pins)..."
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+		| sh -s -- -b "$$(go env GOPATH)/bin" $(GOLANGCI_VERSION)
+
+lint:
+	@fail=0; \
+	for m in $(GO_MODULES); do \
+		[ -f "$$m/go.mod" ] || continue; \
+		printf '%-28s' "$$m"; \
+		if out=$$(cd "$$m" && golangci-lint run --timeout=5m 2>&1); then \
+			echo "clean"; \
+		else \
+			echo "ISSUES"; echo "$$out"; fail=1; \
+		fi; \
+	done; \
+	exit $$fail
+
+# --fix does not add imports and is not import-alias aware, so it can leave the
+# tree uncompilable; worse, one errorlint fix can invert a test's meaning while
+# still compiling and still passing. vet runs straight afterwards, and reading
+# the resulting diff is not optional.
+lint-fix:
+	@for m in $(GO_MODULES); do \
+		[ -f "$$m/go.mod" ] || continue; \
+		echo "==> $$m"; \
+		(cd "$$m" && golangci-lint run --fix --timeout=5m) || true; \
+	done
+	@$(MAKE) --no-print-directory vet
+
+# go vet, not go build: vet compiles _test.go files too, which is exactly where
+# a missing import left behind by --fix hides.
+vet:
+	@fail=0; \
+	for m in $(GO_MODULES); do \
+		[ -f "$$m/go.mod" ] || continue; \
+		printf '%-28s' "$$m"; \
+		if out=$$(cd "$$m" && go vet ./... 2>&1); then \
+			echo "ok"; \
+		else \
+			echo "FAIL"; echo "$$out"; fail=1; \
+		fi; \
+	done; \
+	exit $$fail

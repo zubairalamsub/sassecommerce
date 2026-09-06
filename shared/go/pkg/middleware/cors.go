@@ -133,7 +133,7 @@ func CORS(config CORSConfig) gin.HandlerFunc {
 		}
 
 		// Handle preflight requests
-		if c.Request.Method == "OPTIONS" {
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(204)
 			return
 		}
@@ -189,8 +189,13 @@ func HardenedCORS(config CORSConfig) gin.HandlerFunc {
 		maxAge = defaultMaxAgeSeconds
 	}
 
-	// Credentials are only safe with explicit, non-wildcard origins.
-	allowCredentials := config.AllowCredentials && !containsWildcard(origins)
+	// Credentials are only safe with explicit, non-wildcard origins. The
+	// len check matters for the production path above: stripping a wildcard
+	// can leave the list empty, and the header was still advertised. Nothing
+	// could act on it -- Access-Control-Allow-Origin is never set in that
+	// state, so no browser shares the response -- but announcing credential
+	// support that cannot apply is misleading to anyone reading the traffic.
+	allowCredentials := config.AllowCredentials && len(origins) > 0 && !containsWildcard(origins)
 
 	methodsHeader := strings.Join(methods, ", ")
 	headersHeader := strings.Join(headers, ", ")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ecommerce/promotion-service/internal/models"
+	"github.com/ecommerce/promotion-service/internal/repository"
 	repoMocks "github.com/ecommerce/promotion-service/internal/repository/mocks"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -319,7 +320,9 @@ func TestValidateCoupon_NotFound(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, errors.New("coupon not found"))
+	// The sentinel, not a lookalike string: telling a customer their coupon is
+	// invalid is only correct when the row really is absent.
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, repository.ErrCouponNotFound)
 
 	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
 
@@ -328,6 +331,45 @@ func TestValidateCoupon_NotFound(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, result.Valid)
 	assert.Contains(t, result.Message, "coupon not found")
+}
+
+// A repository failure is not an invalid coupon. This used to return
+// {Valid: false, "coupon not found"} with a nil error, so a database outage
+// told every customer holding a good coupon that it did not exist -- answered
+// 200, and raised no alert anywhere.
+func TestValidateCoupon_RepositoryFailureIsNotInvalidCoupon(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").
+		Return(nil, errors.New("dial tcp 10.0.0.5:5432: connect: connection refused"))
+
+	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
+
+	result, err := svc.ValidateCoupon(ctx, "SUMMER20", req)
+
+	assert.Error(t, err, "a database outage must surface as an error, not as an invalid coupon")
+	assert.Nil(t, result)
+}
+
+// Same distinction one level down: the coupon exists but its promotion could
+// not be read.
+func TestValidateCoupon_PromotionLookupFailureIsNotInvalidCoupon(t *testing.T) {
+	svc, mockRepo := newTestService()
+	ctx := context.Background()
+
+	coupon := createTestCoupon()
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "SUMMER20").Return(coupon, nil)
+	mockRepo.On("GetUserCouponUsageCount", ctx, coupon.ID, "user-1").Return(int64(0), nil)
+	mockRepo.On("GetPromotionByID", ctx, coupon.TenantID, coupon.PromotionID).
+		Return(nil, context.DeadlineExceeded)
+
+	req := &models.ValidateCouponRequest{TenantID: "tenant-1", UserID: "user-1", OrderTotal: 100}
+
+	result, err := svc.ValidateCoupon(ctx, "SUMMER20", req)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
 }
 
 func TestValidateCoupon_Inactive(t *testing.T) {
@@ -475,7 +517,7 @@ func TestApplyCoupon_InvalidCoupon(t *testing.T) {
 	svc, mockRepo := newTestService()
 	ctx := context.Background()
 
-	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, errors.New("coupon not found"))
+	mockRepo.On("GetCouponByCode", ctx, "tenant-1", "BAD").Return(nil, repository.ErrCouponNotFound)
 
 	req := &models.ApplyCouponRequest{
 		TenantID: "tenant-1", UserID: "user-1", OrderID: "order-1",

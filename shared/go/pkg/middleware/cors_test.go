@@ -143,11 +143,15 @@ func TestHardenedCORS_WildcardStrippedInProduction(t *testing.T) {
 	if got := w.Header().Get("Access-Control-Allow-Origin"); got == "*" {
 		t.Errorf("wildcard origin must be stripped in production, got %q", got)
 	}
+	// The body of this check used to be comments only, so it asserted nothing
+	// at all -- and once written out, it failed.
+	//
+	// Not a hole: with the wildcard stripped and nothing else configured,
+	// Access-Control-Allow-Origin is never set, so no browser will share the
+	// response whatever this header says. It is a coherence fix -- the server
+	// should not advertise credential support it cannot honour.
 	if got := w.Header().Get("Access-Control-Allow-Credentials"); got == "true" {
-		// credentials with wildcard origins should never coexist; since wildcard
-		// is stripped, but there are no other origins, credentials should also
-		// not be advertised.
-		// (Allowed-origins is empty, so credentials being true would be a bug.)
+		t.Error("credentials advertised with no allowed origins configured")
 	}
 }
 

@@ -131,7 +131,7 @@ func TestHandler_SendNotification_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notifications/send", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notifications/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -150,7 +150,7 @@ func TestHandler_SendNotification_BadRequest(t *testing.T) {
 	body := `{"tenant_id": "tenant-1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notifications/send", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notifications/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -175,7 +175,7 @@ func TestHandler_SendNotification_ServiceError(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notifications/send", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notifications/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -192,7 +192,7 @@ func TestHandler_GetNotification_Success(t *testing.T) {
 	mockService.On("GetNotification", mock.Anything, "tenant-1", "notif-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/notifications/notif-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/notifications/notif-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -209,7 +209,7 @@ func TestHandler_GetNotification_NotFound(t *testing.T) {
 	mockService.On("GetNotification", mock.Anything, "tenant-1", "nonexistent").Return(nil, errors.New("notification not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/notifications/nonexistent", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/notifications/nonexistent", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -225,7 +225,7 @@ func TestHandler_GetUserNotifications_Success(t *testing.T) {
 	mockService.On("GetUserNotifications", mock.Anything, "tenant-1", "user-1", 1, 20).Return(responses, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/notifications/user/user-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/notifications/user/user-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -242,7 +242,7 @@ func TestHandler_GetUserNotifications_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/notifications/user/user-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/notifications/user/user-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -256,7 +256,7 @@ func TestHandler_GetUserNotifications_Pagination(t *testing.T) {
 	mockService.On("GetUserNotifications", mock.Anything, "tenant-1", "user-1", 2, 10).Return(responses, int64(25), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/notifications/user/user-1?tenant_id=tenant-1&page=2&page_size=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/notifications/user/user-1?tenant_id=tenant-1&page=2&page_size=10", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -278,7 +278,7 @@ func TestHandler_MarkAsRead_Success(t *testing.T) {
 	mockService.On("MarkAsRead", mock.Anything, "tenant-1", "notif-1").Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/notifications/notif-1/read", nil)
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/notifications/notif-1/read", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -291,7 +291,7 @@ func TestHandler_MarkAsRead_NotFound(t *testing.T) {
 	mockService.On("MarkAsRead", mock.Anything, "tenant-1", "nonexistent").Return(errors.New("notification not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/notifications/nonexistent/read", nil)
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/notifications/nonexistent/read", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -315,7 +315,7 @@ func TestHandler_GetPreference_Success(t *testing.T) {
 	mockService.On("GetPreference", mock.Anything, "tenant-1", "user-1").Return(pref, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/preferences/user-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/preferences/user-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -331,7 +331,7 @@ func TestHandler_GetPreference_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/preferences/user-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/preferences/user-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -357,7 +357,7 @@ func TestHandler_UpdatePreference_Success(t *testing.T) {
 	body := `{"email_enabled": false}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/preferences/user-1?tenant_id=tenant-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/preferences/user-1?tenant_id=tenant-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -375,7 +375,7 @@ func TestHandler_UpdatePreference_Unauthenticated(t *testing.T) {
 	body := `{"email_enabled": false}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/preferences/user-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/preferences/user-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -392,7 +392,7 @@ func TestHandler_UpdatePreference_ServiceError(t *testing.T) {
 	body := `{"email_enabled": false}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/preferences/user-1?tenant_id=tenant-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/preferences/user-1?tenant_id=tenant-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

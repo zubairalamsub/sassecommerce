@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -175,7 +176,14 @@ func (s *promotionService) ValidateCoupon(ctx context.Context, code string, req 
 
 	coupon, err := s.repo.GetCouponByCode(ctx, req.TenantID, code)
 	if err != nil {
-		return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "coupon not found"}, nil
+		// Only a genuinely absent coupon is a Valid:false answer. Every other
+		// error -- connection refused, timeout, cancelled context -- must
+		// surface as an error, or a database outage silently tells every
+		// customer their valid coupon does not exist, with a 200 and no alert.
+		if errors.Is(err, repository.ErrCouponNotFound) {
+			return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "coupon not found"}, nil
+		}
+		return nil, fmt.Errorf("failed to look up coupon: %w", err)
 	}
 
 	if !coupon.IsActive {
@@ -203,7 +211,10 @@ func (s *promotionService) ValidateCoupon(ctx context.Context, code string, req 
 	// Get promotion for discount details
 	promotion, err := s.repo.GetPromotionByID(ctx, coupon.TenantID, coupon.PromotionID)
 	if err != nil {
-		return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "associated promotion not found"}, nil
+		if errors.Is(err, repository.ErrPromotionNotFound) {
+			return &models.ValidateCouponResponse{Valid: false, Code: code, Message: "associated promotion not found"}, nil
+		}
+		return nil, fmt.Errorf("failed to look up promotion for coupon: %w", err)
 	}
 
 	// Check promotion is active and within date range
@@ -249,9 +260,18 @@ func (s *promotionService) ApplyCoupon(ctx context.Context, req *models.ApplyCou
 		return result, nil
 	}
 
-	// Record usage
+	// Record usage.
+	//
+	// ValidateCoupon already read this row, but it does not hand the coupon
+	// back, so it is read again. Discarding the error here dereferenced a nil
+	// coupon on the very next line -- a lookup that fails between the two calls
+	// (the connection dropping is enough) panicked the handler rather than
+	// returning 500.
 	code := strings.ToUpper(req.Code)
-	coupon, _ := s.repo.GetCouponByCode(ctx, req.TenantID, code)
+	coupon, err := s.repo.GetCouponByCode(ctx, req.TenantID, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-read coupon for usage recording: %w", err)
+	}
 
 	usage := &models.CouponUsage{
 		ID:       uuid.New().String(),

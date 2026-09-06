@@ -204,7 +204,7 @@ func TestPresignPut_ReturnsUsableURL(t *testing.T) {
 	if !strings.Contains(pre.URL, "/test-bucket/tenants/t1/uploads/file.bin") {
 		t.Errorf("unexpected URL: %s", pre.URL)
 	}
-	if pre.Method != "PUT" {
+	if pre.Method != http.MethodPut {
 		t.Errorf("expected method PUT, got %s", pre.Method)
 	}
 	if pre.Headers["Content-Type"] != "application/octet-stream" {
@@ -216,7 +216,7 @@ func TestPresignPut_ReturnsUsableURL(t *testing.T) {
 
 	// Use the URL — the stub doesn't validate the signature so this just
 	// proves the URL is structurally usable.
-	req, err := http.NewRequest("PUT", pre.URL, strings.NewReader("payload"))
+	req, err := http.NewRequest(http.MethodPut, pre.URL, strings.NewReader("payload"))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestPresignGet_ReturnsURL(t *testing.T) {
 	if !strings.Contains(pre.URL, "/test-bucket/tenants/t1/uploads/file.bin") {
 		t.Errorf("unexpected URL: %s", pre.URL)
 	}
-	if pre.Method != "GET" {
+	if pre.Method != http.MethodGet {
 		t.Errorf("expected method GET, got %s", pre.Method)
 	}
 }
@@ -302,12 +302,12 @@ func TestNewFromEnv_RequiresAllValues(t *testing.T) {
 
 func TestNewFromEnv_AllValuesPresent(t *testing.T) {
 	env := map[string]string{
-		"OCI_S3_ENDPOINT":         "https://x.example",
-		"OCI_S3_REGION":           "ap-singapore-1",
-		"OCI_S3_BUCKET":           "b",
-		"OCI_S3_ACCESS_KEY":       "a",
-		"OCI_S3_SECRET_KEY":       "s",
-		"OCI_S3_PUBLIC_BASE_URL":  "https://cdn.example",
+		"OCI_S3_ENDPOINT":        "https://x.example",
+		"OCI_S3_REGION":          "ap-singapore-1",
+		"OCI_S3_BUCKET":          "b",
+		"OCI_S3_ACCESS_KEY":      "a",
+		"OCI_S3_SECRET_KEY":      "s",
+		"OCI_S3_PUBLIC_BASE_URL": "https://cdn.example",
 	}
 	cfg, err := NewFromEnv(func(k string) string { return env[k] })
 	if err != nil {

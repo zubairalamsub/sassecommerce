@@ -98,7 +98,7 @@ func main() {
 		fail(err)
 	}
 	if !exists {
-		fail(fmt.Errorf("Exists returned false right after Put"))
+		fail(fmt.Errorf("exists returned false right after Put"))
 	}
 	ok("object visible")
 
@@ -113,7 +113,7 @@ func main() {
 		fail(err)
 	}
 	if !bytes.Equal(got, tinyPNG) {
-		fail(fmt.Errorf("Get returned %d bytes, expected %d (corruption?)", len(got), len(tinyPNG)))
+		fail(fmt.Errorf("get returned %d bytes, expected %d (corruption?)", len(got), len(tinyPNG)))
 	}
 	ok(fmt.Sprintf("%d bytes match", len(got)))
 
@@ -156,13 +156,19 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	getResp, err := http.Get(presignGet.URL)
+	// NewRequestWithContext rather than http.Get: ctx already carries this
+	// tool's 60s budget, and http.Get ignores it entirely.
+	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, presignGet.URL, nil)
+	if err != nil {
+		fail(err)
+	}
+	getResp, err := http.DefaultClient.Do(getReq)
 	if err != nil {
 		fail(err)
 	}
 	getBody, _ := io.ReadAll(getResp.Body)
 	getResp.Body.Close()
-	if getResp.StatusCode != 200 || !bytes.Equal(getBody, tinyPNG) {
+	if getResp.StatusCode != http.StatusOK || !bytes.Equal(getBody, tinyPNG) {
 		fail(fmt.Errorf("presigned GET returned status %d, %d bytes", getResp.StatusCode, len(getBody)))
 	}
 	ok("retrieved correct bytes")
@@ -199,9 +205,9 @@ func randomHex(n int) string {
 	return fmt.Sprintf("%x", b)
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max]
+	return s[:limit]
 }

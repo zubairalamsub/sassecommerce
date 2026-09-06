@@ -1,0 +1,230 @@
+# Shared golangci-lint configuration for every Go module in this repo.
+#
+# Each service is its own module and CI runs `golangci-lint run` from
+# services/<svc>, but golangci-lint walks parent directories looking for a
+# config, so this single file governs all 15 modules (14 services + shared/go).
+#
+# Pinned to the v2 schema because CI installs golangci-lint v2.5.0 — the v1
+# format is silently incompatible.
+#
+# A warning about `golangci-lint run --fix`, learned the hard way while
+# adopting this file. It is useful for the mechanical linters but it does not
+# manage imports and it is not alias-aware, so always build AND vet afterwards
+# (`go vet ./...`, not just `go build ./...` — vet compiles test files, which is
+# where two of the three breakages below landed):
+#
+#   - usestdlibvars rewrote "200" to http.StatusOK without adding net/http.
+#   - errorlint rewrote a type assertion to `errors.As` in a file that imports
+#     the stdlib as `stderrors`.
+#   - errorlint rewrote `fmt.Errorf("...: %v", err)` to `%w` inside a test whose
+#     entire purpose was to assert that a %v-formatted error does NOT unwrap.
+#     That one still compiled and still passed -- it just silently stopped
+#     testing anything, with the name and comment left intact.
+version: "2"
+
+run:
+  timeout: 5m
+  # Lint test files too. Most of the bug classes below (unclosed rows, dropped
+  # errors, response bodies left open) are just as wrong in a test helper.
+  tests: true
+
+issues:
+  # Defaults are max-issues-per-linter: 50 and max-same-issues: 3, which
+  # silently truncate the report -- a first run showed 6 usestdlibvars in a file
+  # that actually had 18. A lint gate that hides two thirds of what it found is
+  # worse than useless, so both caps are lifted.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  # The five golangci-lint enables on its own: errcheck, govet, ineffassign,
+  # staticcheck, unused. Everything below is additive.
+  default: standard
+
+  enable:
+    # --- Error handling -------------------------------------------------
+    # errorlint is the reason this file exists. Comparing errors with `==`
+    # instead of errors.Is silently stops matching the moment anything in the
+    # chain wraps, and wrapping with %v instead of %w breaks it for everyone
+    # downstream. Both had shipped here repeatedly before anything flagged it.
+    - errorlint
+    # `if err != nil { return nil }` — an error checked and then thrown away.
+    - nilerr
+    # Error variables named ErrFoo, error types named FooError.
+    - errname
+
+    # --- Resource leaks -------------------------------------------------
+    # An HTTP response body never closed leaks the connection: the transport
+    # cannot reuse it and the pool fills. Relevant on every outbound call the
+    # provider adapters and inter-service clients make.
+    - bodyclose
+    # sql.Rows / sql.Stmt left open holds a pooled connection for good. This
+    # repo uses raw database/sql widely, so a leak here exhausts the pool.
+    - sqlclosecheck
+    # rows.Err() unchecked hides an iteration that stopped early — a truncated
+    # result set read as a complete one.
+    - rowserrcheck
+
+    # --- Context --------------------------------------------------------
+    # http.Get / http.NewRequest without a context: no deadline, no
+    # cancellation. One slow upstream then pins a request goroutine forever.
+    - noctx
+
+    # --- Correctness ----------------------------------------------------
+    # time.Duration multiplied by a Duration — the result is nanoseconds
+    # squared, and the code silently waits the wrong amount of time.
+    - durationcheck
+    # append to a slice built with make(T, n) rather than make(T, 0, n),
+    # which leaves n zero values in front of the appended data.
+    - makezero
+    # A value assigned and then overwritten before it is read.
+    - wastedassign
+    # []any passed where ...any is expected — the slice becomes one argument.
+    - asasalint
+    # Reassigning a package-level variable declared in another package.
+    - reassign
+    # Shadowing a predeclared identifier (len, cap, new, error...).
+    - predeclared
+    # Redundant `x := x` loop-variable copies; Go 1.22+ scopes them per
+    # iteration, so these are now noise that hides real shadowing.
+    - copyloopvar
+    # Malformed //go: directives, which the compiler ignores in silence.
+    - gocheckcompilerdirectives
+    # Unicode direction-override characters — source that does not read the
+    # way it executes.
+    - bidichk
+
+    # --- Clarity --------------------------------------------------------
+    # Conversions that do nothing.
+    - unconvert
+    # "GET" instead of http.MethodGet, "200" instead of http.StatusOK.
+    - usestdlibvars
+    - misspell
+
+    # --- Security -------------------------------------------------------
+    # This is a multi-tenant platform handling payments and PII; gosec is the
+    # only linter here that looks for that class at all.
+    - gosec
+
+  settings:
+    errcheck:
+      # check-type-assertions on: an unchecked `x.(T)` panics rather than
+      # returning an error, and this codebase decodes a lot of
+      # map[string]interface{} event payloads where the shape is not guaranteed.
+      check-type-assertions: true
+      # check-blank off: `_ = f()` is how this codebase says "I considered this
+      # error and it does not matter here" (deferred Close on a reader, best
+      # effort logging). Flagging it would only move the noise to //nolint.
+      check-blank: false
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    gosec:
+      excludes:
+        # G104 duplicates errcheck, which is already enabled and reports the
+        # same unchecked errors with better positions.
+        - G104
+        # G115 (integer conversion overflow) fires on virtually every int ->
+        # int32/int64 conversion in the codebase, including provably safe ones
+        # such as len() results and parsed page sizes. The signal-to-noise
+        # ratio does not justify enabling it repo-wide today; revisit if a
+        # future gosec narrows it.
+        - G115
+
+    govet:
+      # Left at govet's own defaults.
+      #
+      # `shadow` was enabled first and then removed on the evidence: it
+      # produced 24 findings across the repo, every one of them the idiomatic
+      # `if err := f(); err != nil { return ... }` where the shadowed error is
+      # handled inside its own block. Not one was a bug. Acting on them would
+      # mean renaming correct code to err2/err3, which reads worse than what
+      # is there now.
+      #
+      # `fieldalignment` is likewise off: it would churn every DTO to save a
+      # few bytes per struct.
+      enable-all: false
+
+    staticcheck:
+      checks:
+        - all
+        # ST1000: package comment on every package. Not worth 200 stubs.
+        - -ST1000
+        # ST1003: naming conventions (Id vs ID, Url vs URL). The API DTOs
+        # deliberately mirror the JSON wire format.
+        - -ST1003
+        # ST1020/ST1021/ST1022: comment-on-exported-thing rules.
+        - -ST1020
+        - -ST1021
+        - -ST1022
+
+    misspell:
+      # Deliberately no `locale:`. Setting US turns misspell into a
+      # British-to-American converter, and this domain's vocabulary is
+      # British: `OrderCancelled` is an event type on the Kafka wire with 100+
+      # references. Without a locale it still catches genuine typos, which is
+      # the part worth having.
+      ignore-rules:
+        - cancelled
+        - cancelling
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+
+    rules:
+      # Tests deliberately construct edge cases and ignore returns that
+      # production code must not.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - noctx
+          - bodyclose
+
+      # Mockery output. `args.Get(0).(*models.Thing)` is how a generated mock
+      # returns a typed value, and check-type-assertions flags every one; the
+      # files are generated, so there is nothing to fix in them.
+      - path: /mocks/
+        linters:
+          - errcheck
+
+      # database/sql without a context, in the order-service read/write path
+      # and the notification providers.
+      #
+      # These are real: an uncancellable query keeps its pooled connection
+      # after the client has gone. They are excluded rather than fixed because
+      # neither the event store, the projection, nor the Provider interface
+      # accepts a context.Context at all -- threading one through is ~25
+      # signature changes plus their tests, which is its own change, not a
+      # lint-config one. Scoped to these files by name so any new file, and any
+      # new call site outside them, is still checked.
+      - path: order-service/internal/(eventstore|projection|saga)/
+        linters:
+          - noctx
+      - path: notification-service/internal/service/provider_
+        linters:
+          - noctx
+
+      # Ping on startup, before any request context exists.
+      - path: cmd/server/main\.go
+        linters:
+          - noctx
+
+formatters:
+  # Deliberately empty.
+  #
+  # This repo is developed on Windows with core.autocrlf=true, so the working
+  # tree has CRLF while git stores LF. gofmt/goimports read the file as it sits
+  # on disk, so enabling them here would pass in CI (Linux, LF) and flag every
+  # single file locally — making the local run useless exactly when a developer
+  # needs it. Fixing that means committing a .gitattributes with `*.go eol=lf`
+  # first; until then formatting stays a `gofmt -l` habit rather than a gate.
+  enable: []

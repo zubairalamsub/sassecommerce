@@ -124,7 +124,7 @@ func TestHandler_SearchProducts_Success(t *testing.T) {
 	mockService.On("Search", mock.Anything, mock.AnythingOfType("*models.SearchRequest")).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?tenant_id=tenant-1&q=widget", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?tenant_id=tenant-1&q=widget", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -140,7 +140,7 @@ func TestHandler_SearchProducts_MissingTenantID(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?q=widget", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?q=widget", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -154,7 +154,7 @@ func TestHandler_SearchProducts_EmptyQuery(t *testing.T) {
 	mockService.On("Search", mock.Anything, mock.AnythingOfType("*models.SearchRequest")).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -168,7 +168,7 @@ func TestHandler_SearchProducts_WithFilters(t *testing.T) {
 	mockService.On("Search", mock.Anything, mock.AnythingOfType("*models.SearchRequest")).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?tenant_id=tenant-1&q=widget&category_id=cat-1&brand=WidgetCo&min_price=10&max_price=100&in_stock=true&sort_by=price&sort_order=asc", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?tenant_id=tenant-1&q=widget&category_id=cat-1&brand=WidgetCo&min_price=10&max_price=100&in_stock=true&sort_by=price&sort_order=asc", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -182,7 +182,7 @@ func TestHandler_SearchProducts_WithTags(t *testing.T) {
 	mockService.On("Search", mock.Anything, mock.AnythingOfType("*models.SearchRequest")).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?tenant_id=tenant-1&tags=premium,new", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?tenant_id=tenant-1&tags=premium,new", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -196,7 +196,7 @@ func TestHandler_SearchProducts_ServiceError(t *testing.T) {
 		Return(nil, errors.New("es error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/products?tenant_id=tenant-1&q=widget", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/products?tenant_id=tenant-1&q=widget", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -216,7 +216,7 @@ func TestHandler_Autocomplete_Success(t *testing.T) {
 	mockService.On("Autocomplete", mock.Anything, mock.AnythingOfType("*models.AutocompleteRequest")).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/autocomplete?q=wid&tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/autocomplete?q=wid&tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -231,7 +231,7 @@ func TestHandler_Autocomplete_MissingQuery(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/autocomplete?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/autocomplete?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -242,7 +242,7 @@ func TestHandler_Autocomplete_MissingTenantID(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/autocomplete?q=wid", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/autocomplete?q=wid", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -256,7 +256,7 @@ func TestHandler_Autocomplete_ServiceError(t *testing.T) {
 		Return(nil, errors.New("es error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/search/autocomplete?q=wid&tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/search/autocomplete?q=wid&tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -283,7 +283,7 @@ func TestHandler_ReindexProduct_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -299,7 +299,7 @@ func TestHandler_ReindexProduct_Forbidden(t *testing.T) {
 	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -315,7 +315,7 @@ func TestHandler_ReindexProduct_NoRole(t *testing.T) {
 	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -329,7 +329,7 @@ func TestHandler_ReindexProduct_MissingID(t *testing.T) {
 	body := `{"name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -344,7 +344,7 @@ func TestHandler_ReindexProduct_MissingTenantID(t *testing.T) {
 	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -356,7 +356,7 @@ func TestHandler_ReindexProduct_InvalidJSON(t *testing.T) {
 	router := setupRouterWithAuth(mockService, "admin", "tenant-1")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString("not json"))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -374,7 +374,7 @@ func TestHandler_ReindexProduct_TenantMismatch(t *testing.T) {
 	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -391,7 +391,7 @@ func TestHandler_ReindexProduct_ServiceError(t *testing.T) {
 	body := `{"id": "product-1", "name": "Widget"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/search/reindex", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/search/reindex", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

@@ -61,11 +61,12 @@ func AuditMiddleware(auditService service.AuditService, logger *logrus.Logger) g
 		}
 
 		// Get user ID from context (set by auth middleware)
-		userID, _ := c.Get("user_id")
-		userIDStr := ""
-		if userID != nil {
-			userIDStr = userID.(string)
-		}
+		// Checked assertion: this is an audit hook that runs on every request,
+		// and a bare one panics the request if any other middleware ever puts
+		// a non-string under "user_id". An audit log with a blank user is a
+		// far better failure than a 500 on a request that otherwise succeeded.
+		userIDValue, _ := c.Get("user_id")
+		userIDStr, _ := userIDValue.(string)
 
 		// Capture error message if any
 		errorMessage := ""

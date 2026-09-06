@@ -1,6 +1,7 @@
 package models
 
 import (
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"time"
 )
 
@@ -28,29 +29,29 @@ const (
 type NotificationType string
 
 const (
-	TypeOrderConfirmation  NotificationType = "order_confirmation"
-	TypeOrderShipped       NotificationType = "order_shipped"
-	TypeOrderDelivered     NotificationType = "order_delivered"
-	TypeOrderCancelled     NotificationType = "order_cancelled"
-	TypePaymentConfirmed   NotificationType = "payment_confirmed"
-	TypePaymentFailed      NotificationType = "payment_failed"
-	TypeWelcome            NotificationType = "welcome"
-	TypeEmailVerification  NotificationType = "email_verification"
-	TypePasswordReset      NotificationType = "password_reset"
-	TypeReceipt            NotificationType = "receipt"
-	TypeStockAlert         NotificationType = "stock_alert"
-	TypePromotion          NotificationType = "promotion"
-	TypeCustom             NotificationType = "custom"
+	TypeOrderConfirmation NotificationType = "order_confirmation"
+	TypeOrderShipped      NotificationType = "order_shipped"
+	TypeOrderDelivered    NotificationType = "order_delivered"
+	TypeOrderCancelled    NotificationType = "order_cancelled"
+	TypePaymentConfirmed  NotificationType = "payment_confirmed"
+	TypePaymentFailed     NotificationType = "payment_failed"
+	TypeWelcome           NotificationType = "welcome"
+	TypeEmailVerification NotificationType = "email_verification"
+	TypePasswordReset     NotificationType = "password_reset"
+	TypeReceipt           NotificationType = "receipt"
+	TypeStockAlert        NotificationType = "stock_alert"
+	TypePromotion         NotificationType = "promotion"
+	TypeCustom            NotificationType = "custom"
 )
 
 // Notification represents a notification record
 type Notification struct {
-	ID          string             `bson:"_id,omitempty" json:"id"`
-	TenantID    string             `bson:"tenant_id" json:"tenant_id"`
-	UserID      string             `bson:"user_id" json:"user_id"`
-	Channel     Channel            `bson:"channel" json:"channel"`
-	Type        NotificationType   `bson:"type" json:"type"`
-	Status      NotificationStatus `bson:"status" json:"status"`
+	ID       string             `bson:"_id,omitempty" json:"id"`
+	TenantID string             `bson:"tenant_id" json:"tenant_id"`
+	UserID   string             `bson:"user_id" json:"user_id"`
+	Channel  Channel            `bson:"channel" json:"channel"`
+	Type     NotificationType   `bson:"type" json:"type"`
+	Status   NotificationStatus `bson:"status" json:"status"`
 
 	// Content
 	Subject string `bson:"subject" json:"subject"`
@@ -209,15 +210,18 @@ type UserPreferenceResponse struct {
 
 // EventEnvelope is the Kafka event wire format
 type EventEnvelope struct {
-	EventID       string                 `json:"event_id"`
-	EventType     string                 `json:"event_type"`
-	AggregateID   string                 `json:"aggregate_id,omitempty"`
-	AggregateType string                 `json:"aggregate_type,omitempty"`
-	Timestamp     time.Time              `json:"timestamp"`
-	Version       string                 `json:"version,omitempty"`
-	Payload       map[string]interface{} `json:"payload,omitempty"`
-	Data          map[string]interface{} `json:"data,omitempty"`
-	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	EventID       string    `json:"event_id"`
+	EventType     string    `json:"event_type"`
+	AggregateID   string    `json:"aggregate_id,omitempty"`
+	AggregateType string    `json:"aggregate_type,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+	// Version decodes from either a JSON number or a quoted one. order-service
+	// emits a number; this envelope was written expecting a string, which
+	// silently dropped every order event it published.
+	Version  sharedkafka.EventVersion `json:"version,omitempty"`
+	Payload  map[string]interface{}   `json:"payload,omitempty"`
+	Data     map[string]interface{}   `json:"data,omitempty"`
+	Metadata map[string]interface{}   `json:"metadata,omitempty"`
 }
 
 // GetPayload returns whichever field is populated (payload or data)

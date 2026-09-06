@@ -9,22 +9,22 @@ import (
 
 // User represents a user in the system
 type User struct {
-	ID           string    `gorm:"primaryKey" json:"id"`
-	TenantID     string    `gorm:"index;not null" json:"tenant_id"`
-	Email        string    `gorm:"uniqueIndex:idx_tenant_email;not null" json:"email"`
-	Username     string    `gorm:"uniqueIndex:idx_tenant_username" json:"username"`
-	PasswordHash string    `gorm:"not null" json:"-"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
-	Phone        string    `json:"phone,omitempty"`
-	Avatar       string    `json:"avatar,omitempty"`
-	Status       UserStatus `gorm:"default:'active'" json:"status"`
-	Role         UserRole  `gorm:"default:'customer'" json:"role"`
-	EmailVerified bool     `gorm:"default:false" json:"email_verified"`
-	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	DeletedAt    *time.Time `gorm:"index" json:"deleted_at,omitempty"`
+	ID            string     `gorm:"primaryKey" json:"id"`
+	TenantID      string     `gorm:"index;not null" json:"tenant_id"`
+	Email         string     `gorm:"uniqueIndex:idx_tenant_email;not null" json:"email"`
+	Username      string     `gorm:"uniqueIndex:idx_tenant_username" json:"username"`
+	PasswordHash  string     `gorm:"not null" json:"-"`
+	FirstName     string     `json:"first_name"`
+	LastName      string     `json:"last_name"`
+	Phone         string     `json:"phone,omitempty"`
+	Avatar        string     `json:"avatar,omitempty"`
+	Status        UserStatus `gorm:"default:'active'" json:"status"`
+	Role          UserRole   `gorm:"default:'customer'" json:"role"`
+	EmailVerified bool       `gorm:"default:false" json:"email_verified"`
+	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // UserStatus represents the status of a user
@@ -41,10 +41,10 @@ const (
 type UserRole string
 
 const (
-	UserRoleAdmin    UserRole = "admin"
+	UserRoleAdmin     UserRole = "admin"
 	UserRoleModerator UserRole = "moderator"
-	UserRoleCustomer UserRole = "customer"
-	UserRoleGuest    UserRole = "guest"
+	UserRoleCustomer  UserRole = "customer"
+	UserRoleGuest     UserRole = "guest"
 )
 
 // TableName specifies the table name for User
@@ -140,7 +140,11 @@ type ChangePasswordRequest struct {
 // IPAddress and UserAgent are populated by the HTTP handler for
 // anti-abuse rate limiting on the password-reset email pipeline.
 type ForgotPasswordRequest struct {
-	TenantID  string `json:"tenant_id" binding:"required,uuid"`
+	// Tenant ids are not UUIDs — the platform issues readable ones such as
+	// "tenant_saajan", which is what RegisterRequest and LoginRequest accept.
+	// A "uuid" constraint here rejected every real tenant with a 400, so
+	// password reset was unusable while login worked.
+	TenantID  string `json:"tenant_id" binding:"required"`
 	Email     string `json:"email" binding:"required,email"`
 	IPAddress string `json:"-"`
 	UserAgent string `json:"-"`
@@ -159,7 +163,9 @@ type VerifyEmailRequest struct {
 
 // ResendVerificationRequest represents a request to resend verification email
 type ResendVerificationRequest struct {
-	TenantID string `json:"tenant_id" binding:"required,uuid"`
+	// Same as ForgotPasswordRequest: a "uuid" constraint here rejected every
+	// real tenant id.
+	TenantID string `json:"tenant_id" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
 }
 

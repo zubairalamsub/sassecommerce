@@ -207,6 +207,18 @@ export default function CheckoutPage() {
         tenant_id: TENANT_ID,
         shipping_address: address,
         billing_address: address,
+        // Items go with the order in a single request. Adding them afterwards
+        // via POST /orders/:id/items needs auth, so a guest checkout used to
+        // create the order and then fail with "Unauthorized", leaving an
+        // empty order behind.
+        items: items.map((item) => ({
+          product_id: item.productId,
+          variant_id: item.variantId || '',
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+        })),
       };
 
       if (user) {
@@ -219,19 +231,6 @@ export default function CheckoutPage() {
 
       const order = await orderApi.create(orderReq, TENANT_ID, token || undefined);
       const orderId = order.order_id || order.id || '';
-
-      // Add items sequentially (event-sourced order uses optimistic concurrency,
-      // so parallel adds cause version conflicts)
-      for (const item of items) {
-        await orderApi.addItem(orderId, {
-          product_id: item.productId,
-          variant_id: item.variantId || '',
-          sku: item.sku,
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.price,
-        }, TENANT_ID, token || undefined);
-      }
 
       // Record payment (skip for COD — customer pays on delivery)
       if (paymentMethod !== 'cod' && user) {

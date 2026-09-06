@@ -140,6 +140,13 @@ func main() {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.Port),
 		Handler: router,
+		// Without ReadHeaderTimeout a client can hold a connection open by
+		// dribbling out header bytes indefinitely (Slowloris); the other
+		// timeouts bound the rest of the exchange.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Start server in a goroutine

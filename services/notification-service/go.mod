@@ -1,6 +1,6 @@
 module github.com/ecommerce/notification-service
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/ecommerce/shared/go v0.1.0

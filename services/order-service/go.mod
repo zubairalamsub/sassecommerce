@@ -1,6 +1,6 @@
 module github.com/yourusername/ecommerce/order-service
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2

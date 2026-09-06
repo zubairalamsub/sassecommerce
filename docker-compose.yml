@@ -333,6 +333,16 @@ services:
       BREVO_SMTP_PASSWORD: ${BREVO_SMTP_PASSWORD:-}
       MAILJET_SMTP_USER: ${MAILJET_SMTP_USER:-}
       MAILJET_SMTP_PASSWORD: ${MAILJET_SMTP_PASSWORD:-}
+      # Mailgun over SMTP ("mailgun") takes a per-domain postmaster@ login.
+      MAILGUN_SMTP_USER: ${MAILGUN_SMTP_USER:-}
+      MAILGUN_SMTP_PASSWORD: ${MAILGUN_SMTP_PASSWORD:-}
+      # Mailgun over its HTTP API ("mailgun_api") takes the account API key
+      # instead, and works where outbound port 587 is blocked. MAILGUN_DOMAIN
+      # defaults to the From address's domain; MAILGUN_API_HOST selects the
+      # region (api.eu.mailgun.net for EU accounts).
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
+      MAILGUN_API_HOST: ${MAILGUN_API_HOST:-}
       RESEND_SMTP_USER: ${RESEND_SMTP_USER:-}
       RESEND_SMTP_PASSWORD: ${RESEND_SMTP_PASSWORD:-}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3002}

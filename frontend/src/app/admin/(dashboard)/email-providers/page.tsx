@@ -50,10 +50,16 @@ const PRESET_HINTS: Record<string, { label: string; userLabel: string; secretLab
   elasticemail: { label: 'Elastic Email', userLabel: 'Username', secretLabel: 'API key' },
   zeptomail: { label: 'ZeptoMail', userLabel: 'SMTP username', secretLabel: 'SMTP password' },
   mailgun: {
-    label: 'Mailgun',
+    label: 'Mailgun (SMTP)',
     userLabel: 'SMTP login (postmaster@mg.yourdomain.com)',
     secretLabel: 'SMTP password',
-    note: 'Mailgun\'s SMTP credentials are NOT your API key — find them under Sending → Domains → your domain → SMTP credentials. If your account is in the EU region, override the Host with smtp.eu.mailgun.org. A sandbox domain only delivers to recipients you have added as Authorized Recipients.',
+    note: 'Mailgun\'s SMTP credentials are NOT your API key — find them under Sending → Domains → your domain → SMTP credentials. If your account is in the EU region, override the Host with smtp.eu.mailgun.org. A sandbox domain only delivers to recipients you have added as Authorized Recipients. To use your API key instead, choose "Mailgun (API)".',
+  },
+  mailgun_api: {
+    label: 'Mailgun (API)',
+    userLabel: 'Sending domain (optional)',
+    secretLabel: 'API key',
+    note: 'Uses Mailgun\'s HTTP API with your private API key from Settings → API Keys — no SMTP credentials, and it works where outbound port 587 is blocked. The sending domain defaults to the domain of the From address, which is what Mailgun requires it to match; set it explicitly only if they differ. EU accounts: set Host to api.eu.mailgun.net.',
   },
   postmark: { label: 'Postmark', userLabel: 'Server token', secretLabel: 'Server token' },
   ses: { label: 'Amazon SES', userLabel: 'SMTP username', secretLabel: 'SMTP password', note: 'SES is region-scoped — set the Host to your region\'s endpoint, e.g. email-smtp.ap-southeast-1.amazonaws.com' },
@@ -69,6 +75,12 @@ function providerLabel(key: string): string {
 /** Providers that need neither username nor host. */
 function isCredentialOnly(provider: string): boolean {
   return provider === 'sendgrid';
+}
+
+/** Providers that talk HTTP rather than SMTP: no port, and Host selects the
+ *  API region instead of a relay. */
+function isHTTPProvider(provider: string): boolean {
+  return provider === 'mailgun_api';
 }
 
 function needsNothing(provider: string): boolean {
@@ -407,20 +419,30 @@ export default function EmailProvidersPage() {
                       {!isCredentialOnly(cfg.provider) && (
                         <>
                           <Field
-                            label="Host"
+                            label={isHTTPProvider(cfg.provider) ? 'API host (region)' : 'Host'}
                             value={draft.host}
-                            placeholder={cfg.provider === 'smtp' ? 'required' : 'preset default'}
+                            placeholder={
+                              cfg.provider === 'smtp'
+                                ? 'required'
+                                : isHTTPProvider(cfg.provider)
+                                  ? 'api.mailgun.net'
+                                  : 'preset default'
+                            }
                             onChange={(v) => patchDraft(cfg.provider, { host: v })}
                           />
-                          <Field
-                            label="Port"
-                            value={draft.port}
-                            placeholder="587"
-                            onChange={(v) => patchDraft(cfg.provider, { port: v })}
-                          />
+                          {/* An HTTP API has no port to configure. */}
+                          {!isHTTPProvider(cfg.provider) && (
+                            <Field
+                              label="Port"
+                              value={draft.port}
+                              placeholder="587"
+                              onChange={(v) => patchDraft(cfg.provider, { port: v })}
+                            />
+                          )}
                           <Field
                             label={hint?.userLabel || 'Username'}
                             value={draft.username}
+                            placeholder={isHTTPProvider(cfg.provider) ? 'defaults to the From address domain' : ''}
                             onChange={(v) => patchDraft(cfg.provider, { username: v })}
                           />
                         </>

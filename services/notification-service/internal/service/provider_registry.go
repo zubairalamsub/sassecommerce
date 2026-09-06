@@ -34,9 +34,15 @@ var smtpPresets = map[string]smtpPreset{
 	"ses": {host: "", port: 587},
 }
 
+// MailgunAPIProviderKey is the provider key for Mailgun's HTTP API. It is
+// separate from the SMTP "mailgun" entry because the two take different
+// credentials — the API key here, a per-domain postmaster@ login there — and
+// collapsing them would silently break whichever was configured first.
+const MailgunAPIProviderKey = "mailgun_api"
+
 // EmailProviderNames lists every provider key BuildEmailChain accepts.
 func EmailProviderNames() []string {
-	names := []string{"sendgrid", "smtp", "simulated"}
+	names := []string{"sendgrid", "smtp", "simulated", MailgunAPIProviderKey}
 	for name := range smtpPresets {
 		names = append(names, name)
 	}
@@ -91,6 +97,22 @@ func buildEmailProvider(name string, env func(string) string, logger *logrus.Log
 			APIKey:    key,
 			FromEmail: firstNonEmpty(env("SENDGRID_FROM_EMAIL"), env("EMAIL_FROM_ADDRESS"), "noreply@saajan.com"),
 			FromName:  firstNonEmpty(env("SENDGRID_FROM_NAME"), env("EMAIL_FROM_NAME"), "Saajan Store"),
+		}, logger), nil
+
+	case MailgunAPIProviderKey:
+		key := env("MAILGUN_API_KEY")
+		if key == "" {
+			return nil, fmt.Errorf("MAILGUN_API_KEY is not set")
+		}
+		from := firstNonEmpty(env("MAILGUN_FROM_ADDRESS"), env("EMAIL_FROM_ADDRESS"), "noreply@saajan.com")
+		return NewMailgunAPIProvider(MailgunConfig{
+			APIKey: key,
+			// Falls back to the from address's domain, which is what Mailgun
+			// requires the posting domain to match anyway.
+			Domain:    firstNonEmpty(env("MAILGUN_DOMAIN"), domainFromAddress(from)),
+			APIHost:   env("MAILGUN_API_HOST"),
+			FromEmail: from,
+			FromName:  firstNonEmpty(env("MAILGUN_FROM_NAME"), env("EMAIL_FROM_NAME"), "Saajan Store"),
 		}, logger), nil
 
 	default:
@@ -194,6 +216,26 @@ func BuildProviderFromConfig(cfg *models.EmailProviderConfig, secret string, log
 		return NewSendGridEmailProvider(SendGridConfig{
 			APIKey:    secret,
 			FromEmail: firstNonEmpty(cfg.FromEmail, "noreply@saajan.com"),
+			FromName:  firstNonEmpty(cfg.FromName, "Saajan Store"),
+		}, logger), nil
+
+	case MailgunAPIProviderKey:
+		if secret == "" {
+			return nil, fmt.Errorf("mailgun api requires an API key")
+		}
+		from := firstNonEmpty(cfg.FromEmail, "noreply@saajan.com")
+		// Username doubles as an explicit sending domain here; leaving it
+		// blank derives the domain from the from address. Host selects the
+		// region (api.eu.mailgun.net for EU accounts).
+		domain := firstNonEmpty(cfg.Username, domainFromAddress(from))
+		if domain == "" {
+			return nil, fmt.Errorf("mailgun api needs a sending domain, or a from address to derive it from")
+		}
+		return NewMailgunAPIProvider(MailgunConfig{
+			APIKey:    secret,
+			Domain:    domain,
+			APIHost:   cfg.Host,
+			FromEmail: from,
 			FromName:  firstNonEmpty(cfg.FromName, "Saajan Store"),
 		}, logger), nil
 	}

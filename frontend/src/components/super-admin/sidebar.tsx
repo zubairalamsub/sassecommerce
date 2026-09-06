@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
+  Send,
   LayoutDashboard,
   Building2,
   CreditCard,
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/super-admin/plans', label: 'Plans & Billing', icon: CreditCard },
   { href: '/super-admin/users', label: 'Users & Roles', icon: Users },
   { href: '/super-admin/integrations', label: 'Integrations', icon: Plug },
+  { href: '/admin/email-providers', label: 'Email providers', icon: Send },
   { href: '/super-admin/content', label: 'Content & Branding', icon: FileText },
   { href: '/super-admin/system', label: 'System', icon: Server },
   { href: '/super-admin/settings', label: 'Settings', icon: Settings },

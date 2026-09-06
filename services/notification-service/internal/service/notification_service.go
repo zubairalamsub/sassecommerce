@@ -20,10 +20,21 @@ type NotificationService interface {
 	UpdatePreference(ctx context.Context, tenantID, userID string, req *models.UpdatePreferenceRequest) (*models.UserPreferenceResponse, error)
 }
 
+// EmailChainResolver supplies the email provider chain for a tenant at send
+// time. It is an interface so notificationService does not depend on the
+// concrete resolver, and so tests can substitute a fixed chain.
+type EmailChainResolver interface {
+	Resolve(ctx context.Context, tenantID string) NotificationProvider
+}
+
 type notificationService struct {
 	repo      repository.NotificationRepository
 	providers map[models.Channel]NotificationProvider
 	logger    *logrus.Logger
+	// emailResolver, when set, takes precedence over providers[ChannelEmail]
+	// so a tenant's own configuration beats the startup one. Nil keeps the
+	// original startup-only behaviour.
+	emailResolver EmailChainResolver
 }
 
 func NewNotificationService(repo repository.NotificationRepository, providers map[models.Channel]NotificationProvider, logger *logrus.Logger) NotificationService {
@@ -32,6 +43,24 @@ func NewNotificationService(repo repository.NotificationRepository, providers ma
 		providers: providers,
 		logger:    logger,
 	}
+}
+
+// SetEmailResolver enables per-tenant email provider resolution.
+func (s *notificationService) SetEmailResolver(r EmailChainResolver) {
+	s.emailResolver = r
+}
+
+// providerFor picks the provider for a channel. Email is resolved per tenant
+// when a resolver is configured, falling back to the startup provider so a
+// tenant with no configuration still gets mail.
+func (s *notificationService) providerFor(ctx context.Context, channel models.Channel, tenantID string) (NotificationProvider, bool) {
+	if channel == models.ChannelEmail && s.emailResolver != nil {
+		if resolved := s.emailResolver.Resolve(ctx, tenantID); resolved != nil {
+			return resolved, true
+		}
+	}
+	provider, ok := s.providers[channel]
+	return provider, ok
 }
 
 func (s *notificationService) SendNotification(ctx context.Context, req *models.SendNotificationRequest) (*models.NotificationResponse, error) {
@@ -63,8 +92,8 @@ func (s *notificationService) SendNotification(ctx context.Context, req *models.
 		Metadata:      req.Metadata,
 	}
 
-	// Get provider for channel
-	provider, ok := s.providers[channel]
+	// Get provider for channel — email resolves per tenant.
+	provider, ok := s.providerFor(ctx, channel, req.TenantID)
 	if !ok {
 		notification.Status = models.StatusFailed
 		notification.FailureReason = fmt.Sprintf("no provider configured for channel: %s", channel)

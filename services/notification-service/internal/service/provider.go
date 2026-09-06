@@ -149,3 +149,6 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// Name reports this provider's label for failover logging and results.
+func (p *SimulatedEmailProvider) Name() string { return "simulated" }

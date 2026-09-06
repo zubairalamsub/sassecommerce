@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
+  Send,
   LayoutDashboard,
   Package,
   FolderTree,
@@ -33,6 +34,7 @@ const navItems = [
   { href: '/admin/inventory', label: 'Inventory', icon: Warehouse },
   { href: '/admin/promotions', label: 'Promotions', icon: BadgePercent },
   { href: '/admin/email-templates', label: 'Email templates', icon: Mail },
+  { href: '/admin/email-providers', label: 'Email providers', icon: Send },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/vendors', label: 'Vendors', icon: Store },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },

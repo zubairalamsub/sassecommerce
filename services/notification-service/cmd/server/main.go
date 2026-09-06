@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -63,7 +64,24 @@ func main() {
 	// configured, falling back to simulated providers for development.
 	providers := make(map[models.Channel]service.NotificationProvider)
 
-	if sgKey := os.Getenv("SENDGRID_API_KEY"); sgKey != "" {
+	// EMAIL_PROVIDERS is an ordered, comma-separated chain — the first entry
+	// carries normal traffic and the rest are fallbacks, tried in order when a
+	// send fails. Example: EMAIL_PROVIDERS=brevo,sendgrid,simulated.
+	// Any vendor speaking SMTP works; see service.EmailProviderNames().
+	if spec := os.Getenv("EMAIL_PROVIDERS"); spec != "" {
+		chain, names := service.BuildEmailChain(spec, os.Getenv, log)
+		if chain != nil {
+			providers[models.ChannelEmail] = chain
+			log.Infof("Email providers: %s", strings.Join(names, " -> "))
+		} else {
+			// Every provider named in the spec was missing its credentials.
+			// Falling back keeps the service usable instead of dropping mail
+			// on the floor, but it is a misconfiguration worth shouting about.
+			providers[models.ChannelEmail] = service.NewSimulatedEmailProvider(log)
+			log.Warnf("EMAIL_PROVIDERS=%q but none were configured; falling back to Simulated", spec)
+		}
+	} else if sgKey := os.Getenv("SENDGRID_API_KEY"); sgKey != "" {
+		// Back-compatible single-provider path.
 		providers[models.ChannelEmail] = service.NewSendGridEmailProvider(service.SendGridConfig{
 			APIKey:    sgKey,
 			FromEmail: getEnv("SENDGRID_FROM_EMAIL", "noreply@saajan.com"),
@@ -72,7 +90,7 @@ func main() {
 		log.Info("Email provider: SendGrid")
 	} else {
 		providers[models.ChannelEmail] = service.NewSimulatedEmailProvider(log)
-		log.Info("Email provider: Simulated (set SENDGRID_API_KEY to enable SendGrid)")
+		log.Info("Email provider: Simulated (set EMAIL_PROVIDERS or SENDGRID_API_KEY to send real mail)")
 	}
 
 	if twilioSID := os.Getenv("TWILIO_ACCOUNT_SID"); twilioSID != "" {
@@ -98,8 +116,31 @@ func main() {
 		log.Info("Push provider: Simulated (set FCM_SERVER_KEY to enable FCM)")
 	}
 
+	// Per-tenant / platform provider configuration, stored encrypted in Mongo
+	// and editable through the admin UI. Credentials are sealed with
+	// EMAIL_ENCRYPTION_KEY (16, 24 or 32 bytes); without it they are only
+	// base64-encoded, which is fine locally and not fine in production.
+	providerRepo, err := repository.NewEmailProviderRepository(db, []byte(os.Getenv("EMAIL_ENCRYPTION_KEY")))
+	if err != nil {
+		log.Fatalf("Failed to initialise email provider repository: %v", err)
+	}
+	if !providerRepo.UsingEncryption() {
+		log.Warn("EMAIL_ENCRYPTION_KEY is not set — provider credentials are base64-encoded, NOT encrypted. Set it before production.")
+	}
+
+	// The resolver decides which chain a tenant's mail takes: the tenant's own
+	// providers, else the platform default, else the EMAIL_PROVIDERS chain
+	// built above. That last fallback means a database problem degrades
+	// delivery rather than stopping it.
+	emailResolver := service.NewEmailProviderResolver(providerRepo, providers[models.ChannelEmail], log)
+
 	// Initialize service
 	notifService := service.NewNotificationService(notifRepo, providers, log)
+	if configurable, ok := notifService.(interface {
+		SetEmailResolver(service.EmailChainResolver)
+	}); ok {
+		configurable.SetEmailResolver(emailResolver)
+	}
 	tmplService := service.NewTemplateService(notifRepo, providers, log)
 
 	// Initialize Kafka consumer — templates are looked up via the repository
@@ -113,6 +154,7 @@ func main() {
 	// Initialize handler
 	handler := api.NewNotificationHandler(notifService, log)
 	tmplHandler := api.NewTemplateHandler(tmplService, log)
+	providerHandler := api.NewEmailProviderHandler(providerRepo, emailResolver, log)
 
 	// Setup Gin router
 	if cfg.Server.Env == "production" {
@@ -158,6 +200,7 @@ func main() {
 	// Register API routes
 	api.RegisterRoutes(router, handler)
 	api.RegisterTemplateRoutes(router, tmplHandler)
+	api.RegisterEmailProviderRoutes(router, providerHandler)
 
 	// Create HTTP server
 	srv := &http.Server{

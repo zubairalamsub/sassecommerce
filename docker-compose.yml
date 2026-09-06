@@ -308,6 +308,44 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — 32+ random bytes (see .env.example)}
       KAFKA_BROKER: kafka:29092
       KAFKA_GROUP_ID: notification-service
+      # Ordered email provider chain: the first entry carries traffic, the rest
+      # are fallbacks tried in order when a send fails. Any SMTP vendor works
+      # (brevo, mailjet, resend, smtp2go, elasticemail, zeptomail, mailgun,
+      # postmark, ses) plus sendgrid and simulated. Each needs credentials —
+      # e.g. BREVO_SMTP_USER / BREVO_SMTP_PASSWORD — and a provider whose
+      # credentials are missing is skipped with a warning at startup.
+      # Keeping "simulated" last means a total outage logs instead of erroring,
+      # which is right for development and wrong for production.
+      # Seals provider credentials stored via the admin UI (AES-GCM). Must be
+      # 16, 24 or 32 bytes. Unset means secrets are only base64-encoded, which
+      # the service warns about loudly at startup. Rotating this key makes
+      # existing stored secrets undecryptable — they must be re-entered.
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:-}
+      EMAIL_PROVIDERS: ${EMAIL_PROVIDERS:-simulated}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@saajan.test}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Saajan Store}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      BREVO_SMTP_USER: ${BREVO_SMTP_USER:-}
+      BREVO_SMTP_PASSWORD: ${BREVO_SMTP_PASSWORD:-}
+      MAILJET_SMTP_USER: ${MAILJET_SMTP_USER:-}
+      MAILJET_SMTP_PASSWORD: ${MAILJET_SMTP_PASSWORD:-}
+      # Mailgun over SMTP ("mailgun") takes a per-domain postmaster@ login.
+      MAILGUN_SMTP_USER: ${MAILGUN_SMTP_USER:-}
+      MAILGUN_SMTP_PASSWORD: ${MAILGUN_SMTP_PASSWORD:-}
+      # Mailgun over its HTTP API ("mailgun_api") takes the account API key
+      # instead, and works where outbound port 587 is blocked. MAILGUN_DOMAIN
+      # defaults to the From address's domain; MAILGUN_API_HOST selects the
+      # region (api.eu.mailgun.net for EU accounts).
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
+      MAILGUN_API_HOST: ${MAILGUN_API_HOST:-}
+      RESEND_SMTP_USER: ${RESEND_SMTP_USER:-}
+      RESEND_SMTP_PASSWORD: ${RESEND_SMTP_PASSWORD:-}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3002}
     depends_on:
       mongodb:
         condition: service_healthy

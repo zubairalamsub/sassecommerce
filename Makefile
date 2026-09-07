@@ -1,4 +1,4 @@
-.PHONY: help up up-monitoring down build logs clean test lint lint-fix lint-install vet
+.PHONY: help up up-monitoring down build logs clean test lint lint-fix lint-install vet grafana-lookup-setup grafana-open
 
 # Enable BuildKit + parallel image builds for every docker/compose invocation.
 export DOCKER_BUILDKIT := 1
@@ -46,6 +46,10 @@ help:
 	@echo "  make test-tenant-badges    - Generate test coverage badges"
 	@echo "  make view-tenant-report    - View HTML test report in browser"
 	@echo "  make view-tenant-coverage  - View coverage report in browser"
+	@echo ""
+	@echo "Observability:"
+	@echo "  make grafana-lookup-setup - Create the grafana_ro role + support views (run once)"
+	@echo "  make grafana-open         - Open Grafana (Support Lookup dashboard)"
 	@echo ""
 	@echo "Code quality (all 15 Go modules):"
 	@echo "  make lint             - Run golangci-lint across every Go module"
@@ -282,3 +286,38 @@ vet:
 		fi; \
 	done; \
 	exit $$fail
+
+# ---------------------------------------------------------------------------
+# Observability
+# ---------------------------------------------------------------------------
+
+# Creates the read-only grafana_ro role and the support_* views the Support
+# Lookup dashboard reads.
+#
+# Not a docker-entrypoint-initdb.d script, deliberately: the tables it grants
+# on are created by the services at startup, long after Postgres finishes
+# initialising, so granting at init time would fail on tables that do not exist
+# yet. Idempotent -- re-run it after a schema change.
+grafana-lookup-setup:
+	@set -e; \
+	PW="$${GRAFANA_DB_READONLY_PASSWORD:-$$(grep -E '^GRAFANA_DB_READONLY_PASSWORD=' .env 2>/dev/null | cut -d= -f2-)}"; \
+	if [ -z "$$PW" ]; then \
+		echo "GRAFANA_DB_READONLY_PASSWORD is not set."; \
+		echo "Add it to .env (see .env.example), then run this again."; \
+		exit 1; \
+	fi; \
+	echo "Creating grafana_ro and the support_* views..."; \
+	docker-compose exec -T postgres psql -U postgres -q \
+		-v grafana_ro_password="$$PW" \
+		-f - < infrastructure/monitoring/postgres/grafana-lookup.sql; \
+	echo ""; \
+	echo "Done. Grafana reads the password from its own environment, so if it"; \
+	echo "was already running when you set it:  docker-compose restart grafana"
+
+grafana-open:
+	@echo "Grafana:        http://localhost:3001"
+	@echo "Support Lookup: http://localhost:3001/d/support-lookup"
+	@open http://localhost:3001/d/support-lookup 2>/dev/null \
+		|| xdg-open http://localhost:3001/d/support-lookup 2>/dev/null \
+		|| powershell -NoProfile -Command "Start-Process 'http://localhost:3001/d/support-lookup'" 2>/dev/null \
+		|| true

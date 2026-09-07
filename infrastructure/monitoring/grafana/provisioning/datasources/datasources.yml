@@ -2,6 +2,7 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
@@ -9,7 +10,55 @@ datasources:
     editable: false
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100
+    editable: false
+
+  # ---------------------------------------------------------------------------
+  # Support lookup: read the order and user read models directly.
+  #
+  # Metrics cannot answer "which tenant does this order belong to". Putting an
+  # order id or a phone number in a Prometheus label would blow the series
+  # cardinality up, and Loki only knows what happened to be logged. The read
+  # models are the authoritative answer, so Grafana queries them.
+  #
+  # Both connect as grafana_ro, which can only SELECT from the three
+  # support_* views (see infrastructure/monitoring/postgres/grafana-lookup.sql).
+  # The views name their columns explicitly, so users.password_hash is not
+  # reachable from Grafana even by accident.
+  #
+  # Two datasources rather than one, because these are separate Postgres
+  # databases in the same instance and Postgres cannot join across them. The
+  # lookup dashboard queries each and shows whichever matched.
+  # ---------------------------------------------------------------------------
+  - name: Orders DB (read-only)
+    uid: orders-ro
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: order_db
+    user: grafana_ro
+    secureJsonData:
+      password: ${GRAFANA_DB_READONLY_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    editable: false
+
+  - name: Users DB (read-only)
+    uid: users-ro
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: user_db
+    user: grafana_ro
+    secureJsonData:
+      password: ${GRAFANA_DB_READONLY_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
     editable: false

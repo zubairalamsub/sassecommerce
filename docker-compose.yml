@@ -634,6 +634,11 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env (see .env.example)}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Expanded inside provisioning/datasources/datasources.yml by
+      # Grafana itself. Empty is fine until `make grafana-lookup-setup`
+      # has been run -- the two Postgres datasources simply fail to
+      # connect, and the rest of the stack is unaffected.
+      GRAFANA_DB_READONLY_PASSWORD: ${GRAFANA_DB_READONLY_PASSWORD:-}
     ports:
       - "3001:3000"
     volumes:

@@ -170,3 +170,69 @@ func TestExposedMetricNames(t *testing.T) {
 		}
 	}
 }
+
+// Register() must bring the event metrics up with it. Without this, a healthy
+// consumer exposes no kafka_events_* families until the first event happens to
+// arrive — which reads exactly like a service nobody instrumented, and leaves
+// the alert rules with no series to evaluate.
+func TestRegisterAlsoRegistersEventMetrics(t *testing.T) {
+	Register("test-service")
+
+	for _, name := range []string{
+		"kafka_events_consumed_total",
+		"kafka_events_failed_total",
+		"kafka_events_published_total",
+	} {
+		if !metricExists(t, name) {
+			t.Errorf("%s is not exposed after Register(); a healthy service would look uninstrumented", name)
+		}
+	}
+}
+
+// InitTopic has to create the series, not merely register the collectors. A
+// CounterVec emits nothing at all until a label combination is touched, so
+// without this a healthy consumer is indistinguishable from an uninstrumented
+// one, and the staleness gauge an alert reads would not exist.
+func TestInitTopicCreatesZeroSeries(t *testing.T) {
+	InitTopic("test-service", "fresh-topic")
+
+	for _, reason := range []string{ReasonDecodeError, ReasonSignatureInvalid, ReasonHandlerError} {
+		lbl := map[string]string{"topic": "fresh-topic", "event_type": "unknown", "reason": reason}
+		if !seriesPresent(t, "kafka_events_failed_total", lbl) {
+			t.Errorf("no zero-valued drop series for reason=%s; the panel would read \"No data\"", reason)
+		}
+	}
+	if counterValue(t, "kafka_event_last_processed_timestamp_seconds", map[string]string{"topic": "fresh-topic"}) == 0 {
+		t.Error("staleness gauge not seeded; a consumer that processes nothing would have no series to alert on")
+	}
+}
+
+func seriesPresent(t *testing.T, name string, want map[string]string) bool {
+	t.Helper()
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != name {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			labels := map[string]string{}
+			for _, lp := range m.GetLabel() {
+				labels[lp.GetName()] = lp.GetValue()
+			}
+			ok := true
+			for k, v := range want {
+				if labels[k] != v {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				return true
+			}
+		}
+	}
+	return false
+}

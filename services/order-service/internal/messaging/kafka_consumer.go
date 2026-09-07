@@ -52,6 +52,10 @@ func NewKafkaEventConsumer(
 		Logger:         kafka.LoggerFunc(func(msg string, args ...interface{}) {}), // Suppress kafka logs
 	})
 
+	// Pre-create the zero-valued series for this topic, so a consumer that has
+	// never dropped anything reads as 0 rather than as no data at all.
+	metrics.InitTopic(metricsService, topic)
+
 	return &KafkaEventConsumer{
 		reader:     reader,
 		topic:      topic,

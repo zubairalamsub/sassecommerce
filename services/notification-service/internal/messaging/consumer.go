@@ -51,6 +51,10 @@ var consumedTopics = []string{
 func NewEventConsumer(brokers []string, groupID string, svc service.NotificationService, repo repository.NotificationRepository, frontendBaseURL string, logger *logrus.Logger) *EventConsumer {
 	var readers []*kafka.Reader
 	for _, topic := range consumedTopics {
+		// Pre-create the zero-valued series for this topic. Without it a
+		// consumer that has never dropped anything emits nothing at all, and a
+		// healthy topic is indistinguishable from an uninstrumented one.
+		metrics.InitTopic(metricsService, topic)
 		reader := kafka.NewReader(kafka.ReaderConfig{
 			Brokers:        brokers,
 			Topic:          topic,

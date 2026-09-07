@@ -27,6 +27,14 @@ import (
 // Cardinality is bounded by design. `topic` and `event_type` are both closed
 // sets fixed in code, and `reason` is the constants below — no ids, no tenant,
 // nothing user-supplied.
+//
+// `service` is a ConstLabel here, matching the HTTP metrics in this package.
+// prometheus.yml also attaches `service` as a target label on every scrape
+// job, and with honor_labels unset Prometheus renames the exposed copy to
+// `exported_service` on collision. The values are identical, so this is
+// redundancy rather than a conflict, and queries should group by the target
+// label. Kept for consistency with the rest of the package — dropping it
+// would mean changing the HTTP metrics too.
 
 // Reasons an event was read but not acted on. Use these rather than free
 // strings; the label is only bounded because the set is.
@@ -172,4 +180,39 @@ func orUnknown(eventType string) string {
 		return "unknown"
 	}
 	return eventType
+}
+
+// InitTopic pre-creates the zero-valued drop series for a topic, so a consumer
+// that has never dropped anything reports 0 rather than nothing at all.
+//
+// This matters because a CounterVec emits no output whatsoever until one of
+// its label combinations has been touched — not even a HELP line. Without
+// this, a dashboard cannot tell a healthy consumer from one that was never
+// instrumented: both render as "No data".
+//
+// Call it once per topic at consumer construction. Only the drop counters are
+// seeded; kafka_events_consumed_total appears on its own the moment real
+// traffic arrives, and a zero there would be indistinguishable from a topic
+// nobody publishes to.
+func InitTopic(service, topic string) {
+	RegisterEvents(service)
+	for _, reason := range []string{
+		ReasonDecodeError,
+		ReasonSignatureInvalid,
+		ReasonUnknownEventType,
+		ReasonMissingField,
+		ReasonHandlerError,
+	} {
+		eventsFailedTotal.WithLabelValues(topic, "unknown", reason).Add(0)
+	}
+
+	// Seed the staleness gauge with the subscribe time.
+	//
+	// A GaugeVec child does not exist until something Sets it, so without
+	// this a consumer that comes up and then processes nothing at all leaves
+	// the series absent — and an alert shaped like
+	// `time() - kafka_event_last_processed_timestamp_seconds > N` cannot fire
+	// on a series that is not there. The silent case would be the one it
+	// missed. Seeding at subscribe starts the clock immediately.
+	eventLastProcessedTS.WithLabelValues(topic).Set(float64(time.Now().Unix()))
 }

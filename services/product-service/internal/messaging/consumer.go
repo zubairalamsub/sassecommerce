@@ -53,6 +53,10 @@ type EventConsumer struct {
 
 // NewEventConsumer creates a new Kafka event consumer for inventory events
 func NewEventConsumer(brokers []string, groupID string, productRepo repository.ProductRepository, logger *logrus.Logger) *EventConsumer {
+	// Pre-create the zero-valued series for this topic, so a consumer that
+	// has never dropped anything reads as 0 rather than as no data.
+	metrics.InitTopic(metricsService, "inventory-events")
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
 		Topic:   "inventory-events",

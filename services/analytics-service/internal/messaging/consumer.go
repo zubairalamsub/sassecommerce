@@ -32,6 +32,10 @@ func NewEventConsumer(brokers []string, groupID string, analyticsService service
 	readers := make([]*kafka.Reader, len(topics))
 
 	for i, topic := range topics {
+		// Pre-create the zero-valued series for this topic. Without it a
+		// consumer that has never dropped anything emits nothing at all, and a
+		// healthy topic is indistinguishable from an uninstrumented one.
+		metrics.InitTopic(metricsService, topic)
 		readers[i] = kafka.NewReader(kafka.ReaderConfig{
 			Brokers: brokers,
 			Topic:   topic,

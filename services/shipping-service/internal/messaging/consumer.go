@@ -69,6 +69,10 @@ func NewEventConsumer(cfg EventConsumerConfig, svc service.ShippingService, logg
 		defaultFromAddr: cfg.DefaultFromAddress,
 	}
 	for _, topic := range shippingTopics {
+		// Pre-create the zero-valued series for this topic. Without it a
+		// consumer that has never dropped anything emits nothing at all, and a
+		// healthy topic is indistinguishable from an uninstrumented one.
+		metrics.InitTopic(metricsService, topic)
 		c.readers = append(c.readers, kafka.NewReader(kafka.ReaderConfig{
 			Brokers:        cfg.Brokers,
 			Topic:          topic,

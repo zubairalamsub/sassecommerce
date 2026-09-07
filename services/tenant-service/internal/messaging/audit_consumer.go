@@ -99,6 +99,10 @@ var auditTopics = []string{
 func NewAuditEventConsumer(brokers []string, auditService service.AuditService, logger *logrus.Logger) *AuditEventConsumer {
 	var readers []*kafka.Reader
 	for _, topic := range auditTopics {
+		// Pre-create the zero-valued series for this topic. Without it a
+		// consumer that has never dropped anything emits nothing at all, and a
+		// healthy topic is indistinguishable from an uninstrumented one.
+		metrics.InitTopic(metricsService, topic)
 		r := kafka.NewReader(kafka.ReaderConfig{
 			Brokers:  brokers,
 			Topic:    topic,

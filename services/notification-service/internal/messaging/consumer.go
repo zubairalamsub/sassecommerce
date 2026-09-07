@@ -17,9 +17,14 @@ import (
 	"github.com/ecommerce/notification-service/internal/service"
 	"github.com/ecommerce/notification-service/internal/templates"
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "notification-service"
 
 // eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
 var eventSigner = sharedkafka.NewEventSignerFromEnv()
@@ -110,6 +115,7 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 			// Reject events that fail HMAC verification (spoofed/tampered);
 			// still committed below so the poison message is not redelivered.
 			if err := eventSigner.Verify(msg); err != nil {
+				metrics.EventDropped(metricsService, topic, "", metrics.ReasonSignatureInvalid)
 				c.logger.WithError(err).WithFields(logrus.Fields{
 					"topic":  topic,
 					"offset": msg.Offset,
@@ -129,8 +135,14 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 }
 
 func (c *EventConsumer) processMessage(ctx context.Context, msg kafka.Message) error {
+	start := time.Now()
+
 	var envelope models.EventEnvelope
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
+		// This is the exact drop that stopped order confirmation, shipped,
+		// cancelled, payment and receipt emails for weeks. The offset is
+		// committed either way, so lag never moved and nothing alerted.
+		metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonDecodeError)
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
 
@@ -139,7 +151,12 @@ func (c *EventConsumer) processMessage(ctx context.Context, msg kafka.Message) e
 		"event_id":   envelope.EventID,
 	}).Debug("Processing event")
 
-	return c.handleEvent(ctx, &envelope)
+	if err := c.handleEvent(ctx, &envelope); err != nil {
+		metrics.EventDropped(metricsService, msg.Topic, envelope.EventType, metrics.ReasonHandlerError)
+		return err
+	}
+	metrics.EventConsumed(metricsService, msg.Topic, envelope.EventType, time.Since(start))
+	return nil
 }
 
 func (c *EventConsumer) handleEvent(ctx context.Context, envelope *models.EventEnvelope) error {

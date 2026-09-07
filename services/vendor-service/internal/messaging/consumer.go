@@ -3,13 +3,20 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/ecommerce/vendor-service/internal/models"
 	"github.com/ecommerce/vendor-service/internal/service"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics. Kept as a constant
+// rather than plumbed in, so the label can never drift between the
+// consumer and the dashboard queries that group by it.
+const metricsService = "vendor-service"
 
 // eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
 var eventSigner = sharedkafka.NewEventSignerFromEnv()
@@ -67,6 +74,9 @@ func (c *EventConsumer) consume(ctx context.Context, reader *kafka.Reader) {
 
 		// Reject events that fail HMAC verification (spoofed/tampered)
 		if err := eventSigner.Verify(msg); err != nil {
+			// Counted, not just logged: the offset is committed either way, so
+			// a stream of forged or mis-signed messages is invisible to lag.
+			metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonSignatureInvalid)
 			c.logger.WithError(err).WithField("topic", msg.Topic).Warn("Dropping Kafka message that failed signature verification")
 			continue
 		}
@@ -76,11 +86,25 @@ func (c *EventConsumer) consume(ctx context.Context, reader *kafka.Reader) {
 }
 
 func (c *EventConsumer) handleMessage(ctx context.Context, msg kafka.Message) {
+	start := time.Now()
+
 	var envelope models.EventEnvelope
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
+		// Counted, not just logged. The offset is committed regardless of this
+		// failure, so an envelope that will not decode is lost outright while
+		// consumer lag still reads zero — which is exactly how every order
+		// event went missing for weeks.
+		metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonDecodeError)
 		c.logger.WithError(err).Error("Failed to unmarshal event envelope")
 		return
 	}
+
+	// Past the decode, so the event was received and dispatched. These
+	// handlers report their own failures by logging, not by returning, so
+	// "consumed" here means delivered to a handler rather than known-good.
+	defer func() {
+		metrics.EventConsumed(metricsService, msg.Topic, envelope.EventType, time.Since(start))
+	}()
 
 	c.logger.WithFields(logrus.Fields{
 		"event_type": envelope.EventType,

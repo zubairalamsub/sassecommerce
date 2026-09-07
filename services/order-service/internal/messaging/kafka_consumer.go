@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/yourusername/ecommerce/order-service/internal/domain/events"
 	"github.com/yourusername/ecommerce/order-service/internal/projection"
@@ -25,6 +26,11 @@ type KafkaEventConsumer struct {
 	projection *projection.OrderProjection
 	logger     *zap.Logger
 	stopChan   chan struct{}
+
+	// topic is kept here rather than read back from reader.Config(): the
+	// reader is nil when processMessage is exercised directly in tests, and
+	// a metrics label is not worth a nil dereference.
+	topic string
 }
 
 // NewKafkaEventConsumer creates a new Kafka event consumer
@@ -48,6 +54,7 @@ func NewKafkaEventConsumer(
 
 	return &KafkaEventConsumer{
 		reader:     reader,
+		topic:      topic,
 		projection: projection,
 		logger:     logger,
 		stopChan:   make(chan struct{}),
@@ -95,6 +102,7 @@ func (c *KafkaEventConsumer) consumeLoop(ctx context.Context) {
 			// Reject events that fail HMAC verification (spoofed/tampered);
 			// still committed below so the poison message is not redelivered.
 			if err := eventSigner.Verify(message); err != nil {
+				metrics.EventDropped(metricsService, c.topic, "", metrics.ReasonSignatureInvalid)
 				c.logger.Warn("Dropping Kafka message that failed signature verification",
 					zap.Int64("offset", message.Offset),
 					zap.Error(err),
@@ -119,8 +127,14 @@ func (c *KafkaEventConsumer) consumeLoop(ctx context.Context) {
 // processMessage processes a single Kafka message
 func (c *KafkaEventConsumer) processMessage(ctx context.Context, message kafka.Message) error {
 	// Unmarshal event envelope
+	start := time.Now()
+	topic := c.topic
+
 	var envelope EventEnvelope
 	if err := json.Unmarshal(message.Value, &envelope); err != nil {
+		// The offset is committed regardless of this failure, so a decode
+		// error loses the event outright while consumer lag reads zero.
+		metrics.EventDropped(metricsService, topic, "", metrics.ReasonDecodeError)
 		return fmt.Errorf("failed to unmarshal event envelope: %w", err)
 	}
 
@@ -134,13 +148,19 @@ func (c *KafkaEventConsumer) processMessage(ctx context.Context, message kafka.M
 	// Deserialize event from envelope
 	event, err := c.deserializeEvent(envelope)
 	if err != nil {
+		// A well-formed envelope carrying a payload this consumer cannot
+		// build — usually a producer shipping a new event type ahead of its
+		// reader.
+		metrics.EventDropped(metricsService, topic, envelope.EventType, metrics.ReasonUnknownEventType)
 		return fmt.Errorf("failed to deserialize event: %w", err)
 	}
 
 	// Apply projection
 	if err := c.projection.Project(event); err != nil {
+		metrics.EventDropped(metricsService, topic, envelope.EventType, metrics.ReasonHandlerError)
 		return fmt.Errorf("failed to apply projection: %w", err)
 	}
+	metrics.EventConsumed(metricsService, topic, envelope.EventType, time.Since(start))
 
 	c.logger.Info("Event processed successfully",
 		zap.String("event_id", envelope.EventID),

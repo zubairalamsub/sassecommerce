@@ -8,9 +8,14 @@ import (
 	"time"
 
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "order-service"
 
 // OrderCommand represents a command that can be dispatched to the order service.
 // This interface breaks the import cycle between messaging and commands packages.
@@ -109,6 +114,7 @@ func (c *ExternalEventConsumer) consumeLoop(ctx context.Context, reader *kafka.R
 			// Reject events that fail HMAC verification (spoofed/tampered);
 			// still committed below so the poison message is not redelivered.
 			if err := eventSigner.Verify(message); err != nil {
+				metrics.EventDropped(metricsService, topic, "", metrics.ReasonSignatureInvalid)
 				c.logger.Warn("Dropping Kafka message that failed signature verification",
 					zap.String("topic", topic),
 					zap.Error(err),
@@ -126,8 +132,14 @@ func (c *ExternalEventConsumer) consumeLoop(ctx context.Context, reader *kafka.R
 
 // handleMessage processes a single message from an external topic
 func (c *ExternalEventConsumer) handleMessage(ctx context.Context, topic string, msg kafka.Message) {
+	start := time.Now()
+
 	var envelope ExternalEventEnvelope
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
+		// payment-, inventory- and shipping-events all land here. The offset
+		// is committed regardless, so a decode failure loses the event with
+		// consumer lag still reading zero.
+		metrics.EventDropped(metricsService, topic, "", metrics.ReasonDecodeError)
 		c.logger.Error("Failed to unmarshal external event",
 			zap.String("topic", topic),
 			zap.Error(err),
@@ -140,6 +152,12 @@ func (c *ExternalEventConsumer) handleMessage(ctx context.Context, topic string,
 		zap.String("event_type", envelope.EventType),
 		zap.String("event_id", envelope.EventID),
 	)
+
+	// These handlers report failure by logging rather than returning, so
+	// "consumed" here means decoded and dispatched, not known-good.
+	defer func() {
+		metrics.EventConsumed(metricsService, topic, envelope.EventType, time.Since(start))
+	}()
 
 	switch topic {
 	case "payment-events":

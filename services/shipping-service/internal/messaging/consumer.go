@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/ecommerce/shipping-service/internal/models"
 	"github.com/ecommerce/shipping-service/internal/service"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "shipping-service"
 
 // EventConsumer reacts to upstream events that should produce shipments.
 type EventConsumer struct {
@@ -116,11 +121,12 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 			// Reject events that fail HMAC verification (spoofed/tampered);
 			// still committed below so the poison message is not redelivered.
 			if err := eventSigner.Verify(msg); err != nil {
+				metrics.EventDropped(metricsService, topic, "", metrics.ReasonSignatureInvalid)
 				c.logger.WithError(err).WithFields(logrus.Fields{
 					"topic":  topic,
 					"offset": msg.Offset,
 				}).Warn("Dropping Kafka message that failed signature verification")
-			} else if err := c.processMessage(ctx, msg.Value); err != nil {
+			} else if err := c.processMessage(ctx, topic, msg.Value); err != nil {
 				c.logger.WithError(err).WithFields(logrus.Fields{
 					"topic":  topic,
 					"offset": msg.Offset,
@@ -135,12 +141,24 @@ func (c *EventConsumer) consumeLoop(ctx context.Context, reader *kafka.Reader, t
 
 // processMessage decodes a single message and dispatches by event type.
 // Exposed for unit tests.
-func (c *EventConsumer) processMessage(ctx context.Context, raw []byte) error {
+// processMessage takes the topic as well as the payload so the event metrics
+// can be labelled by it; this consumer reads three topics from one loop.
+func (c *EventConsumer) processMessage(ctx context.Context, topic string, raw []byte) error {
+	start := time.Now()
+
 	var env EventEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
+		// Committed regardless, so without this counter a shipment update that
+		// never decoded is indistinguishable from one that never arrived.
+		metrics.EventDropped(metricsService, topic, "", metrics.ReasonDecodeError)
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
-	return c.HandleEvent(ctx, &env)
+	if err := c.HandleEvent(ctx, &env); err != nil {
+		metrics.EventDropped(metricsService, topic, env.EventType, metrics.ReasonHandlerError)
+		return err
+	}
+	metrics.EventConsumed(metricsService, topic, env.EventType, time.Since(start))
+	return nil
 }
 
 // HandleEvent dispatches a parsed envelope to the relevant handler.

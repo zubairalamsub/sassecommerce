@@ -4,13 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/ecommerce/tenant-service/internal/models"
 	"github.com/ecommerce/tenant-service/internal/service"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "tenant-service"
 
 // eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
 var eventSigner = sharedkafka.NewEventSignerFromEnv()
@@ -133,6 +139,7 @@ func (c *AuditEventConsumer) consume(ctx context.Context, reader *kafka.Reader) 
 		// Reject events that fail HMAC verification (spoofed/tampered);
 		// still committed below so the poison message is not redelivered.
 		if err := eventSigner.Verify(msg); err != nil {
+			metrics.EventDropped(metricsService, topic, "", metrics.ReasonSignatureInvalid)
 			c.logger.WithError(err).WithField("topic", topic).Warn("Dropping Kafka message that failed signature verification")
 		} else {
 			c.handleMessage(ctx, topic, msg)
@@ -145,11 +152,20 @@ func (c *AuditEventConsumer) consume(ctx context.Context, reader *kafka.Reader) 
 }
 
 func (c *AuditEventConsumer) handleMessage(ctx context.Context, topic string, msg kafka.Message) {
+	start := time.Now()
+
 	var event ServiceEvent
 	if err := json.Unmarshal(msg.Value, &event); err != nil {
+		// Committed regardless, so a decode failure here silently drops an
+		// audit record rather than delaying one.
+		metrics.EventDropped(metricsService, topic, "", metrics.ReasonDecodeError)
 		c.logger.WithError(err).WithField("topic", topic).Warn("Failed to unmarshal event")
 		return
 	}
+
+	defer func() {
+		metrics.EventConsumed(metricsService, topic, event.EventType, time.Since(start))
+	}()
 
 	payload := event.getPayload()
 	resource := topicToResource[topic]

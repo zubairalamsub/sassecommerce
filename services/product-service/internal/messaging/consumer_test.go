@@ -124,15 +124,26 @@ func TestHandleMessage_MalformedJSONIsDroppedNotPanicked(t *testing.T) {
 // inventory-service's KafkaEventPublisher, always sends version as a JSON
 // string ("1.0.0"), so this is a latent landmine rather than an active bug.
 // Flagged in the QA report.
-func TestHandleMessage_NumericVersionDropsTheWholeEnvelope(t *testing.T) {
+// This test used to be named ...NumericVersionDropsTheWholeEnvelope and
+// asserted that UpdateStock was never called: `version` was declared as a Go
+// string, so a numeric version made json.Unmarshal return a type error and
+// handleMessage returned before dispatching on EventType. The field is now
+// sharedkafka.EventVersion, which accepts both shapes producers on this
+// platform emit, so the event must be processed rather than dropped.
+//
+// Left in place deliberately — a numeric version is the shape order-service's
+// publisher uses, and a silently dropped stock update is exactly what this
+// asserts against.
+func TestHandleMessage_NumericVersionIsStillProcessed(t *testing.T) {
 	repo := new(mocks.MockProductRepository)
 	c := newTestConsumer(repo)
+	repo.On("UpdateStock", mock.Anything, "tenant-1", "prod-1", 5, true).Return(nil)
 
 	raw := []byte(`{"event_id":"evt-1","event_type":"InventoryUpdated","version":1,"payload":{"tenant_id":"tenant-1","product_id":"prod-1","quantity":5}}`)
 
 	c.handleMessage(context.Background(), kafka.Message{Value: raw})
 
-	assertUpdateStockNotCalled(t, repo)
+	repo.AssertCalled(t, "UpdateStock", mock.Anything, "tenant-1", "prod-1", 5, true)
 }
 
 func TestHandleMessage_StringVersionDecodesFine(t *testing.T) {

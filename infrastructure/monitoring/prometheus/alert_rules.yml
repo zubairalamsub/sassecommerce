@@ -163,6 +163,259 @@ groups:
           summary: "Kafka under-replicated partitions"
           description: "Topic {{ $labels.topic }} has {{ $value }} under-replicated partitions."
 
+  # ── Kafka Event Processing ──────────────────────────────────
+  # Consumer lag is blind to a consumer that reads a message, fails to handle
+  # it, commits the offset anyway and carries on. That is exactly how order
+  # confirmation / shipped / cancelled / payment / receipt e-mails stopped for
+  # weeks: an envelope `version` change broke decoding on every order event,
+  # offsets kept advancing, KafkaConsumerLag never left zero, the brokers were
+  # healthy and throughput looked normal. These rules watch the *outcome* of
+  # each message instead of the broker's offset arithmetic.
+  #
+  # Grouping notes for everything below:
+  #   * `service` is the target label from prometheus.yml. The services also
+  #     export a `service` const label; with honor_labels unset Prometheus
+  #     renames that copy to `exported_service`, so `service` is always the
+  #     scrape-config value — identical in practice, and safe to group on.
+  #   * `job` is carried through every aggregation because Alertmanager's
+  #     route group_by and inhibit_rules key on it.
+  #   * Event rates are multiplied by 60 so both the threshold and `$value`
+  #     read as events per minute. Per-second rates here are well under 1,
+  #     and `humanize` renders those with an SI prefix — "50m/s", which in a
+  #     3am page reads as metres per second, not 0.05 events per second.
+  - name: kafka_events
+    rules:
+      # decode_error means the wire contract broke: the envelope no longer
+      # unmarshals, so *every* message of that shape is lost, not just an
+      # unlucky one. signature_invalid means the payload failed verification —
+      # a key-rotation mistake, or tampering. Both are deterministic and
+      # all-or-nothing, so there is no "acceptable" non-zero rate here and the
+      # threshold is a plain > 0 rather than a tuned rate. `for: 2m` exists
+      # only to ride out the seconds during a rolling deploy when a new
+      # producer is briefly ahead of its consumers.
+      - alert: KafkaEventContractBroken
+        expr: |
+          sum(rate(kafka_events_failed_total{reason=~"decode_error|signature_invalid"}[5m]))
+          by (job, service, topic, event_type, reason)
+          * 60
+          > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} is discarding {{ $labels.topic }} events ({{ $labels.reason }})"
+          description: "{{ $labels.service }} read and dropped {{ $labels.event_type }} events from {{ $labels.topic }} with reason={{ $labels.reason }} ({{ $value | humanize }} events/min). The offsets were committed anyway, so consumer lag stays at zero while the events are permanently gone."
+
+      # unknown_event_type / missing_field mean the producer is emitting a
+      # shape this consumer was never taught. Narrower than a decode break
+      # (usually one event type out of many) and legitimately transient while
+      # a producer rolls out ahead of its consumers — hence warning, and a 10m
+      # `for` that is long enough for a rolling deploy to finish. Still firing
+      # after that means someone shipped a field or an event type nobody
+      # downstream handles, and those records are being thrown away.
+      - alert: KafkaEventSchemaDrift
+        expr: |
+          sum(rate(kafka_events_failed_total{reason=~"unknown_event_type|missing_field"}[10m]))
+          by (job, service, topic, event_type, reason)
+          * 60
+          > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} cannot handle some {{ $labels.topic }} events ({{ $labels.reason }})"
+          description: "{{ $labels.service }} is dropping {{ $labels.event_type }} events from {{ $labels.topic }} with reason={{ $labels.reason }} ({{ $value | humanize }} events/min) — the producer is ahead of this consumer's schema."
+
+      # handler_error is the one failure reason that is legitimately noisy: a
+      # single poison record, or a downstream dependency blipping for a few
+      # seconds. Paging on > 0 would be pure alert fatigue, so this one gets a
+      # real rate — 3 dropped records a minute, sustained for 15 minutes, is
+      # well past "one bad message" and into "this handler is burning events".
+      # Quiet topics that never reach that absolute rate are caught by
+      # KafkaEventDropRatioHigh below, which is volume-independent.
+      - alert: KafkaEventHandlerFailures
+        expr: |
+          sum(rate(kafka_events_failed_total{reason="handler_error"}[10m]))
+          by (job, service, topic, event_type)
+          * 60
+          > 3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} is failing to handle {{ $labels.topic }} events"
+          description: "{{ $labels.service }} dropped {{ $value | humanize }} {{ $labels.event_type }} events/min from {{ $labels.topic }} to handler errors over the last 15 minutes."
+
+      # Absolute rates miss the quiet-but-totally-broken case: a topic carrying
+      # two events a minute can be 100% dead and never trip any rate
+      # threshold. This ratio is volume-independent — it asks what fraction of
+      # everything the consumer took off the topic it then threw away.
+      #
+      # Denominator note: the `or (<failed> * 0)` clause synthesises a
+      # zero-valued consumed series for any (service, topic) that has failures
+      # but has never once succeeded. Without it the `+` would drop that group
+      # entirely — binary operators only keep series that match on both sides —
+      # and a consumer that has failed on every single message since process
+      # start (the worst case, and the one this rule exists for) would produce
+      # no series and no alert at all.
+      #
+      # `reason` and `event_type` are summed away on both sides, so every
+      # operand carries exactly {job, service, topic} and the division lines
+      # up. A group with no traffic at all gives 0/0 = NaN, and NaN
+      # comparisons are always false, so an idle topic cannot fire this.
+      - alert: KafkaEventDropRatioHigh
+        expr: |
+          sum(rate(kafka_events_failed_total[15m])) by (job, service, topic)
+          /
+          (
+            sum(rate(kafka_events_failed_total[15m])) by (job, service, topic)
+            +
+            (
+              sum(rate(kafka_events_consumed_total[15m])) by (job, service, topic)
+              or
+              (sum(rate(kafka_events_failed_total[15m])) by (job, service, topic) * 0)
+            )
+          )
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} is dropping {{ $value | humanizePercentage }} of {{ $labels.topic }} events"
+          description: "{{ $labels.service }} discarded {{ $value | humanizePercentage }} of the {{ $labels.topic }} events it read over the last 15 minutes (threshold 5%). Offsets are committed on failure, so lag will not show this."
+
+      # Deliberately the same expression as KafkaEventDropRatioHigh — see the
+      # denominator note there. Past 50% the topic is not degraded, it is
+      # broken: more of its events are being destroyed than handled, whatever
+      # the reason label says. Shorter `for` because at this level every
+      # minute is a customer who never got their e-mail.
+      - alert: KafkaTopicProcessingBroken
+        expr: |
+          sum(rate(kafka_events_failed_total[15m])) by (job, service, topic)
+          /
+          (
+            sum(rate(kafka_events_failed_total[15m])) by (job, service, topic)
+            +
+            (
+              sum(rate(kafka_events_consumed_total[15m])) by (job, service, topic)
+              or
+              (sum(rate(kafka_events_failed_total[15m])) by (job, service, topic) * 0)
+            )
+          )
+          > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.topic }} processing is broken in {{ $labels.service }}"
+          description: "{{ $labels.service }} is throwing away {{ $value | humanizePercentage }} of the {{ $labels.topic }} events it reads. Treat this topic as not being processed at all."
+
+      # The "nothing is arriving any more" case. A naive
+      # `time() - last_processed > X` pages at 3am for every topic that is
+      # simply idle overnight, so this is gated on the topic having carried
+      # real, sustained traffic: more than 1 event/min averaged over the
+      # *previous 6 hours*, i.e. north of 360 events in the window. A consumer
+      # at that cadence does not go 35 minutes silent by chance. A genuinely
+      # low-traffic topic — a handful of events an hour, or one burst a day —
+      # averages well under the gate and can never fire this rule, however
+      # long it stays quiet.
+      #
+      # The 6h look-back is deliberately far longer than the 30m silence
+      # window, so the gate is still satisfied by pre-outage traffic after the
+      # consumer has gone quiet; that is what makes it a "was previously
+      # active" test rather than an "is currently active" one.
+      #
+      # `max(...) by` reduces the gauge to one series per topic (the most
+      # recent success across replicas, so a replica holding no partitions for
+      # this topic cannot false-positive) and leaves both sides of the `and`
+      # with exactly {job, service, topic} — without it the left side would
+      # still carry `instance`/`language` from the target labels, match
+      # nothing, and the rule would be silently dead.
+      - alert: KafkaConsumerSilent
+        expr: |
+          (
+            time() - max(kafka_event_last_processed_timestamp_seconds) by (job, service, topic)
+            > 1800
+          )
+          and
+          (
+            sum(rate(kafka_events_consumed_total[6h])) by (job, service, topic) * 60 > 1
+          )
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} has stopped processing {{ $labels.topic }}"
+          description: "{{ $labels.service }} has not processed a {{ $labels.topic }} event for {{ $value | humanizeDuration }}, on a topic that averaged steady traffic over the previous 6 hours. Consumer lag will not show this if offsets are still being committed."
+
+      # A failed publish never reaches the broker at all: no partition, no
+      # offset, nothing on the consuming half of the platform can ever notice
+      # it, and no amount of consumer instrumentation will find it. The
+      # producing service is the only place it is visible. Publishing is
+      # retried in-process, so an error still counted here is one that gave up
+      # — the event does not exist. `for: 5m` rides out a leader election.
+      - alert: KafkaEventPublishFailures
+        expr: |
+          sum(rate(kafka_events_published_total{outcome="error"}[5m]))
+          by (job, service, topic, event_type)
+          * 60
+          > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} is failing to publish to {{ $labels.topic }}"
+          description: "{{ $labels.service }} failed to publish {{ $value | humanize }} {{ $labels.event_type }} events/min to {{ $labels.topic }} — those events were never written to Kafka."
+
+      # As on the consume side, a ratio catches the low-volume producer that is
+      # 100% broken but too quiet to trip a rate. Above 10% the producer is not
+      # blipping, it is failing, and every miss is an order or payment event
+      # that no downstream service will ever see. Both sides sum `outcome`
+      # away, so each carries exactly {job, service, topic}; the denominator
+      # is a strict superset of the numerator (same metric, all outcomes), so
+      # it can only be zero when the numerator is zero — NaN, which the
+      # comparison filters out.
+      - alert: KafkaEventPublishFailureRatioHigh
+        expr: |
+          sum(rate(kafka_events_published_total{outcome="error"}[10m])) by (job, service, topic)
+          /
+          sum(rate(kafka_events_published_total[10m])) by (job, service, topic)
+          > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} cannot publish to {{ $labels.topic }}"
+          description: "{{ $value | humanizePercentage }} of {{ $labels.service }}'s publishes to {{ $labels.topic }} failed over the last 10 minutes — those events do not exist anywhere."
+
+      # Slow handlers are a leading indicator of a much worse failure: once
+      # processing outruns max.poll.interval.ms the broker evicts the consumer,
+      # the group rebalances, and in-flight work is redelivered or dropped. p99
+      # is the right quantile — a mean hides the single event type stuck behind
+      # a slow downstream call.
+      #
+      # Threshold caveat: keep this BELOW the histogram's largest finite
+      # bucket. histogram_quantile cannot interpolate inside the +Inf bucket
+      # and clamps its answer to the highest finite boundary, so a threshold at
+      # or above that boundary can never be exceeded and the rule would be
+      # silently dead. The shared metrics package tops out at 5s, hence 2s.
+      # `le` must stay in the `by` clause or histogram_quantile has no buckets
+      # to work with.
+      - alert: KafkaEventProcessingSlow
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(kafka_event_processing_duration_seconds_bucket[10m]))
+            by (le, job, service, topic, event_type)
+          )
+          > 2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow {{ $labels.topic }} event processing in {{ $labels.service }}"
+          description: "{{ $labels.service }} p99 processing time for {{ $labels.event_type }} on {{ $labels.topic }} is {{ $value | humanizeDuration }} (threshold 2s) — sustained slowness risks a consumer-group rebalance."
+
   # ── Elasticsearch ───────────────────────────────────────────
   - name: elasticsearch
     rules:

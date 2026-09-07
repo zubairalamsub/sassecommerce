@@ -1,4 +1,4 @@
-using Ecommerce.InventoryService.DTOs;
+﻿using Ecommerce.InventoryService.DTOs;
 using Ecommerce.InventoryService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -307,8 +307,13 @@ public class InventoryController : ControllerBase
         }
     }
 
+    // Not async: this is still a placeholder with nothing to await, and the
+    // async signature earned a CS1998 that only the SDK the Dockerfile uses
+    // reports -- so the image build failed while CI went green. Referenced by
+    // nameof() in CreatedAtAction above, which does not care about the return
+    // type.
     [HttpGet("reservations/{id:guid}")]
-    public async Task<ActionResult<StockReservationResponse>> GetReservation(Guid id)
+    public ActionResult<StockReservationResponse> GetReservation(Guid id)
     {
         // This is a placeholder - you'd implement GetReservationByIdAsync in the service
         return NotFound();

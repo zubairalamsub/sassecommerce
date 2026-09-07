@@ -38,14 +38,22 @@ jobs:
         working-directory: ${{ inputs.service-path }}
         run: dotnet restore
 
+      # -c Release on both steps, to match the Dockerfile.
+      #
+      # This job built Debug until now, and the divergence hid a real
+      # failure: a CS1998 in InventoryController surfaced only in the image
+      # build, so CI reported success on a commit whose container would not
+      # build. Same analyzer settings and same SDK line -- the configuration
+      # alone was enough. `dotnet test --no-build` needs the flag too, or it
+      # looks in Debug for output that now lands in Release.
       - name: Build
         working-directory: ${{ inputs.service-path }}
-        run: dotnet build --no-restore
+        run: dotnet build --no-restore -c Release
 
       - name: Run tests
         working-directory: ${{ inputs.test-project-path }}
         run: |
-          dotnet test --no-build \
+          dotnet test --no-build -c Release \
             --logger "trx;LogFileName=test-results.trx" \
             --collect:"XPlat Code Coverage" \
             --results-directory ./test-results

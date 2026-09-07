@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ecommerce/product-service/internal/models"
@@ -128,7 +129,15 @@ func (r *productRepository) Create(ctx context.Context, product *models.Product)
 		return err
 	}
 
-	product.ID = result.InsertedID.(primitive.ObjectID)
+	// Checked: InsertedID is driver-typed as interface{} and only carries an
+	// ObjectID when the driver generated the _id. A document inserted with an
+	// _id already set returns that value instead, and a bare assertion turns
+	// an otherwise successful write into a panic.
+	id, ok := result.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return fmt.Errorf("inserted product has unexpected _id type %T", result.InsertedID)
+	}
+	product.ID = id
 	return nil
 }
 

@@ -115,7 +115,7 @@ func TestHandler_RegisterVendor_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "name": "Acme", "email": "vendor@acme.com"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/vendors/register", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/vendors/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -129,7 +129,7 @@ func TestHandler_RegisterVendor_BadRequest(t *testing.T) {
 	body := `{"name": "Acme"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/vendors/register", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/vendors/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -146,7 +146,7 @@ func TestHandler_RegisterVendor_Conflict(t *testing.T) {
 	body := `{"tenant_id": "t1", "name": "Acme", "email": "vendor@acme.com"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/vendors/register", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/vendors/register", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -163,7 +163,7 @@ func TestHandler_GetVendor_Success(t *testing.T) {
 	mockService.On("GetVendor", mock.Anything, "vendor-1", "tenant-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors/vendor-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -176,7 +176,7 @@ func TestHandler_GetVendor_NotFound(t *testing.T) {
 	mockService.On("GetVendor", mock.Anything, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors/bad", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -192,7 +192,7 @@ func TestHandler_ListVendors_Success(t *testing.T) {
 	mockService.On("ListVendors", mock.Anything, "tenant-1", "", 1, 20).Return(resp, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -207,7 +207,7 @@ func TestHandler_ListVendors_Unauthenticated(t *testing.T) {
 	router := setupRouterWithIdentity(mockService, "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -225,7 +225,7 @@ func TestHandler_UpdateVendor_Success(t *testing.T) {
 	body := `{"name": "Updated Acme"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/vendors/vendor-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/vendors/vendor-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -242,7 +242,7 @@ func TestHandler_UpdateVendor_NotFound(t *testing.T) {
 	body := `{"name": "Test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/vendors/bad", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/vendors/bad", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -261,7 +261,7 @@ func TestHandler_UpdateVendorStatus_Success(t *testing.T) {
 	body := `{"status": "approved"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -278,7 +278,7 @@ func TestHandler_UpdateVendorStatus_InvalidTransition(t *testing.T) {
 	body := `{"status": "suspended"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -293,7 +293,7 @@ func TestHandler_UpdateVendorStatus_Forbidden(t *testing.T) {
 	body := `{"status": "approved"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/vendors/vendor-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -311,7 +311,7 @@ func TestHandler_GetVendorOrders_Success(t *testing.T) {
 	mockService.On("GetVendorOrders", mock.Anything, "vendor-1", "tenant-1", 1, 20).Return(orders, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1/orders", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors/vendor-1/orders", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -329,7 +329,7 @@ func TestHandler_GetVendorAnalytics_Success(t *testing.T) {
 	mockService.On("GetVendorAnalytics", mock.Anything, "vendor-1", "tenant-1").Return(analytics, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors/vendor-1/analytics", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors/vendor-1/analytics", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -346,7 +346,7 @@ func TestHandler_GetVendorAnalytics_NotFound(t *testing.T) {
 	mockService.On("GetVendorAnalytics", mock.Anything, "bad", "tenant-1").Return(nil, errors.New("vendor not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/vendors/bad/analytics", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/vendors/bad/analytics", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)

@@ -135,7 +135,7 @@ func TestHandler_CreatePromotion_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/promotions", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/promotions", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -149,7 +149,7 @@ func TestHandler_CreatePromotion_BadRequest(t *testing.T) {
 	body := `{"name": "Sale"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/promotions", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/promotions", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -170,7 +170,7 @@ func TestHandler_CreatePromotion_ValidationError(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/promotions", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/promotions", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -189,7 +189,7 @@ func TestHandler_CreatePromotion_Forbidden(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/promotions", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/promotions", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -207,7 +207,7 @@ func TestHandler_GetPromotion_Success(t *testing.T) {
 	mockService.On("GetPromotion", mock.Anything, "tenant-1", "promo-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/promotions/promo-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/promotions/promo-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -220,7 +220,7 @@ func TestHandler_GetPromotion_NotFound(t *testing.T) {
 	mockService.On("GetPromotion", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("promotion not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/promotions/bad", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/promotions/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -236,7 +236,7 @@ func TestHandler_GetActivePromotions_Success(t *testing.T) {
 	mockService.On("GetActivePromotions", mock.Anything, "tenant-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/promotions/active?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/promotions/active?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -252,7 +252,7 @@ func TestHandler_GetActivePromotions_Unauthenticated(t *testing.T) {
 	router := setupRouterWithClaims(mockService, "", "user-1", "admin")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/promotions/active", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/promotions/active", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -270,7 +270,7 @@ func TestHandler_CreateCoupon_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "promotion_id": "promo-1", "code": "SUMMER20"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -287,7 +287,7 @@ func TestHandler_CreateCoupon_Conflict(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "promotion_id": "promo-1", "code": "SUMMER20"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -302,7 +302,7 @@ func TestHandler_CreateCoupon_Forbidden(t *testing.T) {
 	body := `{"promotion_id": "promo-1", "code": "SUMMER20"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -322,7 +322,7 @@ func TestHandler_ValidateCoupon_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "user_id": "user-1", "order_total": 100}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons/validate/SUMMER20", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons/validate/SUMMER20", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -341,7 +341,7 @@ func TestHandler_ApplyCoupon_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "user_id": "user-1", "order_id": "order-1", "order_total": 100, "code": "SUMMER20"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons/apply", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons/apply", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -355,7 +355,7 @@ func TestHandler_ApplyCoupon_BadRequest(t *testing.T) {
 	body := `{"tenant_id": "t1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/coupons/apply", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/coupons/apply", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -372,7 +372,7 @@ func TestHandler_GetLoyaltyAccount_Success(t *testing.T) {
 	mockService.On("GetLoyaltyAccount", mock.Anything, "tenant-1", "user-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/loyalty/user-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/loyalty/user-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -384,7 +384,7 @@ func TestHandler_GetLoyaltyAccount_Unauthenticated(t *testing.T) {
 	router := setupRouterWithClaims(mockService, "", "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/loyalty/user-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/loyalty/user-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -400,7 +400,7 @@ func TestHandler_ProcessLoyaltyPoints_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "user_id": "user-1", "type": "earn", "points": 100}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/loyalty/points", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/loyalty/points", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -417,7 +417,7 @@ func TestHandler_ProcessLoyaltyPoints_InsufficientPoints(t *testing.T) {
 	body := `{"tenant_id": "tenant-1", "user_id": "user-1", "type": "redeem", "points": 500}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/loyalty/points", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/loyalty/points", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -431,7 +431,7 @@ func TestHandler_ProcessLoyaltyPoints_BadRequest(t *testing.T) {
 	body := `{"tenant_id": "t1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/loyalty/points", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/loyalty/points", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

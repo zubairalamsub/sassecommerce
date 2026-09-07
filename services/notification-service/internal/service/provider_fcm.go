@@ -79,7 +79,7 @@ func (p *FCMPushProvider) Send(notification *models.Notification) (*ProviderResu
 		return nil, fmt.Errorf("failed to marshal FCM request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://fcm.googleapis.com/fcm/send", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, "https://fcm.googleapis.com/fcm/send", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create FCM request: %w", err)
 	}

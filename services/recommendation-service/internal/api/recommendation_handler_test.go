@@ -106,7 +106,7 @@ func TestHandler_GetUserRecommendations_Success(t *testing.T) {
 	mockService.On("GetUserRecommendations", mock.Anything, "tenant-1", "user-1", 10).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/user/user-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/user/user-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -123,7 +123,7 @@ func TestHandler_GetUserRecommendations_Unauthenticated(t *testing.T) {
 	router := setupRouterWithAuth(mockService, "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/user/user-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/user/user-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -136,7 +136,7 @@ func TestHandler_GetUserRecommendations_ServiceFailure(t *testing.T) {
 	mockService.On("GetUserRecommendations", mock.Anything, "tenant-1", "user-1", 10).Return(nil, errors.New("db error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/user/user-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/user/user-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -155,7 +155,7 @@ func TestHandler_GetUserRecommendations_CustomLimit(t *testing.T) {
 	mockService.On("GetUserRecommendations", mock.Anything, "tenant-1", "user-1", 5).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/user/user-1?tenant_id=tenant-1&limit=5", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/user/user-1?tenant_id=tenant-1&limit=5", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -178,7 +178,7 @@ func TestHandler_GetProductRecommendations_Success(t *testing.T) {
 	mockService.On("GetProductRecommendations", mock.Anything, "tenant-1", "p-1", 10).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/product/p-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/product/p-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -193,7 +193,7 @@ func TestHandler_GetProductRecommendations_Unauthenticated(t *testing.T) {
 	router := setupRouterWithAuth(mockService, "", "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/product/p-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/product/p-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -206,7 +206,7 @@ func TestHandler_GetProductRecommendations_ServiceFailure(t *testing.T) {
 	mockService.On("GetProductRecommendations", mock.Anything, "tenant-1", "p-1", 10).Return(nil, errors.New("db error"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/product/p-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/product/p-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -228,7 +228,7 @@ func TestHandler_TrainModel_Success(t *testing.T) {
 	body := `{"tenant_id": "tenant-1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/recommendations/train", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/recommendations/train", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -243,7 +243,7 @@ func TestHandler_TrainModel_Forbidden(t *testing.T) {
 	body := `{}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/recommendations/train", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/recommendations/train", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -259,7 +259,7 @@ func TestHandler_TrainModel_ServiceFailure(t *testing.T) {
 	body := `{"tenant_id": "tenant-1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/recommendations/train", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/recommendations/train", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -280,7 +280,7 @@ func TestHandler_GetTrainingJob_Success(t *testing.T) {
 	mockService.On("GetTrainingJob", mock.Anything, "tenant-1", "job-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/train/job-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/train/job-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -293,7 +293,7 @@ func TestHandler_GetTrainingJob_NotFound(t *testing.T) {
 	mockService.On("GetTrainingJob", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("training job not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/recommendations/train/bad", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/recommendations/train/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)

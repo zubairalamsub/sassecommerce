@@ -248,10 +248,15 @@ func (s *shippingService) UpdateStatus(ctx context.Context, tenantID, id string,
 		"status":          string(newStatus),
 	})
 
-	// Reload with details
+	// Reload with details. The status change is already committed and the event
+	// already published, so a failure to re-read is not a failure of the
+	// operation — fall back to the shipment we have rather than reporting an
+	// error for work that succeeded.
 	updated, err := s.repo.GetByIDWithDetails(ctx, tenantID, id)
 	if err != nil {
-		return toShipmentResponse(shipment), nil
+		s.logger.WithError(err).WithField("shipment_id", id).
+			Warn("Status updated but detail reload failed; returning summary response")
+		return toShipmentResponse(shipment), nil //nolint:nilerr // the update itself succeeded
 	}
 	return toShipmentResponse(updated), nil
 }
@@ -304,8 +309,12 @@ func (s *shippingService) CalculateRates(ctx context.Context, req *models.Calcul
 
 // publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
 func (s *shippingService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	// Held in a variable rather than read back out of the map: the Kafka key
+	// needs it as a string, and reading it back out was an unchecked
+	// assertion standing in for a value we had in hand two lines earlier.
+	eventID := uuid.New().String()
 	event := map[string]interface{}{
-		"event_id":   uuid.New().String(),
+		"event_id":   eventID,
 		"event_type": eventType,
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		"version":    "1.0.0",
@@ -318,7 +327,7 @@ func (s *shippingService) publishEvent(ctx context.Context, eventType string, pa
 		return
 	}
 
-	if err := s.kafkaProducer.Publish(ctx, "shipping-events", event["event_id"].(string), data); err != nil {
+	if err := s.kafkaProducer.Publish(ctx, "shipping-events", eventID, data); err != nil {
 		s.logger.WithError(err).Warn("Failed to publish shipping event")
 	}
 }

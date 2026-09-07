@@ -122,7 +122,7 @@ func TestMenuHandler_CreateMenu_Success(t *testing.T) {
 	body := `{"tenant_id":"t-1","name":"Main Nav","slug":"main-nav","location":"header"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/menus", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/menus", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -140,7 +140,7 @@ func TestMenuHandler_CreateMenu_BadRequest(t *testing.T) {
 	body := `{"name":"test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/menus", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/menus", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -157,7 +157,7 @@ func TestMenuHandler_CreateMenu_DuplicateSlug(t *testing.T) {
 	body := `{"tenant_id":"t-1","name":"Main Nav","slug":"main-nav","location":"header"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/menus", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/menus", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -174,7 +174,7 @@ func TestMenuHandler_GetMenu_Success(t *testing.T) {
 	mockService.On("GetMenu", mock.Anything, "m-1", "t-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/m-1?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/m-1?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -187,7 +187,7 @@ func TestMenuHandler_GetMenu_NotFound(t *testing.T) {
 	mockService.On("GetMenu", mock.Anything, "bad", "t-1").Return(nil, errors.New("menu not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/bad?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/bad?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -203,7 +203,7 @@ func TestMenuHandler_GetMenuBySlug_Success(t *testing.T) {
 	mockService.On("GetMenuBySlug", mock.Anything, "t-1", "main-nav").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/slug/main-nav?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/slug/main-nav?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -214,7 +214,7 @@ func TestMenuHandler_GetMenuBySlug_MissingTenant(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/slug/main-nav", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/slug/main-nav", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -232,7 +232,7 @@ func TestMenuHandler_UpdateMenu_Success(t *testing.T) {
 	body := `{"name":"Updated Nav"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menus/m-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menus/m-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -249,7 +249,7 @@ func TestMenuHandler_UpdateMenu_NotFound(t *testing.T) {
 	body := `{"name":"test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menus/bad", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menus/bad", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -265,7 +265,7 @@ func TestMenuHandler_DeleteMenu_Success(t *testing.T) {
 	mockService.On("DeleteMenu", mock.Anything, "m-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/menus/m-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/menus/m-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -278,7 +278,7 @@ func TestMenuHandler_DeleteMenu_NotFound(t *testing.T) {
 	mockService.On("DeleteMenu", mock.Anything, "bad", "t-1").Return(errors.New("menu not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/menus/bad", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/menus/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -297,7 +297,7 @@ func TestMenuHandler_ListMenus_Success(t *testing.T) {
 	mockService.On("ListMenus", mock.Anything, "t-1").Return(menus, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -312,7 +312,7 @@ func TestMenuHandler_ListMenus_MissingTenant(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -330,7 +330,7 @@ func TestMenuHandler_ListMenusByLocation_Success(t *testing.T) {
 	mockService.On("ListMenusByLocation", mock.Anything, "t-1", "header").Return(menus, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/location/header?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/location/header?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -341,7 +341,7 @@ func TestMenuHandler_ListMenusByLocation_MissingTenant(t *testing.T) {
 	router := setupMenuRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/menus/location/header", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/menus/location/header", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -359,7 +359,7 @@ func TestMenuHandler_CreateMenuItem_Success(t *testing.T) {
 	body := `{"label":"Home","url":"/"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/menu-items/m-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/menu-items/m-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -377,7 +377,7 @@ func TestMenuHandler_CreateMenuItem_BadRequest(t *testing.T) {
 	body := `{"url":"/"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/menu-items/m-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/menu-items/m-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -396,7 +396,7 @@ func TestMenuHandler_UpdateMenuItem_Success(t *testing.T) {
 	body := `{"label":"Updated","url":"/new"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menu-items/i-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menu-items/i-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -413,7 +413,7 @@ func TestMenuHandler_UpdateMenuItem_NotFound(t *testing.T) {
 	body := `{"label":"test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menu-items/bad", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menu-items/bad", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -429,7 +429,7 @@ func TestMenuHandler_DeleteMenuItem_Success(t *testing.T) {
 	mockService.On("DeleteMenuItem", mock.Anything, "i-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/menu-items/i-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/menu-items/i-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -442,7 +442,7 @@ func TestMenuHandler_DeleteMenuItem_NotFound(t *testing.T) {
 	mockService.On("DeleteMenuItem", mock.Anything, "bad", "t-1").Return(errors.New("menu item not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/menu-items/bad", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/menu-items/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -459,7 +459,7 @@ func TestMenuHandler_ReorderItems_Success(t *testing.T) {
 	body := `{"items":[{"id":"i-1","position":1},{"id":"i-2","position":0}]}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menus-reorder/m-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menus-reorder/m-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -476,7 +476,7 @@ func TestMenuHandler_ReorderItems_MenuNotFound(t *testing.T) {
 	body := `{"items":[{"id":"i-1","position":0}]}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/menus-reorder/bad", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/menus-reorder/bad", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

@@ -321,7 +321,11 @@ func (s *tenantService) publishEvent(ctx context.Context, event map[string]inter
 		return err
 	}
 
-	return s.kafkaProducer.Publish(ctx, "tenant-events", string(event["event_id"].(string)), data)
+	// Checked, and without the redundant string() around a value that is
+	// already a string. The key is a partitioning hint; a caller passing an
+	// event map without an event_id should not panic the publish.
+	key, _ := event["event_id"].(string)
+	return s.kafkaProducer.Publish(ctx, "tenant-events", key, data)
 }
 
 // publishSecurityEvent is a thin wrapper that builds the standard envelope

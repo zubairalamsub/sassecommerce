@@ -162,7 +162,7 @@ func TestHandler_CreateReview_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -189,7 +189,7 @@ func TestHandler_CreateReview_IgnoresBodyIdentity(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -207,7 +207,7 @@ func TestHandler_CreateReview_Unauthenticated(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -222,7 +222,7 @@ func TestHandler_CreateReview_BadRequest(t *testing.T) {
 	body := `{"title": "no product id"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -242,7 +242,7 @@ func TestHandler_CreateReview_Conflict(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -260,7 +260,7 @@ func TestHandler_GetReview_Success(t *testing.T) {
 	mockService.On("GetReview", mock.Anything, "tenant-1", "review-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/review-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/review-1", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -276,7 +276,7 @@ func TestHandler_GetReview_CrossTenantNotFound(t *testing.T) {
 	mockService.On("GetReview", mock.Anything, "tenant-2", "review-1").Return(nil, errors.New("review not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/review-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/review-1", nil)
 	authed(req, "tenant-2", "user-9", "customer")
 	router.ServeHTTP(w, req)
 
@@ -290,7 +290,7 @@ func TestHandler_GetReview_NotFound(t *testing.T) {
 	mockService.On("GetReview", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("review not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/bad", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/bad", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -309,7 +309,7 @@ func TestHandler_GetProductReviews_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	// Tenant comes from the JWT context, not a query param. A stray ?tenant_id
 	// must be ignored so it cannot be used to read another tenant's reviews.
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1?tenant_id=attacker", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/product/product-1?tenant_id=attacker", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -326,7 +326,7 @@ func TestHandler_GetProductReviews_Unauthenticated(t *testing.T) {
 
 	// No JWT context; a query ?tenant_id must not substitute for authentication.
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/product/product-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -347,7 +347,7 @@ func TestHandler_UpdateReview_Success(t *testing.T) {
 	body := `{"title": "Updated"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/reviews/review-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/reviews/review-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -362,7 +362,7 @@ func TestHandler_UpdateReview_Unauthenticated(t *testing.T) {
 	body := `{"title": "Updated"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/reviews/review-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/reviews/review-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -381,7 +381,7 @@ func TestHandler_UpdateReview_Forbidden(t *testing.T) {
 	body := `{"title": "Hacked"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/reviews/review-1", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/reviews/review-1", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "other", "customer")
 	router.ServeHTTP(w, req)
@@ -399,7 +399,7 @@ func TestHandler_DeleteReview_Owner(t *testing.T) {
 	mockService.On("DeleteReview", mock.Anything, "tenant-1", "user-1", "review-1", false).Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/reviews/review-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/reviews/review-1", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -415,7 +415,7 @@ func TestHandler_DeleteReview_Staff(t *testing.T) {
 	mockService.On("DeleteReview", mock.Anything, "tenant-1", "mod-1", "review-1", true).Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/reviews/review-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/reviews/review-1", nil)
 	authed(req, "tenant-1", "mod-1", "moderator")
 	router.ServeHTTP(w, req)
 
@@ -427,7 +427,7 @@ func TestHandler_DeleteReview_Unauthenticated(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/reviews/review-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/reviews/review-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -441,7 +441,7 @@ func TestHandler_DeleteReview_NotFound(t *testing.T) {
 	mockService.On("DeleteReview", mock.Anything, "tenant-1", "user-1", "bad", false).Return(errors.New("review not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/reviews/bad", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/reviews/bad", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -461,7 +461,7 @@ func TestHandler_ModerateReview_Success(t *testing.T) {
 	body := `{"status": "rejected", "reject_reason": "Spam"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/moderate", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/moderate", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "mod-1", "moderator")
 	router.ServeHTTP(w, req)
@@ -476,7 +476,7 @@ func TestHandler_ModerateReview_ForbiddenForCustomer(t *testing.T) {
 	body := `{"status": "rejected", "reject_reason": "Spam"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/moderate", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/moderate", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -496,7 +496,7 @@ func TestHandler_AddHelpfulVote_Success(t *testing.T) {
 	body := `{"user_id": "voter-1", "helpful": true}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/helpful", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/helpful", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "voter-1", "customer")
 	router.ServeHTTP(w, req)
@@ -511,7 +511,7 @@ func TestHandler_AddHelpfulVote_BadRequest(t *testing.T) {
 	body := `{"helpful": true}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/helpful", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/helpful", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "voter-1", "customer")
 	router.ServeHTTP(w, req)
@@ -532,7 +532,7 @@ func TestHandler_RespondToReview_Success(t *testing.T) {
 	body := `{"response": "Thanks!"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/respond", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/respond", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "admin-1", "admin")
 	router.ServeHTTP(w, req)
@@ -547,7 +547,7 @@ func TestHandler_RespondToReview_ForbiddenForCustomer(t *testing.T) {
 	body := `{"response": "Thanks!"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/reviews/review-1/respond", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/reviews/review-1/respond", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
@@ -572,7 +572,7 @@ func TestHandler_GetProductSummary_Success(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	// A stray ?tenant_id=attacker must be ignored in favour of the JWT tenant.
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary?tenant_id=attacker", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/product/product-1/summary?tenant_id=attacker", nil)
 	authed(req, "tenant-1", "user-1", "customer")
 	router.ServeHTTP(w, req)
 
@@ -589,7 +589,7 @@ func TestHandler_GetProductSummary_Unauthenticated(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/reviews/product/product-1/summary?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/reviews/product/product-1/summary?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)

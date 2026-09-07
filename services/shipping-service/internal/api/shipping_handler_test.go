@@ -155,7 +155,7 @@ func TestHandler_CreateShipment_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/shipments", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/shipments", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -174,7 +174,7 @@ func TestHandler_CreateShipment_BadRequest(t *testing.T) {
 	body := `{"invalid": "json"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/shipments", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/shipments", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -197,7 +197,7 @@ func TestHandler_CreateShipment_ServiceError(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/shipments", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/shipments", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -214,7 +214,7 @@ func TestHandler_GetShipment_Success(t *testing.T) {
 	mockService.On("GetShipment", mock.Anything, "tenant-1", "shipment-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/shipment-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/shipment-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -231,7 +231,7 @@ func TestHandler_GetShipment_NotFound(t *testing.T) {
 	mockService.On("GetShipment", mock.Anything, "tenant-1", "nonexistent").Return(nil, errors.New("shipment not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/nonexistent", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/nonexistent", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -247,7 +247,7 @@ func TestHandler_GetShipmentByTracking_Success(t *testing.T) {
 	mockService.On("GetShipmentByTracking", mock.Anything, "tenant-1", "PA1234567890").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/tracking/PA1234567890", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/tracking/PA1234567890", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -260,7 +260,7 @@ func TestHandler_GetShipmentByTracking_NotFound(t *testing.T) {
 	mockService.On("GetShipmentByTracking", mock.Anything, "tenant-1", "INVALID").Return(nil, errors.New("not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/tracking/INVALID", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/tracking/INVALID", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -276,7 +276,7 @@ func TestHandler_GetShipmentByOrderID_Success(t *testing.T) {
 	mockService.On("GetShipmentByOrderID", mock.Anything, "tenant-1", "order-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/order/order-1?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/order/order-1?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -287,7 +287,7 @@ func TestHandler_GetShipmentByOrderID_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/order/order-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/order/order-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -300,7 +300,7 @@ func TestHandler_GetShipmentByOrderID_NotFound(t *testing.T) {
 	mockService.On("GetShipmentByOrderID", mock.Anything, "tenant-1", "bad").Return(nil, errors.New("not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments/order/bad?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments/order/bad?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -316,7 +316,7 @@ func TestHandler_ListShipments_Success(t *testing.T) {
 	mockService.On("ListShipments", mock.Anything, "tenant-1", 1, 20, "").Return(responses, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments?tenant_id=tenant-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments?tenant_id=tenant-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -332,7 +332,7 @@ func TestHandler_ListShipments_Unauthenticated(t *testing.T) {
 	router := setupRouterWithTenant(mockService, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -346,7 +346,7 @@ func TestHandler_ListShipments_WithStatusFilter(t *testing.T) {
 	mockService.On("ListShipments", mock.Anything, "tenant-1", 1, 20, "in_transit").Return(responses, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments?tenant_id=tenant-1&status=in_transit", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments?tenant_id=tenant-1&status=in_transit", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -360,7 +360,7 @@ func TestHandler_ListShipments_Pagination(t *testing.T) {
 	mockService.On("ListShipments", mock.Anything, "tenant-1", 2, 10, "").Return(responses, int64(15), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/shipments?tenant_id=tenant-1&page=2&page_size=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/shipments?tenant_id=tenant-1&page=2&page_size=10", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -386,7 +386,7 @@ func TestHandler_UpdateStatus_Success(t *testing.T) {
 	body := `{"status": "in_transit", "location": "Gazipur, Dhaka", "description": "In transit"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -400,7 +400,7 @@ func TestHandler_UpdateStatus_BadRequest(t *testing.T) {
 	body := `{"invalid": true}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -417,7 +417,7 @@ func TestHandler_UpdateStatus_InvalidTransition(t *testing.T) {
 	body := `{"status": "delivered"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("PUT", "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPut, "/api/v1/shipments/shipment-1/status", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -435,7 +435,7 @@ func TestHandler_CancelShipment_Success(t *testing.T) {
 	mockService.On("CancelShipment", mock.Anything, "tenant-1", "shipment-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/shipments/shipment-1/cancel", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/shipments/shipment-1/cancel", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -453,7 +453,7 @@ func TestHandler_CancelShipment_Error(t *testing.T) {
 		Return(nil, errors.New("can only be cancelled when pending"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/shipments/shipment-1/cancel", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/shipments/shipment-1/cancel", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -481,7 +481,7 @@ func TestHandler_CalculateRates_Success(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/rates", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/rates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -499,7 +499,7 @@ func TestHandler_CalculateRates_BadRequest(t *testing.T) {
 	body := `{"invalid": true}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/rates", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/rates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -521,7 +521,7 @@ func TestHandler_CalculateRates_ServiceError(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/rates", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/rates", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 

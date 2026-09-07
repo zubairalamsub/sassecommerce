@@ -111,7 +111,7 @@ func TestHandler_GetConfig_Success(t *testing.T) {
 	mockService.On("GetConfig", mock.Anything, "global", "page_size", "all", "t-1").Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/get?namespace=global&key=page_size", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/get?namespace=global&key=page_size", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -126,7 +126,7 @@ func TestHandler_GetConfig_MissingParams(t *testing.T) {
 	router := setupRouter(mockService)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/get?namespace=global", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/get?namespace=global", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -139,7 +139,7 @@ func TestHandler_GetConfig_NotFound(t *testing.T) {
 	mockService.On("GetConfig", mock.Anything, "bad", "key", "all", "t-1").Return(nil, errors.New("config not found: bad.key"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/get?namespace=bad&key=key", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/get?namespace=bad&key=key", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -157,7 +157,7 @@ func TestHandler_SetConfig_Success(t *testing.T) {
 	body := `{"namespace":"test","key":"key1","value":"value1"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/config/set", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/config/set", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -171,7 +171,7 @@ func TestHandler_SetConfig_BadRequest(t *testing.T) {
 	body := `{"namespace":"test"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/config/set", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/config/set", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -188,7 +188,7 @@ func TestHandler_SetConfig_InvalidType(t *testing.T) {
 	body := `{"namespace":"test","key":"k1","value":"v1","value_type":"invalid"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/config/set", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/config/set", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -204,7 +204,7 @@ func TestHandler_DeleteConfig_Success(t *testing.T) {
 	mockService.On("DeleteConfig", mock.Anything, "c-1", "t-1").Return(nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/config/c-1", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/config/c-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -217,7 +217,7 @@ func TestHandler_DeleteConfig_NotFound(t *testing.T) {
 	mockService.On("DeleteConfig", mock.Anything, "bad", "t-1").Return(errors.New("config not found"))
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("DELETE", "/api/v1/config/bad", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/config/bad", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -235,7 +235,7 @@ func TestHandler_ListByNamespace_Success(t *testing.T) {
 	mockService.On("ListByNamespace", mock.Anything, "storefront", "", "t-1").Return(configs, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/namespace/storefront?tenant_id=t-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/namespace/storefront?tenant_id=t-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -260,7 +260,7 @@ func TestHandler_ListNamespaces_Success(t *testing.T) {
 	mockService.On("ListNamespaces", mock.Anything).Return(resp, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/namespaces", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/namespaces", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -278,7 +278,7 @@ func TestHandler_SearchConfigs_Success(t *testing.T) {
 	mockService.On("SearchConfigs", mock.Anything, "fedex", "", "", "t-1", 1, 50).Return(configs, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/search?q=fedex", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/search?q=fedex", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -302,7 +302,7 @@ func TestHandler_BulkGet_Success(t *testing.T) {
 	body := `{"keys":[{"namespace":"global","key":"page_size"}]}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/config/bulk/get", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/config/bulk/get", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -323,7 +323,7 @@ func TestHandler_BulkSet_Success(t *testing.T) {
 	body := `{"entries":[{"namespace":"test","key":"k1","value":"v1"}],"updated_by":"admin"}`
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/config/bulk/set", bytes.NewBufferString(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/config/bulk/set", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
@@ -343,7 +343,7 @@ func TestHandler_ExportNamespace_Success(t *testing.T) {
 	mockService.On("ExportNamespace", mock.Anything, "business.shipping", "", "t-1").Return(configs, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/export/business.shipping", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/export/business.shipping", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -366,7 +366,7 @@ func TestHandler_GetAuditLog_Success(t *testing.T) {
 	mockService.On("GetAuditLog", mock.Anything, "test", "", "t-1", 1, 50).Return(logs, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/audit?namespace=test", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/audit?namespace=test", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -384,7 +384,7 @@ func TestHandler_GetConfigHistory_Success(t *testing.T) {
 	mockService.On("GetConfigHistory", mock.Anything, "c-1", "t-1", 1, 50).Return(logs, int64(1), nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/v1/config/audit/c-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/config/audit/c-1", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)

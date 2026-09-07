@@ -120,7 +120,7 @@ func TestInstallDefaults_Success(t *testing.T) {
 	mockSvc.On("InstallDefaults", mock.Anything, "tenant-1", false).Return(expected, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{}`))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-Id", "tenant-1")
 	router.ServeHTTP(w, req)
@@ -141,7 +141,7 @@ func TestInstallDefaults_ForceFlag(t *testing.T) {
 		Return(&service.InstallDefaultsResult{Created: 5, Updated: 6}, nil)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{"force":true}`))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{"force":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-Id", "tenant-1")
 	router.ServeHTTP(w, req)
@@ -157,7 +157,7 @@ func TestInstallDefaults_Unauthenticated(t *testing.T) {
 	router := setupTemplateRouterWithTenant(mockSvc, "")
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{}`))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/notification-templates/install-defaults", bytes.NewBufferString(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-Id", "tenant-1")
 	router.ServeHTTP(w, req)

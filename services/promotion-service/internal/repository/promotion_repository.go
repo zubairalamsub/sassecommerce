@@ -10,6 +10,20 @@ import (
 	"gorm.io/gorm"
 )
 
+// Sentinel errors for "the row does not exist", as distinct from "the query
+// failed". Callers need that distinction: ValidateCoupon answers an
+// unrecognised code with a 200 and Valid:false, which is the right answer for a
+// missing coupon and the wrong one for an unreachable database -- it tells a
+// customer holding a good coupon that it is invalid, and reports success while
+// doing so, so nothing alerts.
+//
+// These wrap gorm.ErrRecordNotFound so errors.Is matches either sentinel.
+var (
+	ErrPromotionNotFound      = fmt.Errorf("promotion not found: %w", gorm.ErrRecordNotFound)
+	ErrCouponNotFound         = fmt.Errorf("coupon not found: %w", gorm.ErrRecordNotFound)
+	ErrLoyaltyAccountNotFound = fmt.Errorf("loyalty account not found: %w", gorm.ErrRecordNotFound)
+)
+
 // PromotionRepository defines the interface for promotion data access
 type PromotionRepository interface {
 	// Promotions
@@ -55,7 +69,7 @@ func (r *gormPromotionRepository) GetPromotionByID(ctx context.Context, tenantID
 	var promotion models.Promotion
 	if err := r.db.WithContext(ctx).First(&promotion, "id = ? AND tenant_id = ?", id, tenantID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("promotion not found")
+			return nil, ErrPromotionNotFound
 		}
 		return nil, err
 	}
@@ -87,7 +101,7 @@ func (r *gormPromotionRepository) GetCouponByCode(ctx context.Context, tenantID,
 	var coupon models.Coupon
 	if err := r.db.WithContext(ctx).First(&coupon, "code = ? AND tenant_id = ?", code, tenantID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("coupon not found")
+			return nil, ErrCouponNotFound
 		}
 		return nil, err
 	}
@@ -124,7 +138,7 @@ func (r *gormPromotionRepository) GetLoyaltyAccount(ctx context.Context, tenantI
 	var account models.LoyaltyAccount
 	if err := r.db.WithContext(ctx).First(&account, "tenant_id = ? AND user_id = ?", tenantID, userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("loyalty account not found")
+			return nil, ErrLoyaltyAccountNotFound
 		}
 		return nil, err
 	}

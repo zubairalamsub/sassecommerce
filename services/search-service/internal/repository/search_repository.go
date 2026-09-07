@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"strings"
 
 	"github.com/ecommerce/search-service/internal/models"
@@ -46,7 +47,7 @@ func (r *esSearchRepository) EnsureIndex(ctx context.Context) error {
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	if res.StatusCode == 200 {
+	if res.StatusCode == http.StatusOK {
 		r.logger.Infof("Index '%s' already exists", r.indexName)
 		return nil
 	}
@@ -114,7 +115,7 @@ func (r *esSearchRepository) GetProductByID(ctx context.Context, productID strin
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	if res.StatusCode == 404 {
+	if res.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}
 
@@ -149,7 +150,7 @@ func (r *esSearchRepository) DeleteProduct(ctx context.Context, productID string
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	if res.IsError() && res.StatusCode != 404 {
+	if res.IsError() && res.StatusCode != http.StatusNotFound {
 		bodyBytes, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("failed to delete product: %s", string(bodyBytes))
 	}
@@ -394,20 +395,53 @@ func buildSearchQuery(req *models.SearchRequest) map[string]interface{} {
 	return query
 }
 
-func parseSearchResponse(result map[string]interface{}, page, pageSize int) (*models.SearchResponse, error) {
-	hits := result["hits"].(map[string]interface{})
-	totalObj := hits["total"].(map[string]interface{})
-	total := int64(totalObj["value"].(float64))
+// parseSearchResponse reads an Elasticsearch search body.
+//
+// Every assertion here is checked rather than bare. This is a decoded response
+// from another process: an error body, a cluster on a different major version
+// (ES 6 sends `"total": 123`, ES 7+ sends `"total": {"value": 123}`), or a
+// partial result all produce a shape this code did not expect, and a bare
+// assertion turns that into a panic in the request goroutine rather than an
+// error the handler can answer with.
+// parseTotalHits accepts both hit-count shapes Elasticsearch has used:
+// {"value": N} on 7.x and later, and a bare number on 6.x. An unrecognised
+// shape reports zero rather than panicking -- a wrong total renders an empty
+// page, where a panic loses the whole request.
+func parseTotalHits(v interface{}) int64 {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		if n, ok := t["value"].(float64); ok {
+			return int64(n)
+		}
+	case float64:
+		return int64(t)
+	}
+	return 0
+}
 
-	hitsList := hits["hits"].([]interface{})
+func parseSearchResponse(result map[string]interface{}, page, pageSize int) (*models.SearchResponse, error) {
+	hits, ok := result["hits"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected search response: no `hits` object")
+	}
+
+	total := parseTotalHits(hits["total"])
+
+	hitsList, _ := hits["hits"].([]interface{})
 	products := make([]models.ProductHit, 0, len(hitsList))
 
 	for _, h := range hitsList {
-		hit := h.(map[string]interface{})
-		source := hit["_source"].(map[string]interface{})
+		hit, ok := h.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		source, ok := hit["_source"].(map[string]interface{})
+		if !ok {
+			continue
+		}
 		score := 0.0
-		if s, ok := hit["_score"]; ok && s != nil {
-			score = s.(float64)
+		if s, ok := hit["_score"].(float64); ok {
+			score = s
 		}
 
 		sourceBytes, err := json.Marshal(source)
@@ -441,11 +475,17 @@ func parseSearchResponse(result map[string]interface{}, page, pageSize int) (*mo
 			facets.Tags = parseBuckets(tags)
 		}
 		if priceStats, ok := aggs["price_stats"].(map[string]interface{}); ok {
-			if min, ok := priceStats["min"].(float64); ok {
+			// `min` shadowed the builtin; the sibling assertions were also
+			// unguarded, which would panic rather than degrade if Elasticsearch
+			// ever returned a stats bucket with only some fields populated.
+			minPrice, hasMin := priceStats["min"].(float64)
+			maxPrice, hasMax := priceStats["max"].(float64)
+			avgPrice, hasAvg := priceStats["avg"].(float64)
+			if hasMin && hasMax && hasAvg {
 				facets.PriceRange = &models.PriceRange{
-					Min: min,
-					Max: priceStats["max"].(float64),
-					Avg: priceStats["avg"].(float64),
+					Min: minPrice,
+					Max: maxPrice,
+					Avg: avgPrice,
 				}
 			}
 		}
@@ -478,30 +518,49 @@ func parseBuckets(agg map[string]interface{}) []models.FacetBucket {
 
 	result := make([]models.FacetBucket, 0, len(buckets))
 	for _, b := range buckets {
-		bucket := b.(map[string]interface{})
-		key := fmt.Sprintf("%v", bucket["key"])
-		count := int64(bucket["doc_count"].(float64))
+		// Checked, as in parseSearchResponse: a bucket that is not the shape
+		// this expects should cost that one facet, not the whole request.
+		bucket, ok := b.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		count, ok := bucket["doc_count"].(float64)
+		if !ok {
+			continue
+		}
 		result = append(result, models.FacetBucket{
-			Key:   key,
-			Count: count,
+			Key:   fmt.Sprintf("%v", bucket["key"]),
+			Count: int64(count),
 		})
 	}
 	return result
 }
 
+// parseAutocompleteResponse reads an Elasticsearch search body. Same rule as
+// parseSearchResponse: every assertion is checked, because the input is a
+// decoded response from another process rather than a value this code built.
 func parseAutocompleteResponse(result map[string]interface{}) (*models.AutocompleteResponse, error) {
-	hits := result["hits"].(map[string]interface{})
-	hitsList := hits["hits"].([]interface{})
+	hits, ok := result["hits"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected autocomplete response: no `hits` object")
+	}
+	hitsList, _ := hits["hits"].([]interface{})
 
 	seen := make(map[string]bool)
 	suggestions := make([]models.Suggestion, 0)
 
 	for _, h := range hitsList {
-		hit := h.(map[string]interface{})
-		source := hit["_source"].(map[string]interface{})
+		hit, ok := h.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		source, ok := hit["_source"].(map[string]interface{})
+		if !ok {
+			continue
+		}
 		score := 0.0
-		if s, ok := hit["_score"]; ok && s != nil {
-			score = s.(float64)
+		if s, ok := hit["_score"].(float64); ok {
+			score = s
 		}
 
 		// Add product name suggestion

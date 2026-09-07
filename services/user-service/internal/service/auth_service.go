@@ -672,11 +672,13 @@ func (s *authService) VerifyEmail(ctx context.Context, req *models.VerifyEmailRe
 
 // ResendEmailVerification looks up a user by email and sends a new verification token
 func (s *authService) ResendEmailVerification(ctx context.Context, req *models.ResendVerificationRequest) error {
-	// Look up user — return nil even if not found to prevent email enumeration
+	// Look up user — return nil even if not found to prevent email enumeration.
+	// The dropped error is the point: any distinguishable outcome here tells an
+	// attacker whether the address is registered.
 	user, err := s.userRepo.GetByEmail(ctx, req.TenantID, req.Email)
 	if err != nil {
 		s.logger.WithField("email", req.Email).Debug("Resend verification requested for non-existent email")
-		return nil
+		return nil //nolint:nilerr // deliberate: a distinguishable response would leak account existence
 	}
 
 	if user.EmailVerified {
@@ -720,11 +722,12 @@ func (s *authService) RequestPasswordReset(ctx context.Context, req *models.Forg
 		s.recordForgotPasswordRequest(ctx, req.TenantID, emailKey, req.IPAddress, req.UserAgent, "forgot_password")
 	}
 
-	// Look up user — return success even if not found to prevent email enumeration
+	// Look up user — return success even if not found to prevent email
+	// enumeration. As above, the dropped error is deliberate.
 	user, err := s.userRepo.GetByEmail(ctx, req.TenantID, req.Email)
 	if err != nil {
 		s.logger.WithField("email", req.Email).Debug("Password reset requested for non-existent email")
-		return nil
+		return nil //nolint:nilerr // deliberate: a distinguishable response would leak account existence
 	}
 
 	if user.Status != models.UserStatusActive {
@@ -890,8 +893,12 @@ func verifyPassword(hash, password string) bool {
 
 // publishEvent publishes an event to Kafka (non-blocking, logs warning on failure)
 func (s *authService) publishEvent(ctx context.Context, eventType string, payload map[string]interface{}) {
+	// Held in a variable rather than read back out of the map: the Kafka key
+	// needs it as a string, and reading it back out was an unchecked
+	// assertion standing in for a value we had in hand two lines earlier.
+	eventID := uuid.New().String()
 	event := map[string]interface{}{
-		"event_id":   uuid.New().String(),
+		"event_id":   eventID,
 		"event_type": eventType,
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		"version":    "1.0.0",
@@ -904,7 +911,7 @@ func (s *authService) publishEvent(ctx context.Context, eventType string, payloa
 		return
 	}
 
-	if err := s.kafkaProducer.Publish(ctx, "user-events", event["event_id"].(string), data); err != nil {
+	if err := s.kafkaProducer.Publish(ctx, "user-events", eventID, data); err != nil {
 		s.logger.WithError(err).Warn("Failed to publish user event")
 	}
 }

@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -89,7 +90,11 @@ func (c *ExternalEventConsumer) consumeLoop(ctx context.Context, reader *kafka.R
 		default:
 			message, err := reader.FetchMessage(ctx)
 			if err != nil {
-				if err == context.Canceled {
+				// errors.Is, not ==: kafka-go wraps the context error, so the
+				// bare comparison missed it on every shutdown and fell through
+				// to the error branch below -- an ERROR log and a one-second
+				// sleep on the way out, each time, masking real fetch failures.
+				if errors.Is(err, context.Canceled) {
 					return
 				}
 				c.logger.Error("Failed to fetch message",

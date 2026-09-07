@@ -246,7 +246,15 @@ func (c *EventConsumer) handleOrderCancelled(ctx context.Context, payload map[st
 	}
 
 	shipment, err := c.service.GetShipmentByOrderID(ctx, tenantID, orderID)
-	if err != nil || shipment == nil {
+	if err != nil {
+		// Surfacing this rather than swallowing it: the consume loop commits
+		// the offset either way, so returning the error costs no redelivery,
+		// but returning nil meant a lookup failure logged nothing at all --
+		// the cancellation was dropped and the shipment went out anyway.
+		return fmt.Errorf("looking up shipment for cancelled order %s: %w", orderID, err)
+	}
+	if shipment == nil {
+		// No shipment for this order yet; nothing to cancel.
 		return nil
 	}
 	// Don't try to cancel something already in transit.

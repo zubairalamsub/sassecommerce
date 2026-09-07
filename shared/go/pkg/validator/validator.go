@@ -1,6 +1,7 @@
 package validator
 
 import (
+	stderrors "errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -17,10 +18,22 @@ type Validator struct {
 func New() *Validator {
 	v := validator.New()
 
-	// Register custom validators
-	v.RegisterValidation("slug", validateSlug)
-	v.RegisterValidation("phone", validatePhone)
-	v.RegisterValidation("color", validateColor)
+	// Register custom validators.
+	//
+	// RegisterValidation only fails on a programmer error -- an empty tag name
+	// or a nil function -- so panicking here is the same contract as
+	// regexp.MustCompile. Dropping the error instead left the tag silently
+	// unregistered, and an unregistered tag does not fail closed: `binding:"slug"`
+	// on an unknown tag validates nothing at all.
+	for tag, fn := range map[string]validator.Func{
+		"slug":  validateSlug,
+		"phone": validatePhone,
+		"color": validateColor,
+	} {
+		if err := v.RegisterValidation(tag, fn); err != nil {
+			panic(fmt.Sprintf("validator: registering %q: %v", tag, err))
+		}
+	}
 
 	return &Validator{validate: v}
 }
@@ -47,7 +60,11 @@ type ValidationError struct {
 func FormatValidationErrors(err error) []ValidationError {
 	var errors []ValidationError
 
-	if validationErrs, ok := err.(validator.ValidationErrors); ok {
+	// errors.As rather than a type assertion: a handler that wraps the bind
+	// error for context would otherwise get an empty list back and report a
+	// validation failure with no fields in it.
+	var validationErrs validator.ValidationErrors
+	if stderrors.As(err, &validationErrs) {
 		for _, e := range validationErrs {
 			errors = append(errors, ValidationError{
 				Field:   getJSONFieldName(e.Field()),
@@ -149,7 +166,8 @@ func getErrorMessage(e validator.FieldError) string {
 // message so parser and struct details never reach the client. Use this
 // instead of putting err.Error() in a response body.
 func SanitizedBindingErrors(err error) []ValidationError {
-	if validationErrs, ok := err.(validator.ValidationErrors); ok {
+	var validationErrs validator.ValidationErrors
+	if stderrors.As(err, &validationErrs) {
 		out := make([]ValidationError, 0, len(validationErrs))
 		for _, e := range validationErrs {
 			out = append(out, ValidationError{

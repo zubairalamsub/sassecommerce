@@ -74,7 +74,7 @@ func (p *TwilioSMSProvider) Send(notification *models.Notification) (*ProviderRe
 	data.Set("From", p.fromNumber)
 	data.Set("Body", smsBody)
 
-	req, err := http.NewRequest("POST", apiURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequest(http.MethodPost, apiURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Twilio request: %w", err)
 	}

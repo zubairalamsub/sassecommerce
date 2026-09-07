@@ -330,7 +330,7 @@ func (step *ReserveInventoryStep) callInventoryService(path string, request map[
 	}
 
 	url := step.saga.inventoryURL + path
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +475,7 @@ func (step *ProcessPaymentStep) callPaymentService(path string, request map[stri
 	}
 
 	url := step.saga.paymentURL + path
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}

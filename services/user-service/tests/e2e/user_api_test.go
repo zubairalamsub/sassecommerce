@@ -117,7 +117,7 @@ func (suite *E2ETestSuite) TestRegister_Success() {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -145,7 +145,7 @@ func (suite *E2ETestSuite) TestRegister_DuplicateEmail() {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -154,7 +154,7 @@ func (suite *E2ETestSuite) TestRegister_DuplicateEmail() {
 	// Second registration with same email
 	reqBody.Username = "user2"
 	body, _ = json.Marshal(reqBody)
-	req, _ = http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -180,7 +180,7 @@ func (suite *E2ETestSuite) TestLogin_Success() {
 	}
 
 	body, _ := json.Marshal(registerReq)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -194,7 +194,7 @@ func (suite *E2ETestSuite) TestLogin_Success() {
 	}
 
 	body, _ = json.Marshal(loginReq)
-	req, _ = http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+	req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -218,7 +218,7 @@ func (suite *E2ETestSuite) TestLogin_InvalidCredentials() {
 	}
 
 	body, _ := json.Marshal(loginReq)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -234,7 +234,7 @@ func (suite *E2ETestSuite) TestGetProfile_Success() {
 	token := suite.registerAndLogin(tenantID, "profile@example.com", "profileuser", "str0ng-Test-Passw0rd")
 
 	// Get profile
-	req, _ := http.NewRequest("GET", "/api/v1/auth/profile", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/profile", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	w := httptest.NewRecorder()
@@ -248,7 +248,7 @@ func (suite *E2ETestSuite) TestGetProfile_Success() {
 }
 
 func (suite *E2ETestSuite) TestGetProfile_Unauthorized() {
-	req, _ := http.NewRequest("GET", "/api/v1/auth/profile", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/profile", nil)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -266,7 +266,7 @@ func (suite *E2ETestSuite) TestChangePassword_Success() {
 	}
 
 	body, _ := json.Marshal(changeReq)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/change-password", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/change-password", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
@@ -290,7 +290,7 @@ func (suite *E2ETestSuite) TestListUsers_Success() {
 	token := suite.registerAndLogin(tenantID, "listmain@example.com", "listmain", "str0ng-Test-Passw0rd")
 
 	// List users
-	req, _ := http.NewRequest("GET", "/api/v1/users?page=1&page_size=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/users?page=1&page_size=10", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	w := httptest.NewRecorder()
@@ -318,7 +318,7 @@ func (suite *E2ETestSuite) registerAndLogin(tenantID, email, username, password 
 	}
 
 	body, _ := json.Marshal(registerReq)
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
@@ -331,7 +331,7 @@ func (suite *E2ETestSuite) registerAndLogin(tenantID, email, username, password 
 	}
 
 	body, _ = json.Marshal(loginReq)
-	req, _ = http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+	req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)

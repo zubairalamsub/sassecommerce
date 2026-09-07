@@ -95,8 +95,7 @@
           "custom": {
             "align": "left",
             "filterable": true
-          },
-          "noValue": "No order matches that identifier"
+          }
         },
         "overrides": [
           {
@@ -144,7 +143,11 @@
             "properties": [
               {
                 "id": "unit",
-                "value": "currencyBDT"
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 2
               }
             ]
           }
@@ -183,8 +186,7 @@
           "custom": {
             "align": "left",
             "filterable": true
-          },
-          "noValue": "No registered customer matches. A guest order's contact details are not stored — see the note at the top."
+          }
         },
         "overrides": [
           {

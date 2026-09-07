@@ -111,29 +111,20 @@ func TestHandleMessage_MalformedJSONIsDroppedNotPanicked(t *testing.T) {
 	assertUpdateStockNotCalled(t, repo)
 }
 
-// EventEnvelope.Version is a plain string here (unlike notification-service's
-// envelope, which uses sharedkafka.EventVersion for exactly this reason -- see
-// that package's models tests). A numeric version -- the shape order-service
-// historically emitted, and the shape that took out order-event consumption
-// platform-wide -- fails the whole json.Unmarshal call, so handleMessage
-// returns before ever looking at EventType, silently dropping a legitimate
-// stock update. Version itself is never read anywhere in this consumer, so
-// nothing about its own logic needs it to be strict.
+// EventEnvelope.Version used to be a plain string here, and this test asserted
+// the consequence: a numeric version made json.Unmarshal return a type error,
+// so handleMessage returned before dispatching on EventType and a legitimate
+// stock update was dropped in silence. That is the shape order-service's own
+// publisher emits, and the shape that took out order-event consumption
+// platform-wide once already.
 //
-// Not live today: the only current producer wired to inventory-events,
-// inventory-service's KafkaEventPublisher, always sends version as a JSON
-// string ("1.0.0"), so this is a latent landmine rather than an active bug.
-// Flagged in the QA report.
-// This test used to be named ...NumericVersionDropsTheWholeEnvelope and
-// asserted that UpdateStock was never called: `version` was declared as a Go
-// string, so a numeric version made json.Unmarshal return a type error and
-// handleMessage returned before dispatching on EventType. The field is now
-// sharedkafka.EventVersion, which accepts both shapes producers on this
-// platform emit, so the event must be processed rather than dropped.
+// The field is now sharedkafka.EventVersion, which accepts both shapes
+// producers here emit, so the assertion is inverted: the event must be
+// processed. Kept rather than deleted, because a silently dropped stock update
+// is exactly what it guards against.
 //
-// Left in place deliberately — a numeric version is the shape order-service's
-// publisher uses, and a silently dropped stock update is exactly what this
-// asserts against.
+// Version is never read in this consumer. It is declared only so an unexpected
+// shape cannot reject the envelope.
 func TestHandleMessage_NumericVersionIsStillProcessed(t *testing.T) {
 	repo := new(mocks.MockProductRepository)
 	c := newTestConsumer(repo)

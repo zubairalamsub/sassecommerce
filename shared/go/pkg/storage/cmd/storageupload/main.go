@@ -35,7 +35,11 @@ func main() {
 
 	// Generate a 200x100 PNG with a Saajan-orange band so it's recognizable
 	// at a glance in the OCI Console object preview.
-	imgBytes := makeTestPNG()
+	imgBytes, err := makeTestPNG()
+	if err != nil {
+		fmt.Printf("generating test image failed: %v\n", err)
+		os.Exit(1)
+	}
 
 	tenantID := "demo-tenant"
 	timestamp := time.Now().UTC().Format("20060102-150405")
@@ -76,7 +80,7 @@ func main() {
 // makeTestPNG draws a 200×100 image: white background with a Saajan-orange
 // horizontal band. Hand-rolled rather than using image/png + image.RGBA — keeps
 // the binary tiny and dependency-free.
-func makeTestPNG() []byte {
+func makeTestPNG() ([]byte, error) {
 	const w, h = 200, 100
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	white := color.RGBA{255, 255, 255, 255}
@@ -91,8 +95,13 @@ func makeTestPNG() []byte {
 		}
 	}
 	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
+	// A failed encode leaves buf holding a truncated PNG, which would upload
+	// and verify fine — the tool would report storage healthy having stored a
+	// corrupt object. Fail here instead.
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, fmt.Errorf("encode test png: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // Force-link otherwise-unused stdlib imports — harmless future-proofing.

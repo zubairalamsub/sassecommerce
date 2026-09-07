@@ -109,11 +109,15 @@ func main() {
 	api.RegisterRoutes(router, handler)
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Server.Port),
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    fmt.Sprintf(":%s", cfg.Server.Port),
+		Handler: router,
+		// ReadTimeout alone bounds a slow-header client, but it has to stay
+		// generous enough for request bodies, so it is a loose leash on the
+		// headers. ReadHeaderTimeout deadlines the headers on their own.
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

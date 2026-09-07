@@ -4,6 +4,26 @@ on:
   push:
     branches: [master]
 
+  # Re-deploying without a code change used to be impossible: push was the
+  # only trigger, and detect-changes builds only the services whose paths
+  # that push touched. A bare `workflow_dispatch: {}` would inherit that
+  # path filter, find nothing changed, and resolve to an empty matrix — the
+  # run would go green having built and signed nothing, which is a worse
+  # failure than having no manual trigger at all. So on a manual run the
+  # operator names the services and the path filter is bypassed entirely
+  # (see "Resolve services to build" below).
+  #
+  # The ref is deliberately not pinned to master: re-running against a
+  # hotfix branch is a legitimate use. Note that doing so pushes that
+  # branch's build to the `latest` tag, same as a master deploy would.
+  workflow_dispatch:
+    inputs:
+      services:
+        description: '"all", or a comma-separated list (e.g. order-service,user-service)'
+        required: false
+        default: all
+        type: string
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
@@ -13,7 +33,7 @@ permissions:
 
 jobs:
   detect-changes:
-    name: Detect Changed Services
+    name: Resolve Services to Build
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.changes.outputs.services }}
@@ -21,22 +41,89 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          # Two commits is all the push path needs for its HEAD~1..HEAD diff.
+          # The manual path does not diff at all, so this stays as-is.
           fetch-depth: 2
 
-      - name: Detect changed services
+      - name: Resolve services to build
         id: changes
+        env:
+          # Read through env, never interpolated into the script body: this is
+          # attacker-controllable text on a dispatch and `${{ }}` inside run:
+          # would splice it straight into bash.
+          REQUESTED_INPUT: ${{ inputs.services }}
         run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          # Single source of truth for what this workflow may deploy. Both
+          # paths below read it, so onboarding a service is a one-line change
+          # and "all" can never drift from what pushes would have built.
+          # Order is load-bearing only cosmetically (it sets matrix order).
+          DEPLOYABLE=(config-service shipping-service analytics-service notification-service
+                      search-service review-service promotion-service order-service
+                      user-service product-service tenant-service payment-service inventory-service)
           SERVICES=()
 
-          for svc in config-service shipping-service analytics-service notification-service \
-                     search-service review-service promotion-service order-service \
-                     user-service product-service tenant-service payment-service inventory-service; do
-            if echo "$CHANGED_FILES" | grep -q "services/$svc/"; then
-              SERVICES+=("$svc")
-            fi
-          done
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # No diff to filter on here: HEAD~1..HEAD is whatever the last
+            # push happened to touch, which has no relationship to what the
+            # operator wants redeployed. Hence the explicit input.
+            if [ -z "$REQUESTED_INPUT" ] || [ "$REQUESTED_INPUT" = "all" ]; then
+              SERVICES=("${DEPLOYABLE[@]}")
+            else
+              # Service names contain no whitespace, so stripping all of it is
+              # a simpler trim than a regex and makes "a, b" work.
+              IFS=',' read -ra RAW <<< "$REQUESTED_INPUT"
+              REQUESTED=()
+              for entry in "${RAW[@]}"; do
+                name=$(printf '%s' "$entry" | tr -d '[:space:]')
+                [ -n "$name" ] && REQUESTED+=("$name")
+              done
 
+              # Filter DEPLOYABLE by the request rather than iterating the
+              # request itself: that de-duplicates a repeated name (which
+              # would otherwise race two identical pushes of the same tag)
+              # and keeps matrix order identical to the push path.
+              for svc in "${DEPLOYABLE[@]}"; do
+                if printf '%s\n' "${REQUESTED[@]}" | grep -qxF "$svc"; then
+                  SERVICES+=("$svc")
+                fi
+              done
+
+              # A typo must not silently shrink the deploy set. Reject it here,
+              # where the message is readable, instead of letting an unknown
+              # name reach the matrix and fail on a missing Dockerfile.
+              UNKNOWN=()
+              for name in "${REQUESTED[@]}"; do
+                if ! printf '%s\n' "${DEPLOYABLE[@]}" | grep -qxF "$name"; then
+                  UNKNOWN+=("$name")
+                fi
+              done
+              if [ ${#UNKNOWN[@]} -gt 0 ]; then
+                echo "::error::Unknown service(s): ${UNKNOWN[*]}. Deployable: ${DEPLOYABLE[*]}"
+                exit 1
+              fi
+            fi
+
+            # Backstop for the zero-services trap this trigger exists to
+            # avoid — e.g. an input of only commas/spaces passes the checks
+            # above but selects nothing. A manual run that would build
+            # nothing is operator error, so fail loudly rather than go green.
+            if [ ${#SERVICES[@]} -eq 0 ]; then
+              echo "::error::Input '$REQUESTED_INPUT' selected no services; nothing would be built."
+              exit 1
+            fi
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
+            for svc in "${DEPLOYABLE[@]}"; do
+              if echo "$CHANGED_FILES" | grep -q "services/$svc/"; then
+                SERVICES+=("$svc")
+              fi
+            done
+          fi
+
+          # An empty matrix is still a valid, expected outcome for a push that
+          # touched no service (docs, CI config), and is gated by the
+          # `!= '[]'` condition on build-and-push.
           if [ ${#SERVICES[@]} -eq 0 ]; then
             echo "services=[]" >> $GITHUB_OUTPUT
           else
@@ -44,7 +131,7 @@ jobs:
             echo "services=$JSON" >> $GITHUB_OUTPUT
           fi
 
-          echo "Changed services: ${SERVICES[*]:-none}"
+          echo "Services to build: ${SERVICES[*]:-none}"
 
   build-and-push:
     name: Build & Push ${{ matrix.service }}

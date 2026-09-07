@@ -58,7 +58,7 @@
       "title": "How to use this",
       "type": "text",
       "gridPos": {
-        "h": 5,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 0
@@ -79,7 +79,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 9
       },
       "description": "The authoritative answer for an order's tenant. Empty customer_id means a guest order.",
       "targets": [
@@ -87,7 +87,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n    order_id,\n    tenant_id,\n    NULLIF(customer_id, '') AS customer_id,\n    status,\n    total_amount,\n    currency,\n    tracking_number,\n    carrier,\n    payment_id,\n    shipping_city,\n    shipping_country,\n    created_at,\n    updated_at\nFROM support_order_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        order_id         ILIKE '%' || ${search:sqlstring} || '%'\n     OR customer_id     ILIKE '%' || ${search:sqlstring} || '%'\n     OR tracking_number  ILIKE '%' || ${search:sqlstring} || '%'\n     OR payment_id       ILIKE '%' || ${search:sqlstring} || '%'\n     OR reservation_id   ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
+          "rawSql": "SELECT\n    order_id,\n    tenant_id,\n    NULLIF(customer_id, '') AS customer_id,\n    status,\n    total_amount,\n    currency,\n    COALESCE(tracking_number, '') AS tracking_number,\n    COALESCE(carrier, '') AS carrier,\n    COALESCE(payment_id, '') AS payment_id,\n    COALESCE(shipping_city, '') AS shipping_city,\n    COALESCE(shipping_country, '') AS shipping_country,\n    created_at,\n    updated_at\nFROM support_order_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        order_id         ILIKE '%' || ${search:sqlstring} || '%'\n     OR customer_id     ILIKE '%' || ${search:sqlstring} || '%'\n     OR tracking_number  ILIKE '%' || ${search:sqlstring} || '%'\n     OR payment_id       ILIKE '%' || ${search:sqlstring} || '%'\n     OR reservation_id   ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
         }
       ],
       "fieldConfig": {
@@ -95,7 +95,8 @@
           "custom": {
             "align": "left",
             "filterable": true
-          }
+          },
+          "noValue": "Type an identifier in Search above — order id, customer id, tracking number or payment id"
         },
         "overrides": [
           {
@@ -104,10 +105,6 @@
               "options": "tenant_id"
             },
             "properties": [
-              {
-                "id": "custom.width",
-                "value": 190
-              },
               {
                 "id": "custom.cellOptions",
                 "value": {
@@ -120,6 +117,10 @@
                   "mode": "fixed",
                   "fixedColor": "orange"
                 }
+              },
+              {
+                "id": "custom.width",
+                "value": 190
               }
             ]
           },
@@ -132,6 +133,10 @@
               {
                 "id": "noValue",
                 "value": "— guest —"
+              },
+              {
+                "id": "custom.width",
+                "value": 300
               }
             ]
           },
@@ -148,6 +153,42 @@
               {
                 "id": "decimals",
                 "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "order_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "payment_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tracking_number"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
               }
             ]
           }
@@ -170,7 +211,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 19
       },
       "description": "Registered customers only. Copy customer_id into Search to pull up their orders in the panel above. Contains personal data.",
       "targets": [
@@ -178,7 +219,7 @@
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n    customer_id,\n    tenant_id,\n    email,\n    username,\n    TRIM(CONCAT(first_name, ' ', last_name)) AS name,\n    phone,\n    status,\n    role,\n    email_verified,\n    last_login_at,\n    created_at,\n    deleted_at\nFROM support_customer_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        customer_id ILIKE '%' || ${search:sqlstring} || '%'\n     OR email       ILIKE '%' || ${search:sqlstring} || '%'\n     OR username    ILIKE '%' || ${search:sqlstring} || '%'\n     OR phone       ILIKE '%' || ${search:sqlstring} || '%'\n     OR first_name  ILIKE '%' || ${search:sqlstring} || '%'\n     OR last_name   ILIKE '%' || ${search:sqlstring} || '%'\n     OR TRIM(CONCAT(first_name, ' ', last_name)) ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
+          "rawSql": "SELECT\n    customer_id,\n    tenant_id,\n    email,\n    COALESCE(username, '') AS username,\n    TRIM(CONCAT(first_name, ' ', last_name)) AS name,\n    COALESCE(phone, '') AS phone,\n    COALESCE(status, '') AS status,\n    COALESCE(role, '') AS role,\n    email_verified,\n    last_login_at,\n    created_at,\n    deleted_at\nFROM support_customer_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        customer_id ILIKE '%' || ${search:sqlstring} || '%'\n     OR email       ILIKE '%' || ${search:sqlstring} || '%'\n     OR username    ILIKE '%' || ${search:sqlstring} || '%'\n     OR phone       ILIKE '%' || ${search:sqlstring} || '%'\n     OR first_name  ILIKE '%' || ${search:sqlstring} || '%'\n     OR last_name   ILIKE '%' || ${search:sqlstring} || '%'\n     OR TRIM(CONCAT(first_name, ' ', last_name)) ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
         }
       ],
       "fieldConfig": {
@@ -186,7 +227,8 @@
           "custom": {
             "align": "left",
             "filterable": true
-          }
+          },
+          "noValue": "Type an identifier in Search above — customer id, email, phone, username or name"
         },
         "overrides": [
           {
@@ -195,10 +237,6 @@
               "options": "tenant_id"
             },
             "properties": [
-              {
-                "id": "custom.width",
-                "value": 190
-              },
               {
                 "id": "custom.cellOptions",
                 "value": {
@@ -211,6 +249,10 @@
                   "mode": "fixed",
                   "fixedColor": "orange"
                 }
+              },
+              {
+                "id": "custom.width",
+                "value": 190
               }
             ]
           },
@@ -223,6 +265,66 @@
               {
                 "id": "noValue",
                 "value": "active"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "customer_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "email"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 240
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "phone"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_login_at"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "never"
               }
             ]
           }
@@ -244,7 +346,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 29
       },
       "description": "Exact match on customer_id, so it stays empty until you search an id rather than a name.",
       "targets": [
@@ -263,7 +365,44 @@
           },
           "noValue": "Search an exact customer_id to list their orders"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "order_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "customer_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tenant_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -281,7 +420,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 29
       },
       "description": "Exact match on order_id, to confirm you have the right order.",
       "targets": [
@@ -300,7 +439,44 @@
           },
           "noValue": "Search an exact order_id to list its items"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "order_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "product_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -318,7 +494,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 38
       },
       "description": "Straight from the event store. This is what the read model cannot tell you: the read model holds current state, this holds how it got there. A gap between the last event and the read model's status means projection is behind.",
       "targets": [
@@ -349,6 +525,18 @@
                 "value": 620
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "order_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
           }
         ]
       },
@@ -368,7 +556,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 48
       },
       "description": "A plain substring search across every service's logs. Bounded by the dashboard time range, and by Loki's retention — an old order will have no logs left. Use the event history panel above for anything authoritative.",
       "targets": [
@@ -396,7 +584,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 60
       },
       "options": {
         "mode": "markdown",

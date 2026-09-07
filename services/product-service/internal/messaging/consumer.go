@@ -5,18 +5,29 @@ import (
 	"encoding/json"
 
 	"github.com/ecommerce/product-service/internal/repository"
+	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
 
 // EventEnvelope represents a Kafka event envelope
 type EventEnvelope struct {
-	EventID   string                 `json:"event_id"`
-	EventType string                 `json:"event_type"`
-	Timestamp string                 `json:"timestamp"`
-	Version   string                 `json:"version,omitempty"`
-	Payload   map[string]interface{} `json:"payload,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
+	EventID   string `json:"event_id"`
+	EventType string `json:"event_type"`
+	Timestamp string `json:"timestamp"`
+	// sharedkafka.EventVersion, not string. Producers on this platform disagree
+	// about the JSON type of `version`: order-service emits a bare number,
+	// everything else a quoted string. Against a `string` field the numeric
+	// shape makes json.Unmarshal return an UnmarshalTypeError -- and the
+	// handler returns on that error without looking at the fields the decoder
+	// did populate, so the event is dropped and the log says "unmarshal
+	// error" rather than naming the event lost. That is the failure that took
+	// out order confirmation, shipped, cancelled, payment and receipt emails
+	// once already. Nothing here reads this field; it is declared only so an
+	// unexpected shape cannot reject the envelope.
+	Version sharedkafka.EventVersion `json:"version,omitempty"`
+	Payload map[string]interface{}   `json:"payload,omitempty"`
+	Data    map[string]interface{}   `json:"data,omitempty"`
 }
 
 // GetPayload returns the payload, falling back to Data if Payload is nil

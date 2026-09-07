@@ -44,6 +44,18 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      # Blocking, unlike lint below.
+      #
+      # `next build` does run TypeScript, so this looks redundant — it is not.
+      # Verified by putting a deliberate type error in a test file: the build
+      # printed "Finished TypeScript" and still exited 0. Next only checks the
+      # files reachable from what it bundles, and nothing imports a test. That
+      # is how 12 TS2554 errors sat in src/__tests__/stores/reviews.test.ts
+      # with CI green — stale calls to a store method that had gained a
+      # required tenantId argument. At zero now, so keep it a gate.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm test -- --ci
 

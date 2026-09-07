@@ -1,0 +1,405 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "title": "Support Lookup",
+  "uid": "support-lookup",
+  "tags": [
+    "support",
+    "lookup",
+    "tenant"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "search",
+        "label": "Search",
+        "description": "Order id, customer id, email, phone, username, name, tracking number or payment id. Matching is case-insensitive and partial, so the last 4 digits of a phone number or the first part of an id both work.",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "options": [],
+        "skipUrlSync": false
+      },
+      {
+        "name": "tenant",
+        "label": "Tenant filter",
+        "description": "Leave empty to search every tenant. Set it to confine a search to one tenant.",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "options": [],
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "How to use this",
+      "type": "text",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Put any identifier in **Search** above — an order id, customer id, email, phone number, username, customer name, tracking number or payment id. Every panel below matches it against the fields it holds, so you do not need to know which kind of identifier you have. The **tenant id** you are after appears in whichever panel hits.\n\nMatching is case-insensitive and partial: `0171` finds a phone ending in those digits, `a1b2` finds an order id starting with them.\n\n**Guest orders have no contact details stored.** `POST /orders` accepts `guest_email`, `guest_name` and `guest_phone`, but the order aggregate discards them — they are on neither the event nor the read model. So a guest order is findable by its order id and nothing else, and its `customer_id` is blank. Searching a guest's phone number will return nothing, because that number was never persisted.\n\nThese panels read the order and user read models directly, as `grafana_ro`, which can only SELECT from three purpose-built views. Customer name, email and phone are personal data — see the note at the bottom of this dashboard."
+      }
+    },
+    {
+      "title": "Orders — matched on order id, customer id, tracking number or payment id",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "orders-ro"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "description": "The authoritative answer for an order's tenant. Empty customer_id means a guest order.",
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    order_id,\n    tenant_id,\n    NULLIF(customer_id, '') AS customer_id,\n    status,\n    total_amount,\n    currency,\n    tracking_number,\n    carrier,\n    payment_id,\n    shipping_city,\n    shipping_country,\n    created_at,\n    updated_at\nFROM support_order_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        order_id         ILIKE '%' || ${search:sqlstring} || '%'\n     OR customer_id     ILIKE '%' || ${search:sqlstring} || '%'\n     OR tracking_number  ILIKE '%' || ${search:sqlstring} || '%'\n     OR payment_id       ILIKE '%' || ${search:sqlstring} || '%'\n     OR reservation_id   ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          },
+          "noValue": "No order matches that identifier"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tenant_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "customer_id"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "— guest —"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_amount"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyBDT"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": []
+    },
+    {
+      "title": "Customers — matched on customer id, email, phone, username or name",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "users-ro"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "description": "Registered customers only. Copy customer_id into Search to pull up their orders in the panel above. Contains personal data.",
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    customer_id,\n    tenant_id,\n    email,\n    username,\n    TRIM(CONCAT(first_name, ' ', last_name)) AS name,\n    phone,\n    status,\n    role,\n    email_verified,\n    last_login_at,\n    created_at,\n    deleted_at\nFROM support_customer_lookup\nWHERE ${search:sqlstring} <> ''\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\n  AND (\n        customer_id ILIKE '%' || ${search:sqlstring} || '%'\n     OR email       ILIKE '%' || ${search:sqlstring} || '%'\n     OR username    ILIKE '%' || ${search:sqlstring} || '%'\n     OR phone       ILIKE '%' || ${search:sqlstring} || '%'\n     OR first_name  ILIKE '%' || ${search:sqlstring} || '%'\n     OR last_name   ILIKE '%' || ${search:sqlstring} || '%'\n     OR TRIM(CONCAT(first_name, ' ', last_name)) ILIKE '%' || ${search:sqlstring} || '%'\n  )\nORDER BY created_at DESC\nLIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          },
+          "noValue": "No registered customer matches. A guest order's contact details are not stored — see the note at the top."
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tenant_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deleted_at"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "active"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "title": "That customer's orders — paste a customer_id above",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "orders-ro"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "description": "Exact match on customer_id, so it stays empty until you search an id rather than a name.",
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    order_id,\n    tenant_id,\n    status,\n    total_amount,\n    currency,\n    created_at\nFROM support_order_lookup\nWHERE ${search:sqlstring} <> ''\n  AND customer_id = ${search:sqlstring}\n  AND (${tenant:sqlstring} = '' OR tenant_id = ${tenant:sqlstring})\nORDER BY created_at DESC\nLIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          },
+          "noValue": "Search an exact customer_id to list their orders"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "title": "Line items — paste an order_id above",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "orders-ro"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "description": "Exact match on order_id, to confirm you have the right order.",
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    sku,\n    name,\n    quantity,\n    unit_price,\n    (quantity * unit_price) AS line_total,\n    product_id\nFROM support_order_items\nWHERE ${search:sqlstring} <> ''\n  AND order_id = ${search:sqlstring}\nORDER BY sku\nLIMIT 200"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          },
+          "noValue": "Search an exact order_id to list its items"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "title": "Order history — every event, oldest first",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "orders-ro"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "description": "Straight from the event store. This is what the read model cannot tell you: the read model holds current state, this holds how it got there. A gap between the last event and the read model's status means projection is behind.",
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    version,\n    event_type,\n    timestamp,\n    event_data\nFROM support_order_history\nWHERE ${search:sqlstring} <> ''\n  AND order_id = ${search:sqlstring}\nORDER BY version ASC\nLIMIT 200"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "filterable": true
+          },
+          "noValue": "Search an exact order_id to see its event history"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event_data"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 620
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "title": "Logs mentioning this identifier",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "description": "A plain substring search across every service's logs. Bounded by the dashboard time range, and by Loki's retention — an old order will have no logs left. Use the event history panel above for anything authoritative.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"docker\"} |= ${search:doublequote}",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "title": "Notes",
+      "type": "text",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### This dashboard shows personal data\n\nName, email and phone are here because looking a customer up by phone is the job. Two consequences worth being deliberate about:\n\n* **It is not tenant-scoped.** Anyone who can open this dashboard can search every tenant's customers. The rest of the platform enforces tenant isolation on every request; this deliberately does not, because support needs to find an order without already knowing its tenant. If that is not the right trade-off for who has Grafana access, restrict the dashboard's folder permissions, or set the **Tenant filter** as a required value.\n* **The database is the right place to read this from, and logs are not.** Nothing here logs a phone number. Personal data in logs gets shipped to Loki, indexed and retained on a schedule nobody is thinking about at the time; reading it from the read model on demand leaves no second copy.\n\n`grafana_ro` can only SELECT, from three views that list their columns explicitly. `users.password_hash` is not among them, and adding a column to `users` will not expose it here until someone edits the view.\n\nSetup: `make grafana-lookup-setup` (see `infrastructure/monitoring/postgres/grafana-lookup.sql`)."
+      }
+    }
+  ]
+}

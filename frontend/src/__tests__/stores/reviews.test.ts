@@ -1,6 +1,14 @@
 import { useReviewStore } from '@/stores/reviews';
 import { act } from '@testing-library/react';
 
+// addReview takes (review, tenantId, token?) — tenantId became required when
+// the review API was scoped to a tenant. These calls were never updated, which
+// tsc reported as 12 TS2554 errors while the tests kept passing: addReview adds
+// the review locally first, and the API call it then makes with an undefined
+// tenant fails into a catch that keeps the optimistic entry. So the suite
+// covers the optimistic path only, and passed for the wrong reason.
+const TENANT_ID = 'tenant-test';
+
 const sampleReview = {
   productId: 'prod-1',
   userId: 'user-1',
@@ -42,7 +50,7 @@ describe('Review Store', () => {
 
   test('adds a review with generated id and timestamp', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview);
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID);
     });
 
     const reviews = useReviewStore.getState().reviews;
@@ -55,8 +63,8 @@ describe('Review Store', () => {
 
   test('adds reviews in reverse chronological order (newest first)', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview);
-      useReviewStore.getState().addReview(sampleReview2);
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID);
+      useReviewStore.getState().addReview(sampleReview2, TENANT_ID);
     });
 
     const reviews = useReviewStore.getState().reviews;
@@ -67,9 +75,9 @@ describe('Review Store', () => {
 
   test('getProductReviews filters by productId', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview);
-      useReviewStore.getState().addReview(sampleReview2);
-      useReviewStore.getState().addReview(otherProductReview);
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID);
+      useReviewStore.getState().addReview(sampleReview2, TENANT_ID);
+      useReviewStore.getState().addReview(otherProductReview, TENANT_ID);
     });
 
     const prod1Reviews = useReviewStore.getState().getProductReviews('prod-1');
@@ -82,7 +90,7 @@ describe('Review Store', () => {
 
   test('getProductReviews returns empty for unknown product', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview);
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID);
     });
 
     expect(useReviewStore.getState().getProductReviews('unknown')).toHaveLength(0);
@@ -90,8 +98,8 @@ describe('Review Store', () => {
 
   test('getAverageRating calculates correctly', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview); // rating 5
-      useReviewStore.getState().addReview(sampleReview2); // rating 3
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID); // rating 5
+      useReviewStore.getState().addReview(sampleReview2, TENANT_ID); // rating 3
     });
 
     const result = useReviewStore.getState().getAverageRating('prod-1');
@@ -107,8 +115,8 @@ describe('Review Store', () => {
 
   test('getAverageRating only considers correct product', () => {
     act(() => {
-      useReviewStore.getState().addReview(sampleReview); // prod-1, rating 5
-      useReviewStore.getState().addReview(otherProductReview); // prod-2, rating 4
+      useReviewStore.getState().addReview(sampleReview, TENANT_ID); // prod-1, rating 5
+      useReviewStore.getState().addReview(otherProductReview, TENANT_ID); // prod-2, rating 4
     });
 
     const result1 = useReviewStore.getState().getAverageRating('prod-1');
@@ -122,7 +130,7 @@ describe('Review Store', () => {
 
   test('handles single review average', () => {
     act(() => {
-      useReviewStore.getState().addReview({ ...sampleReview, rating: 3 });
+      useReviewStore.getState().addReview({ ...sampleReview, rating: 3 }, TENANT_ID);
     });
 
     const result = useReviewStore.getState().getAverageRating('prod-1');

@@ -14,7 +14,7 @@ public class Warehouse : BaseEntity
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public bool IsActive { get; set; } = true;
-    public bool IsDefault { get; set; } = false;
+    public bool IsDefault { get; set; }
 
     // Navigation properties
     public ICollection<InventoryItem> InventoryItems { get; set; } = new List<InventoryItem>();

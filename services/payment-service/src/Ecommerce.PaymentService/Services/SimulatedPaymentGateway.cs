@@ -114,9 +114,8 @@ public class SimulatedPaymentGateway : IPaymentGateway
         _logger.LogInformation("Tokenizing card ending in {Last4}", cardNumber.Length >= 4 ? cardNumber[^4..] : "****");
 
         // Check for test card behaviors
-        if (TestCardBehaviors.ContainsKey(cardNumber))
+        if (TestCardBehaviors.TryGetValue(cardNumber, out var behavior))
         {
-            var behavior = TestCardBehaviors[cardNumber];
             _logger.LogWarning("Test card detected with behavior: {Behavior}", behavior);
         }
 

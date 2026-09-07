@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -53,7 +54,12 @@ public class SslCommerzPaymentGateway : IPaymentGateway
         {
             ["store_id"] = _config.StoreId,
             ["store_passwd"] = _config.StorePassword,
-            ["total_amount"] = request.Amount.ToString("F2"),
+            // InvariantCulture is load-bearing, not tidiness: "F2" uses the
+            // current culture's decimal separator, so on a host set to a
+            // comma-decimal locale (de-DE, fr-FR, and most of the EU) an amount
+            // of 1234.50 was posted to SSLCommerz as "1234,50". Containers
+            // usually run invariant, which is why this has not bitten yet.
+            ["total_amount"] = request.Amount.ToString("F2", CultureInfo.InvariantCulture),
             ["currency"] = request.Currency ?? "BDT",
             ["tran_id"] = tranId,
             ["success_url"] = _config.SuccessUrl,
@@ -151,7 +157,8 @@ public class SslCommerzPaymentGateway : IPaymentGateway
             ["store_id"] = _config.StoreId,
             ["store_passwd"] = _config.StorePassword,
             ["bank_tran_id"] = request.TransactionId,
-            ["refund_amount"] = request.Amount.ToString("F2"),
+            // As in ChargeAsync: the gateway parses this, not a human.
+            ["refund_amount"] = request.Amount.ToString("F2", CultureInfo.InvariantCulture),
             ["refund_remarks"] = request.Reason ?? "Customer refund request",
             ["refe_id"] = refundId
         };
@@ -305,16 +312,26 @@ public class SslCommerzPaymentGateway : IPaymentGateway
             if (ipnData.TryGetValue(field, out var value))
             {
                 if (dataToHash.Length > 0) dataToHash.Append('&');
-                dataToHash.Append($"{field}={value}");
+                dataToHash.Append(CultureInfo.InvariantCulture, $"{field}={value}");
             }
         }
 
-        dataToHash.Append($"&store_passwd={ComputeMd5(_config.StorePassword)}");
+        dataToHash.Append(CultureInfo.InvariantCulture, $"&store_passwd={ComputeMd5(_config.StorePassword)}");
 
         var computedSign = ComputeMd5(dataToHash.ToString());
         return string.Equals(computedSign, receivedSign, StringComparison.OrdinalIgnoreCase);
     }
 
+    // MD5 is mandated by the SSLCommerz IPN specification: the provider computes
+    // the verify_sign it sends us with MD5, so we have to compute the same digest
+    // to compare against it. Substituting a modern hash here would not harden
+    // anything, it would simply stop every IPN callback verifying.
+    //
+    // This is signature *verification* of a value that already depends on the
+    // store password, not password hashing or a confidentiality boundary.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security", "CA5351:Do Not Use Broken Cryptographic Algorithms",
+        Justification = "MD5 is fixed by the SSLCommerz IPN protocol; it is used to reproduce the provider's verify_sign, not to protect anything of our own choosing.")]
     private static string ComputeMd5(string input)
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes(input));

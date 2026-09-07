@@ -148,7 +148,7 @@ public class InventoryService : IInventoryService
 
         _logger.LogInformation("Inventory item created: {InventoryItemId} for Product {ProductId}", created.Id, created.ProductId);
 
-        return await MapToInventoryItemResponseAsync(created, warehouse.Name);
+        return MapToInventoryItemResponse(created, warehouse.Name);
     }
 
     public async Task<InventoryItemResponse> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, string tenantId, CancellationToken cancellationToken = default)
@@ -165,13 +165,13 @@ public class InventoryService : IInventoryService
         var updated = await _inventoryRepository.UpdateAsync(inventoryItem, cancellationToken);
         _logger.LogInformation("Inventory item updated: {InventoryItemId}", id);
 
-        return await MapToInventoryItemResponseAsync(updated, updated.Warehouse.Name);
+        return MapToInventoryItemResponse(updated, updated.Warehouse.Name);
     }
 
     public async Task<InventoryItemResponse?> GetInventoryItemByIdAsync(Guid id, string tenantId, CancellationToken cancellationToken = default)
     {
         var inventoryItem = await _inventoryRepository.GetByIdAsync(id, tenantId, cancellationToken);
-        return inventoryItem == null ? null : await MapToInventoryItemResponseAsync(inventoryItem, inventoryItem.Warehouse.Name);
+        return inventoryItem == null ? null : MapToInventoryItemResponse(inventoryItem, inventoryItem.Warehouse.Name);
     }
 
     public async Task<StockLevelResponse?> GetStockLevelAsync(string tenantId, string productId, string? variantId = null, CancellationToken cancellationToken = default)
@@ -183,7 +183,7 @@ public class InventoryService : IInventoryService
             items = items.Where(i => i.VariantId == variantId).ToList();
         }
 
-        if (!items.Any())
+        if (items.Count == 0)
         {
             return null;
         }
@@ -216,7 +216,7 @@ public class InventoryService : IInventoryService
 
         foreach (var item in items)
         {
-            responses.Add(await MapToInventoryItemResponseAsync(item, item.Warehouse.Name));
+            responses.Add(MapToInventoryItemResponse(item, item.Warehouse.Name));
         }
 
         return responses;
@@ -229,7 +229,7 @@ public class InventoryService : IInventoryService
 
         foreach (var item in items)
         {
-            responses.Add(await MapToInventoryItemResponseAsync(item, item.Warehouse.Name));
+            responses.Add(MapToInventoryItemResponse(item, item.Warehouse.Name));
         }
 
         return (responses, total);
@@ -309,7 +309,7 @@ public class InventoryService : IInventoryService
             }, cancellationToken);
         }
 
-        return await MapToInventoryItemResponseAsync(inventoryItem, inventoryItem.Warehouse.Name);
+        return MapToInventoryItemResponse(inventoryItem, inventoryItem.Warehouse.Name);
     }
 
     public async Task<InventoryItemResponse> TransferStockAsync(Guid inventoryItemId, TransferStockRequest request, string tenantId, CancellationToken cancellationToken = default)
@@ -396,7 +396,7 @@ public class InventoryService : IInventoryService
         _logger.LogInformation("Stock transferred from inventory {SourceId} to warehouse {TargetWarehouseId}: {Quantity}",
             inventoryItemId, request.ToWarehouseId, request.Quantity);
 
-        return await MapToInventoryItemResponseAsync(sourceItem, sourceItem.Warehouse.Name);
+        return MapToInventoryItemResponse(sourceItem, sourceItem.Warehouse.Name);
     }
 
     public async Task<StockReservationResponse> ReserveStockAsync(ReserveStockRequest request, CancellationToken cancellationToken = default)
@@ -610,7 +610,11 @@ public class InventoryService : IInventoryService
 
     #region Helper Methods
 
-    private async Task<InventoryItemResponse> MapToInventoryItemResponseAsync(InventoryItem item, string warehouseName)
+    // Static and synchronous: this is a pure field-by-field projection with
+    // nothing to await, so the async signature was manufacturing a state
+    // machine at each of its seven call sites for no reason. CA1822 flagged the
+    // missing static; the redundant async was sitting behind it.
+    private static InventoryItemResponse MapToInventoryItemResponse(InventoryItem item, string warehouseName)
     {
         var needsReorder = item.QuantityAvailable <= item.ReorderPoint;
 

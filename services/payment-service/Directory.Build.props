@@ -1,0 +1,90 @@
+<Project>
+
+  <!--
+    Shared build settings for this service's src and test projects.
+
+    MSBuild walks up from each project directory to find this file, so it
+    applies to both src/ and tests/ without either csproj referencing it. The
+    Dockerfile copies it explicitly (see the COPY near the top) so a container
+    build enforces the same rules as CI rather than quietly building with
+    looser ones.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Both projects already build with zero warnings, so this costs nothing
+      today and stops the first one arriving.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!--
+      NuGet audit findings (NU1901-NU1904) stay warnings.
+
+      They are raised against a live advisory database, so as errors they turn
+      a build red with no change to the code — which is how a team learns to
+      ignore a red build. They are still printed on every CI run, and the
+      repo's practice is to triage each one explicitly with
+      <NuGetAuditSuppress> and a written rationale (see the AutoMapper
+      GHSA-rvv3-g6hj-g44x entry in the csproj files).
+    -->
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+
+    <!--
+      Recommended, not All.
+
+      `All` produces ~900 warnings across the two services, 462 of them CA2007
+      (ConfigureAwait) — which ASP.NET Core does not need, since there is no
+      synchronization context to return to. A ruleset whose top finding is
+      inapplicable is a ruleset nobody reads.
+
+      `Recommended` produced 242, and the ones that mattered were real: an
+      amount formatted for the payment gateway with the current culture, a
+      couple of Dispose implementations, culture-sensitive string comparisons.
+    -->
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!--
+      AnalysisLevel pinned rather than left to default.
+
+      It defaults to the SDK's latest wave, so the rules in force would depend
+      on whoever ran the build: CI and the Dockerfile use SDK 8, a developer
+      may have something newer. Pinning it to the 8.0 wave means the same rule
+      set everywhere, and a rule added in a later wave arrives when this line
+      is changed on purpose instead of when someone updates their SDK.
+    -->
+    <AnalysisLevel>8.0</AnalysisLevel>
+
+    <!--
+      CA1848 (use the LoggerMessage source generator) accounts for 186 of the
+      242 Recommended findings. It is a genuine allocation win on a hot logging
+      path, but acting on it means rewriting every log call in both services
+      into declared delegates. That is a deliberate piece of work, not a
+      condition of turning analyzers on; excluded so the remaining findings are
+      visible rather than buried.
+    -->
+    <NoWarn>$(NoWarn);CA1848</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Test projects only.
+
+    CA1707 (identifiers should not contain underscores) fires 82 times across
+    the two test suites, entirely on xUnit method names of the form
+    Method_Scenario_ExpectedResult. That is the convention these suites are
+    written in and the convention the .NET testing ecosystem uses; the rule is
+    aimed at public API surface, which a test assembly does not have.
+
+    Conditioned on the project name rather than $(IsTestProject), because that
+    property is set inside the test csproj and so is not yet defined while this
+    file is being evaluated.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>

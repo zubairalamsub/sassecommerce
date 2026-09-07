@@ -2,6 +2,12 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+# Directory.Build.props carries TreatWarningsAsErrors and the analyzer
+# settings. Copying it to /src puts it one level above the project, where
+# MSBuild finds it walking up -- without this the image would build under
+# looser rules than CI enforces.
+COPY ["Directory.Build.props", "./"]
+
 # Copy csproj and restore dependencies
 COPY ["src/Ecommerce.PaymentService/Ecommerce.PaymentService.csproj", "Ecommerce.PaymentService/"]
 RUN dotnet restore "Ecommerce.PaymentService/Ecommerce.PaymentService.csproj"

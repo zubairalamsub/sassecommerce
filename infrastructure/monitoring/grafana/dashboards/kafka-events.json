@@ -1,0 +1,812 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "description": "Consumer services reporting Kafka event metrics. Sourced from kafka_events_consumed_total, so a service that has dropped every single message it read never appears here — leave this on All while you are hunting for one.",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(kafka_events_consumed_total, service)",
+        "query": "label_values(kafka_events_consumed_total, service)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": ["All"], "value": ["$__all"], "selected": true },
+        "refresh": 2,
+        "sort": 1,
+        "options": [],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "description": "Kafka topics, narrowed by the Service selection. Deliberately sourced from the consumed AND the failed counter: a topic whose every message is being dropped never increments kafka_events_consumed_total, and listing topics from that metric alone would hide exactly the topic you came here to find.",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values({__name__=~\"kafka_events_consumed_total|kafka_events_failed_total\", service=~\"$service\"}, topic)",
+        "query": "label_values({__name__=~\"kafka_events_consumed_total|kafka_events_failed_total\", service=~\"$service\"}, topic)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": ["All"], "value": ["$__all"], "selected": true },
+        "refresh": 2,
+        "sort": 1,
+        "options": [],
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Why this dashboard leads with dropped events",
+      "type": "text",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "A consumer that cannot decode a message still commits its offset and moves on. The message is gone, but **consumer lag never rises** — so lag, throughput and broker health all sit green while events are being thrown away. That is precisely how a change to the `version` field on the event envelope silently stopped every order confirmation, shipped, cancelled, payment and receipt email for weeks: every Kafka panel the platform had was green for the entire outage.\n\nSo read this dashboard top-down. `kafka_events_failed_total` counts messages that were **read and then discarded**, broken out by `reason` — a non-zero value there is an incident by itself, whatever the panels below say. Lag, offsets and partitions live at the bottom because they are context to rule out, not the alarm."
+      }
+    },
+    {
+      "title": "Events dropped",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 6 },
+      "description": "The one number to check first. Anything above zero means messages are being read off Kafka and discarded, which nothing else on this page will tell you.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m]))",
+          "legendFormat": "Dropped/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 3,
+          "noValue": "0",
+          "displayName": "Dropped/s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "Drop ratio",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 6 },
+      "description": "Dropped as a share of everything read. Separates a trickle of malformed messages from a stream failing wholesale — pinned at 100% means a consumer is discarding every message it touches.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) / clamp_min(sum(rate(kafka_events_consumed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) + sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])), 0.000001)",
+          "legendFormat": "Dropped share"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "min": 0,
+          "max": 1,
+          "noValue": "0",
+          "displayName": "Dropped share",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "Publish errors",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 6 },
+      "description": "Failures on the producing side. These events never reached Kafka at all, so no consumer will ever see them and no drop will be counted downstream — the loss is invisible everywhere else on this dashboard.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_published_total{service=~\"$service\", topic=~\"$topic\", outcome=\"error\"}[5m]))",
+          "legendFormat": "Errors/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 3,
+          "noValue": "0",
+          "displayName": "Publish errors/s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "Streams gone quiet",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 6 },
+      "description": "Service/topic pairs with nothing processed for 15 minutes. Catches the other silent failure — a consumer that stopped reading altogether rather than reading and discarding. A non-zero count is expected on genuinely low-traffic topics; the staleness table below says which.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(time() - max(kafka_event_last_processed_timestamp_seconds{service=~\"$service\", topic=~\"$topic\"}) by (service, topic) > 900)",
+          "legendFormat": "Quiet streams"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "displayName": "Quiet > 15m",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 4 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "Brokers up",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 6 },
+      "description": "Here to be argued with rather than trusted. Throughout the outage this dashboard exists to catch, this panel read healthy the entire time.",
+      "targets": [
+        { "refId": "A", "expr": "kafka_brokers", "legendFormat": "Brokers" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "no exporter",
+          "displayName": "Brokers",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "Services reporting",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 6 },
+      "description": "How many consumer services are exposing event metrics at all. Below the number you expect, a consumer is either not running or not instrumented — and an uninstrumented consumer's drops cannot show up anywhere on this dashboard.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(count by (service) (kafka_events_consumed_total{service=~\"$service\", topic=~\"$topic\"}))",
+          "legendFormat": "Services"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "displayName": "Services reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 8 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "title": "── Dropped events ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 10 },
+      "options": { "mode": "markdown", "content": "## Read and thrown away" }
+    },
+    {
+      "title": "Dropped events by service and reason",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "description": "The headline. Every bar is a message a consumer read off a topic and then discarded. Answer which service and which reason here before looking at anything else on this page; empty is the only healthy shape.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (service, reason)",
+          "legendFormat": "{{ service }} / {{ reason }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "stacking": { "mode": "normal", "group": "A" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "What is being dropped — service, topic, event type, reason",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 14, "x": 0, "y": 22 },
+      "description": "The breakdown you hand to whoever owns the consumer. Counted over the dashboard's time range, so widen the range to tell a regression that started this morning from one that has been running for weeks.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[$__range])) by (service, topic, event_type, reason)",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": {},
+            "renameByName": {
+              "service": "Service",
+              "topic": "Topic",
+              "event_type": "Event type",
+              "reason": "Reason",
+              "Value": "Dropped"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": { "fields": {}, "sort": [ { "field": "Dropped", "desc": true } ] }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "left", "filterable": true },
+          "noValue": "Nothing dropped in this time range"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Dropped" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "decimals", "value": 0 },
+              { "id": "custom.width", "value": 110 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "orange", "value": 1 },
+                    { "color": "red", "value": 100 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Reason" },
+            "properties": [ { "id": "custom.width", "value": 170 } ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    },
+    {
+      "title": "Drop reasons, platform-wide",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 10, "x": 14, "y": 22 },
+      "description": "The same drops with the service dimension collapsed, so a shared cause is obvious. decode_error or signature_invalid appearing across several services at once points at a change to the envelope rather than a bug in any one consumer.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (reason)",
+          "legendFormat": "{{ reason }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "stacking": { "mode": "normal", "group": "A" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "── Handled vs dropped ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 32 },
+      "options": { "mode": "markdown", "content": "## Both halves of what was read" }
+    },
+    {
+      "title": "Handled vs dropped, per topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 34 },
+      "description": "Everything a consumer read, split into the part it handled and the part it binned. Distinguishes a topic that has gone quiet from one that is busy and failing — on a throughput-only panel the two are indistinguishable.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_consumed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (topic)",
+          "legendFormat": "{{ topic }} handled"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (topic)",
+          "legendFormat": "{{ topic }} dropped"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*dropped" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "custom.fillOpacity", "value": 40 },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "Drop ratio per topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 34 },
+      "description": "Normalises for traffic, so a quiet topic failing completely is as loud here as a busy one losing a fraction of a percent. A line sitting at 100% is a total decode failure on that topic.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (topic) / clamp_min(sum(rate(kafka_events_consumed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (topic) + sum(rate(kafka_events_failed_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (topic), 0.000001)",
+          "legendFormat": "{{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2 },
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "── Publishing ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 43 },
+      "options": { "mode": "markdown", "content": "## The producing side" }
+    },
+    {
+      "title": "Events published by outcome",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 45 },
+      "description": "What producers believe they wrote. Compare its success line against the handled rate above: a persistent gap means events are leaving one service and not arriving at the other end.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_published_total{service=~\"$service\", topic=~\"$topic\"}[5m])) by (outcome)",
+          "legendFormat": "{{ outcome }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 1 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "error" },
+            "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "success" },
+            "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "Publish errors by service and topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 45 },
+      "description": "Which producer is failing to write, and to where. Points at broker reachability or a rejected message rather than at a consumer bug, so it changes who you go and talk to.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_events_published_total{service=~\"$service\", topic=~\"$topic\", outcome=\"error\"}[5m])) by (service, topic)",
+          "legendFormat": "{{ service }} / {{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "── Processing latency ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 53 },
+      "options": { "mode": "markdown", "content": "## How long handlers take" }
+    },
+    {
+      "title": "Event processing latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 55 },
+      "description": "Time spent inside a handler once it already has the message. A p99 climbing while lag stays flat usually means a downstream call has got slow, not that Kafka is behind.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(kafka_event_processing_duration_seconds_bucket{service=~\"$service\", topic=~\"$topic\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(kafka_event_processing_duration_seconds_bucket{service=~\"$service\", topic=~\"$topic\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(kafka_event_processing_duration_seconds_bucket{service=~\"$service\", topic=~\"$topic\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "p95 latency by service and topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 55 },
+      "description": "Narrows a latency regression down to a single consumer and topic before anyone starts reading logs.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(kafka_event_processing_duration_seconds_bucket{service=~\"$service\", topic=~\"$topic\"}[5m])) by (le, service, topic))",
+          "legendFormat": "{{ service }} / {{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "── Staleness ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 63 },
+      "options": { "mode": "markdown", "content": "## Streams that have gone quiet" }
+    },
+    {
+      "title": "Time since the last event was processed",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 65 },
+      "description": "The failure mode drop rate cannot show: a stream that has stopped entirely produces no drops and no throughput, so every panel above simply goes blank. Read each row against how often you expect that topic to carry traffic — an hour of silence on order-events is an incident, on tenant-events it is a normal Tuesday.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - max(kafka_event_last_processed_timestamp_seconds{service=~\"$service\", topic=~\"$topic\"}) by (service, topic)",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": {},
+            "renameByName": {
+              "service": "Service",
+              "topic": "Topic",
+              "Value": "Silent for"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": { "fields": {}, "sort": [ { "field": "Silent for", "desc": true } ] }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "left", "filterable": true },
+          "noValue": "No service is reporting a last-processed timestamp"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Silent for" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "decimals", "value": 0 },
+              { "id": "custom.width", "value": 160 },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 900 },
+                    { "color": "red", "value": 3600 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    },
+    {
+      "title": "── Broker and lag context ──",
+      "type": "text",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 74 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Context, not alarms — every panel below stayed green for the whole outage described at the top"
+      }
+    },
+    {
+      "title": "Consumer group lag",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 76 },
+      "description": "Whether consumers are keeping up. Genuinely useful for a slow or stopped consumer, and completely blind to one that reads and discards — a dropped message is still a committed offset.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kafka_consumergroup_lag_sum{topic=~\"$topic\"}) by (consumergroup, topic)",
+          "legendFormat": "{{ consumergroup }} / {{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "Broker-side message rate per topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 76 },
+      "description": "What actually landed on the broker, measured by the exporter rather than by any service. Compare against handled rate to decide whether a shortfall is producer-side or consumer-side.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(kafka_topic_partition_current_offset{topic=~\"$topic\"}[5m])) by (topic)",
+          "legendFormat": "{{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "title": "Partitions per topic",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 76 },
+      "description": "Capacity context for the lag panel beside it: a consumer group cannot spread a topic across more instances than the topic has partitions, so lag that will not drain may be a partition-count problem rather than a code one.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(kafka_topic_partitions{topic=~\"$topic\"}) by (topic)",
+          "legendFormat": "{{ topic }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "continuous-BlPu" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["ecommerce", "kafka", "events", "observability"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "Kafka Events — Drops, Flow & Staleness",
+  "uid": "kafka-events",
+  "version": 1
+}

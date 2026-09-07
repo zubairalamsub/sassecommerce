@@ -81,5 +81,6 @@ public class KafkaEventPublisher : IEventPublisher, IDisposable
     {
         _producer?.Flush(TimeSpan.FromSeconds(5));
         _producer?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

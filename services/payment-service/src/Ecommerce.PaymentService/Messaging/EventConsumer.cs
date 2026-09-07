@@ -9,6 +9,13 @@ namespace Ecommerce.PaymentService.Messaging;
 
 public class OrderEventConsumer : BackgroundService
 {
+    // Cached: JsonSerializerOptions builds and caches converters per instance,
+    // so constructing one per message threw that work away on every event.
+    private static readonly JsonSerializerOptions EnvelopeJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OrderEventConsumer> _logger;
     private readonly IConsumer<string, string> _consumer;
@@ -105,10 +112,7 @@ public class OrderEventConsumer : BackgroundService
     {
         try
         {
-            var envelope = JsonSerializer.Deserialize<EventEnvelope>(messageValue, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var envelope = JsonSerializer.Deserialize<EventEnvelope>(messageValue, EnvelopeJsonOptions);
 
             if (envelope == null)
             {
@@ -217,6 +221,7 @@ public class OrderEventConsumer : BackgroundService
     {
         _consumer?.Dispose();
         base.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
 

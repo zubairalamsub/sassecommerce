@@ -9,13 +9,13 @@ public class InventoryItem : BaseEntity
     public string SKU { get; set; } = string.Empty;
 
     // Stock quantities
-    public int QuantityOnHand { get; set; } = 0;
-    public int QuantityReserved { get; set; } = 0;
+    public int QuantityOnHand { get; set; }
+    public int QuantityReserved { get; set; }
     public int QuantityAvailable => QuantityOnHand - QuantityReserved;
 
     // Reorder settings
-    public int ReorderPoint { get; set; } = 0;
-    public int ReorderQuantity { get; set; } = 0;
+    public int ReorderPoint { get; set; }
+    public int ReorderQuantity { get; set; }
     public int? MaxStock { get; set; }
 
     // Location in warehouse

@@ -7,9 +7,9 @@ public class CreateInventoryItemRequest
     public string ProductId { get; set; } = string.Empty;
     public string? VariantId { get; set; }
     public string SKU { get; set; } = string.Empty;
-    public int InitialQuantity { get; set; } = 0;
-    public int ReorderPoint { get; set; } = 0;
-    public int ReorderQuantity { get; set; } = 0;
+    public int InitialQuantity { get; set; }
+    public int ReorderPoint { get; set; }
+    public int ReorderQuantity { get; set; }
     public int? MaxStock { get; set; }
     public string? BinLocation { get; set; }
     public string CreatedBy { get; set; } = string.Empty;

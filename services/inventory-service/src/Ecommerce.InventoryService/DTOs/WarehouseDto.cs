@@ -14,7 +14,7 @@ public class CreateWarehouseRequest
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public bool IsActive { get; set; } = true;
-    public bool IsDefault { get; set; } = false;
+    public bool IsDefault { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
 }
 

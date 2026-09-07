@@ -7,6 +7,7 @@ using Ecommerce.PaymentService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,7 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -68,7 +69,12 @@ if (!string.IsNullOrEmpty(sslCommerzStoreId))
     {
         StoreId = sslCommerzStoreId,
         StorePassword = builder.Configuration["SSLCOMMERZ_STORE_PASSWORD"] ?? "",
-        IsSandbox = builder.Configuration["SSLCOMMERZ_SANDBOX"]?.ToLower() != "false",
+        // ToLowerInvariant, not ToLower: this compares a config flag against a
+        // fixed ASCII literal, so the host's locale must not participate. In a
+        // Turkish locale ToLower maps I to a dotless i and "FALSE" stops
+        // matching "false" -- which would silently put the gateway in sandbox
+        // mode in production.
+        IsSandbox = builder.Configuration["SSLCOMMERZ_SANDBOX"]?.ToLowerInvariant() != "false",
         SuccessUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/success",
         FailUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/fail",
         CancelUrl = $"{paymentServiceBaseUrl}/api/v1/payments/sslcommerz/cancel",

@@ -5,6 +5,7 @@ on:
     branches: [master, develop]
     paths:
       - 'services/tenant-service/**'
+      - 'shared/go/**'
       - '.golangci.yml'
       - '.github/workflows/ci-tenant-service.yml'
       - '.github/workflows/go-service.yml'
@@ -12,6 +13,7 @@ on:
     branches: [master, develop]
     paths:
       - 'services/tenant-service/**'
+      - 'shared/go/**'
       - '.golangci.yml'
 
 permissions:

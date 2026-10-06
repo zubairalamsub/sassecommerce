@@ -59,7 +59,11 @@ jobs:
           # Order is load-bearing only cosmetically (it sets matrix order).
           DEPLOYABLE=(config-service shipping-service analytics-service notification-service
                       search-service review-service promotion-service order-service
-                      user-service product-service tenant-service payment-service inventory-service)
+                      user-service product-service tenant-service payment-service inventory-service
+                      cart-service recommendation-service vendor-service)
+          # The .NET services do not use shared/go; every other one compiles
+          # it into its image. Must match the context switch in build-and-push.
+          DOTNET=(payment-service inventory-service)
           SERVICES=()
 
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
@@ -114,8 +118,17 @@ jobs:
           else
             CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
 
+            # A shared/go change touches no services/ path, but every Go
+            # image is built from it, so all of them are stale.
+            SHARED_GO_CHANGED=false
+            if echo "$CHANGED_FILES" | grep -q "^shared/go/"; then
+              SHARED_GO_CHANGED=true
+            fi
+
             for svc in "${DEPLOYABLE[@]}"; do
               if echo "$CHANGED_FILES" | grep -q "services/$svc/"; then
+                SERVICES+=("$svc")
+              elif [ "$SHARED_GO_CHANGED" = true ] && ! printf '%s\n' "${DOTNET[@]}" | grep -qxF "$svc"; then
                 SERVICES+=("$svc")
               fi
             done

@@ -5,6 +5,7 @@ on:
     branches: [master, develop]
     paths:
       - 'services/order-service/**'
+      - 'shared/go/**'
       - '.golangci.yml'
       - '.github/workflows/ci-order-service.yml'
       - '.github/workflows/go-service.yml'
@@ -12,6 +13,7 @@ on:
     branches: [master, develop]
     paths:
       - 'services/order-service/**'
+      - 'shared/go/**'
       - '.golangci.yml'
 
 permissions:

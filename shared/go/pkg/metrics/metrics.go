@@ -102,6 +102,17 @@ func Register(service string) {
 		)
 
 		prometheus.MustRegister(httpRequestsTotal, httpRequestDur, httpInFlight, tenantRequestsTotal, tenantBytesTotal)
+
+		// Bring the event-pipeline metrics up alongside these, so a service
+		// gets them from calling Register() alone.
+		//
+		// Note this is not sufficient to make them *visible*: a CounterVec
+		// with no observed label combination emits nothing at all, not even
+		// a HELP line. http_requests_total behaves the same way — it appears
+		// only once a request has been served. Consumers that want a healthy
+		// topic to read as 0 rather than as no data should call
+		// InitTopic for each topic they subscribe to.
+		RegisterEvents(service)
 	})
 }
 

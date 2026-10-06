@@ -3,12 +3,18 @@ package messaging
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/ecommerce/product-service/internal/repository"
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "product-service"
 
 // EventEnvelope represents a Kafka event envelope
 type EventEnvelope struct {
@@ -47,6 +53,10 @@ type EventConsumer struct {
 
 // NewEventConsumer creates a new Kafka event consumer for inventory events
 func NewEventConsumer(brokers []string, groupID string, productRepo repository.ProductRepository, logger *logrus.Logger) *EventConsumer {
+	// Pre-create the zero-valued series for this topic, so a consumer that
+	// has never dropped anything reads as 0 rather than as no data.
+	metrics.InitTopic(metricsService, "inventory-events")
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
 		Topic:   "inventory-events",
@@ -86,6 +96,7 @@ func (c *EventConsumer) consume(ctx context.Context) {
 
 		// Reject events that fail HMAC verification (spoofed/tampered)
 		if err := eventSigner.Verify(msg); err != nil {
+			metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonSignatureInvalid)
 			c.logger.WithError(err).WithField("topic", msg.Topic).Warn("Dropping Kafka message that failed signature verification")
 			continue
 		}
@@ -95,11 +106,21 @@ func (c *EventConsumer) consume(ctx context.Context) {
 }
 
 func (c *EventConsumer) handleMessage(ctx context.Context, msg kafka.Message) {
+	start := time.Now()
+
 	var envelope EventEnvelope
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
+		// The counter this exists for: the offset is committed regardless, so
+		// an envelope that will not decode leaves lag at zero while the stock
+		// update it carried is simply lost.
+		metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonDecodeError)
 		c.logger.WithError(err).Error("Failed to unmarshal event envelope")
 		return
 	}
+
+	defer func() {
+		metrics.EventConsumed(metricsService, msg.Topic, envelope.EventType, time.Since(start))
+	}()
 
 	c.logger.WithFields(logrus.Fields{
 		"event_type": envelope.EventType,

@@ -7,9 +7,14 @@ import (
 
 	"github.com/ecommerce/review-service/internal/models"
 	sharedkafka "github.com/ecommerce/shared/go/pkg/kafka"
+	"github.com/ecommerce/shared/go/pkg/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
+// metricsService labels this service's event metrics, kept as a constant
+// so it cannot drift from the dashboard queries that group by it.
+const metricsService = "review-service"
 
 // eventSigner verifies incoming Kafka event signatures when EVENT_SIGNING_KEY is set.
 var eventSigner = sharedkafka.NewEventSignerFromEnv()
@@ -32,6 +37,10 @@ type EventConsumer struct {
 }
 
 func NewEventConsumer(brokers []string, groupID string, logger *logrus.Logger) *EventConsumer {
+	// Pre-create the zero-valued series for this topic, so a consumer that
+	// has never dropped anything reads as 0 rather than as no data.
+	metrics.InitTopic(metricsService, "order-events")
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        brokers,
 		Topic:          "order-events",
@@ -83,6 +92,7 @@ func (c *EventConsumer) consumeLoop(ctx context.Context) {
 			// Reject events that fail HMAC verification (spoofed/tampered);
 			// still committed below so the poison message is not redelivered.
 			if err := eventSigner.Verify(msg); err != nil {
+				metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonSignatureInvalid)
 				c.logger.WithError(err).WithField("topic", msg.Topic).Warn("Dropping Kafka message that failed signature verification")
 			} else {
 				c.processMessage(msg)
@@ -96,11 +106,18 @@ func (c *EventConsumer) consumeLoop(ctx context.Context) {
 }
 
 func (c *EventConsumer) processMessage(msg kafka.Message) {
+	start := time.Now()
+
 	var envelope models.EventEnvelope
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
+		metrics.EventDropped(metricsService, msg.Topic, "", metrics.ReasonDecodeError)
 		c.logger.WithError(err).Error("Failed to unmarshal event")
 		return
 	}
+
+	defer func() {
+		metrics.EventConsumed(metricsService, msg.Topic, envelope.EventType, time.Since(start))
+	}()
 
 	if envelope.EventType == "OrderDelivered" {
 		payload := envelope.GetPayload()

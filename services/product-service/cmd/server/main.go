@@ -134,7 +134,8 @@ func main() {
 	}
 
 	// Setup router
-	router := setupRouter(config, logger, productHandler, categoryHandler, imageHandler, categoryImageHandler)
+	pingDB := func(ctx context.Context) error { return client.Ping(ctx, nil) }
+	router := setupRouter(config, logger, pingDB, productHandler, categoryHandler, imageHandler, categoryImageHandler)
 
 	// Start server
 	srv := &http.Server{
@@ -216,7 +217,7 @@ func connectMongoDB(uri string, logger *logrus.Logger) (*mongo.Client, error) {
 	return client, nil
 }
 
-func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.ProductHandler, categoryHandler *api.CategoryHandler, imageHandler *api.ImageHandler, categoryImageHandler *api.CategoryImageHandler) *gin.Engine {
+func setupRouter(config *Config, logger *logrus.Logger, pingDB func(context.Context) error, productHandler *api.ProductHandler, categoryHandler *api.CategoryHandler, imageHandler *api.ImageHandler, categoryImageHandler *api.CategoryImageHandler) *gin.Engine {
 	// Set Gin mode based on environment
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -242,7 +243,7 @@ func setupRouter(config *Config, logger *logrus.Logger, productHandler *api.Prod
 
 	// Health check endpoint (no authentication required)
 	router.GET("/health", healthCheck)
-	router.GET("/ready", readinessCheck)
+	router.GET("/ready", readinessCheck(pingDB))
 
 	// Prometheus metrics endpoint — registered before Auth/RateLimit so scrapes are not blocked.
 	router.GET("/metrics", sharedmiddleware.MetricsAuth(), gin.WrapH(metrics.Handler()))
@@ -299,10 +300,32 @@ func healthCheck(c *gin.Context) {
 	})
 }
 
-func readinessCheck(c *gin.Context) {
-	// TODO: Add database connectivity check
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ready",
-		"service": "product-service",
-	})
+// readinessTimeout bounds the MongoDB ping so a hung connection fails the
+// probe instead of stalling it past the orchestrator's own timeout.
+const readinessTimeout = 2 * time.Second
+
+// readinessCheck reports ready only while MongoDB answers a ping. /health
+// stays a pure liveness check: restarting the process would not bring the
+// database back, so only readiness may depend on it.
+func readinessCheck(ping func(context.Context) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), readinessTimeout)
+		defer cancel()
+
+		if err := ping(ctx); err != nil {
+			// The error is not echoed: it can carry the MongoDB host.
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":   "not ready",
+				"service":  "product-service",
+				"database": "unreachable",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ready",
+			"service":  "product-service",
+			"database": "ok",
+		})
+	}
 }
